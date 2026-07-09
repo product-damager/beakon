@@ -3,7 +3,7 @@
 
 create type initiative_status as enum ('planned', 'opportunity_framing', 'solution_framing', 'in_development', 'released');
 create type initiative_visibility as enum ('internal', 'external');
-create type initiative_confidence as enum ('low', 'medium', 'high');
+create type initiative_health as enum ('on_track', 'at_risk', 'blocked');
 create type delivery_link_type as enum ('redmine', 'figma', 'spec', 'notion', 'other');
 
 create table themes (
@@ -30,11 +30,11 @@ create table initiatives (
   team text not null,
   theme_id text references themes (id),
   strategic_goal text default '',
-  impact int not null default 3 check (impact between 1 and 5),
-  effort int not null default 3 check (effort between 1 and 5),
-  strategic_fit int not null default 3 check (strategic_fit between 1 and 5),
-  urgency int not null default 3 check (urgency between 1 and 5),
-  confidence initiative_confidence not null default 'medium',
+  reach int not null default 0 check (reach >= 0), -- users/accounts affected per quarter
+  impact numeric not null default 1, -- 0.25 | 0.5 | 1 | 2 | 3
+  confidence numeric not null default 0.8, -- 0.5 | 0.8 | 1
+  effort numeric not null default 1 check (effort > 0), -- person-months
+  health initiative_health not null default 'on_track',
   target_start date not null,
   target_end date not null,
   depends_on text[] not null default '{}',
@@ -52,9 +52,9 @@ create table delivery_links (
   type delivery_link_type not null default 'other'
 );
 
--- Derived priority score = impact + strategic_fit + urgency - effort.
+-- Derived RICE score = (reach * impact * confidence) / effort.
 create view initiative_scores as
-select id, (impact + strategic_fit + urgency - effort) as priority_score
+select id, round((reach * impact * confidence) / effort) as rice_score
 from initiatives;
 
 -- A safe projection for the external roadmap page: approved items only,

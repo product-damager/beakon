@@ -6,19 +6,20 @@ import { useRoadmap } from "@/lib/store";
 import { applyFilters } from "@/lib/filters";
 import { formatShortEN, quarterLabelFromISO } from "@/lib/dates";
 import {
-  CONFIDENCE_META,
-  priorityScore,
+  HEALTH_META,
+  riceScore,
   STATUSES,
   THEME_COLOR_META,
+  type Health,
   type Initiative,
 } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Avatar, StatusTag } from "./ui";
 import { FilterBar } from "./FilterBar";
 
-type SortKey = "title" | "owner" | "team" | "theme" | "status" | "quarter" | "priority" | "confidence" | "updated";
+type SortKey = "title" | "owner" | "team" | "theme" | "status" | "quarter" | "priority" | "health" | "updated";
 
-const CONF_ORDER = { low: 0, medium: 1, high: 2 };
+const HEALTH_ORDER: Record<Health, number> = { on_track: 0, at_risk: 1, blocked: 2 };
 
 export function List() {
   const { initiatives, filters, themes, owners, getOwner, getTheme, select } = useRoadmap();
@@ -38,8 +39,8 @@ export function List() {
         case "theme": return getTheme(i.themeId)?.name.toLowerCase() ?? "";
         case "status": return STATUSES.indexOf(i.status);
         case "quarter": return i.targetStart;
-        case "priority": return priorityScore(i.scores);
-        case "confidence": return CONF_ORDER[i.confidence];
+        case "priority": return riceScore(i.scores);
+        case "health": return HEALTH_ORDER[i.health];
         case "updated": return i.updatedAt;
       }
     };
@@ -83,8 +84,8 @@ export function List() {
               <Th k="team" label="Team" />
               <Th k="status" label="Status" />
               <Th k="quarter" label="Quarter" />
-              <Th k="priority" label="Score" align="right" />
-              <Th k="confidence" label="Confidence" />
+              <Th k="priority" label="RICE" align="right" />
+              <Th k="health" label="Health" />
               <Th k="updated" label="Updated" align="right" />
             </tr>
           </thead>
@@ -121,11 +122,12 @@ export function List() {
                     {quarterLabelFromISO(i.targetStart)}
                   </td>
                   <td className="px-3 py-2.5 text-right font-display font-semibold text-green-90">
-                    {priorityScore(i.scores)}
+                    {riceScore(i.scores)}
                   </td>
                   <td className="px-3 py-2.5">
-                    <span className={cn("mono-label rounded-md px-2 py-1", CONFIDENCE_META[i.confidence].tag)}>
-                      {CONFIDENCE_META[i.confidence].label}
+                    <span className={cn("mono-label inline-flex items-center gap-1 rounded-md px-2 py-1", HEALTH_META[i.health].tag)}>
+                      <span className={cn("h-2 w-2 rounded-full", HEALTH_META[i.health].dot)} aria-hidden />
+                      {HEALTH_META[i.health].label}
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-right text-beige-60">

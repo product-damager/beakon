@@ -11,10 +11,10 @@ import {
 } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import { formatDateEN, quarterLabelFromISO } from "@/lib/dates";
-import { DELIVERY_TYPE_LABEL, priorityScore, THEME_COLOR_META } from "@/lib/types";
+import { DELIVERY_TYPE_LABEL, riceScore, THEME_COLOR_META } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Drawer } from "./Drawer";
-import { Avatar, Button, ConfidenceTag, Eyebrow, StatusTag, Tag } from "./ui";
+import { Avatar, Button, HealthTag, Eyebrow, StatusTag, Tag } from "./ui";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -72,7 +72,7 @@ export function InitiativeDrawer() {
               <Tag className={i.visibility === "external" ? "bg-green-30 text-green-70" : "bg-beige-30 text-beige-60"}>
                 {i.visibility === "external" ? "External" : "Internal"}
               </Tag>
-              <ConfidenceTag confidence={i.confidence} />
+              <HealthTag health={i.health} />
             </div>
           </div>
 
@@ -101,30 +101,33 @@ export function InitiativeDrawer() {
             {i.expectedOutcome && <Section label="Expected outcome">{i.expectedOutcome}</Section>}
             {i.strategicGoal && <Section label="Strategic goal">{i.strategicGoal}</Section>}
 
-            {/* Scoring */}
+            {/* Scoring — RICE */}
             <div>
-              <Eyebrow className="mb-2">Prioritization</Eyebrow>
+              <Eyebrow className="mb-2">Prioritization · RICE</Eyebrow>
               <div className="rounded-xl border border-beige-20 bg-beige-5 p-4">
                 <div className="mb-3 flex items-baseline justify-between">
-                  <span className="text-sm text-green-90">Priority score</span>
+                  <span className="text-sm text-green-90">RICE score</span>
                   <span className="font-display text-2xl font-semibold text-green-90">
-                    {priorityScore(i.scores)}
+                    {riceScore(i.scores)}
                   </span>
                 </div>
                 <div className="grid grid-cols-4 gap-2 text-center">
-                  {(["impact", "strategicFit", "urgency", "effort"] as const).map((k) => (
-                    <div key={k} className="rounded-lg bg-white py-2">
+                  {[
+                    { label: "Reach", value: i.scores.reach.toLocaleString() },
+                    { label: "Impact", value: `${i.scores.impact}×` },
+                    { label: "Confidence", value: `${Math.round(i.scores.confidence * 100)}%` },
+                    { label: "Effort", value: `${i.scores.effort} pm` },
+                  ].map((m) => (
+                    <div key={m.label} className="rounded-lg bg-white py-2">
                       <div className="font-display text-lg font-semibold text-green-90">
-                        {i.scores[k]}
+                        {m.value}
                       </div>
-                      <div className="mono-label-sm text-beige-60">
-                        {k === "strategicFit" ? "Fit" : k}
-                      </div>
+                      <div className="mono-label-sm text-beige-60">{m.label}</div>
                     </div>
                   ))}
                 </div>
                 <p className="mt-3 text-xs text-beige-60">
-                  Score = impact + fit + urgency − effort
+                  RICE = (Reach × Impact × Confidence) ÷ Effort
                 </p>
               </div>
             </div>

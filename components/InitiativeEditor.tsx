@@ -4,18 +4,22 @@ import { useState } from "react";
 import { Plus, Trash2, X } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import {
+  CONFIDENCE_OPTIONS,
   DELIVERY_TYPE_LABEL,
-  priorityScore,
+  HEALTH_META,
+  IMPACT_OPTIONS,
+  riceScore,
   STATUS_META,
   STATUSES,
   TEAMS,
   type DeliveryLink,
   type DeliveryLinkType,
+  type Health,
   type Initiative,
 } from "@/lib/types";
 import { Drawer } from "./Drawer";
 import { Button, Eyebrow } from "./ui";
-import { Field, NativeSelect, Stepper, TextArea, TextInput } from "./form";
+import { Field, NativeSelect, TextArea, TextInput } from "./form";
 
 export function InitiativeEditor() {
   const { editorDraft, closeEditor } = useRoadmap();
@@ -140,14 +144,13 @@ function EditorForm({ draft }: { draft: Initiative }) {
               ))}
             </NativeSelect>
           </Field>
-          <Field label="Confidence">
-            <NativeSelect
-              value={d.confidence}
-              onChange={(e) => set("confidence", e.target.value as Initiative["confidence"])}
-            >
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
+          <Field label="Health">
+            <NativeSelect value={d.health} onChange={(e) => set("health", e.target.value as Health)}>
+              {(Object.keys(HEALTH_META) as Health[]).map((h) => (
+                <option key={h} value={h}>
+                  {HEALTH_META[h].label}
+                </option>
+              ))}
             </NativeSelect>
           </Field>
           <Field label="Target start">
@@ -166,28 +169,61 @@ function EditorForm({ draft }: { draft: Initiative }) {
           />
         </Field>
 
-        {/* Scoring */}
+        {/* Scoring — RICE */}
         <div className="rounded-xl border border-beige-20 bg-beige-5 p-4">
           <div className="mb-3 flex items-center justify-between">
-            <Eyebrow>Prioritization</Eyebrow>
+            <Eyebrow>Prioritization · RICE</Eyebrow>
             <span className="text-sm text-green-90">
-              Priority score{" "}
-              <span className="font-display text-lg font-semibold">{priorityScore(d.scores)}</span>
+              RICE score{" "}
+              <span className="font-display text-lg font-semibold">{riceScore(d.scores)}</span>
             </span>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            {([
-              ["impact", "Impact"],
-              ["strategicFit", "Strategic fit"],
-              ["urgency", "Urgency"],
-              ["effort", "Effort"],
-            ] as const).map(([key, label]) => (
-              <div key={key} className="flex items-center justify-between gap-2">
-                <span className="text-[13px] text-green-90">{label}</span>
-                <Stepper value={d.scores[key]} onChange={(v) => setScore(key, v)} />
-              </div>
-            ))}
+            <Field label="Reach" hint="Users / accounts per quarter">
+              <TextInput
+                type="number"
+                min={0}
+                value={d.scores.reach}
+                onChange={(e) => setScore("reach", Math.max(0, Number(e.target.value) || 0))}
+              />
+            </Field>
+            <Field label="Effort" hint="Person-months">
+              <TextInput
+                type="number"
+                min={0.5}
+                step={0.5}
+                value={d.scores.effort}
+                onChange={(e) => setScore("effort", Math.max(0.5, Number(e.target.value) || 0.5))}
+              />
+            </Field>
+            <Field label="Impact">
+              <NativeSelect
+                value={d.scores.impact}
+                onChange={(e) => setScore("impact", Number(e.target.value))}
+              >
+                {IMPACT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label} ({o.value}×)
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+            <Field label="Confidence">
+              <NativeSelect
+                value={d.scores.confidence}
+                onChange={(e) => setScore("confidence", Number(e.target.value))}
+              >
+                {CONFIDENCE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label} ({o.pct})
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
           </div>
+          <p className="mt-3 text-xs text-beige-60">
+            RICE = (Reach × Impact × Confidence) ÷ Effort
+          </p>
         </div>
 
         <Field label="Problem">

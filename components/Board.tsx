@@ -5,7 +5,7 @@ import { GripVertical } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import { applyFilters } from "@/lib/filters";
 import { quarterLabelFromISO } from "@/lib/dates";
-import { priorityScore, STATUS_META, STATUSES, THEME_COLOR_META, type Initiative, type Status } from "@/lib/types";
+import { riceScore, STATUS_META, STATUSES, THEME_COLOR_META, type Initiative, type Status } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Avatar, Eyebrow } from "./ui";
 import { FilterBar } from "./FilterBar";
@@ -71,9 +71,9 @@ function Card({
       <div className="mt-3 flex items-center justify-between">
         <span className="mono-label-sm text-beige-60">{quarterLabelFromISO(initiative.targetStart)}</span>
         <span className="flex items-center gap-1 text-xs text-beige-60">
-          Score
+          RICE
           <span className="font-display text-sm font-semibold text-green-90">
-            {priorityScore(initiative.scores)}
+            {riceScore(initiative.scores)}
           </span>
         </span>
       </div>
@@ -99,7 +99,7 @@ function Card({
 
 function Placeholder() {
   return (
-    <div className="h-[104px] rounded-xl border-2 border-dashed border-green-50 bg-green-10/60 transition-all" />
+    <div className="pointer-events-none h-[104px] rounded-xl border-2 border-dashed border-green-50 bg-green-10/60" />
   );
 }
 
@@ -156,8 +156,28 @@ export function Board() {
                 onDragOver={(e) => {
                   if (!dragId) return;
                   e.preventDefault();
-                  // Over the column's empty area → drop at the end.
-                  setDrop({ status: s, beforeId: null });
+                  // Compute the insertion point from card geometry so the placeholder is
+                  // stable and lands exactly where the cursor is — including between two
+                  // existing cards. The placeholder is pointer-events-none, so hovering it
+                  // falls through to this single handler (no competing per-card handlers).
+                  const cardEls = Array.from(
+                    e.currentTarget.querySelectorAll("[data-card-id]")
+                  );
+                  let beforeId: string | null = null;
+                  for (const el of cardEls) {
+                    const id = el.getAttribute("data-card-id");
+                    if (!id || id === dragId) continue;
+                    const r = el.getBoundingClientRect();
+                    if (e.clientY < r.top + r.height / 2) {
+                      beforeId = id;
+                      break;
+                    }
+                  }
+                  setDrop((prev) =>
+                    prev && prev.status === s && prev.beforeId === beforeId
+                      ? prev
+                      : { status: s, beforeId }
+                  );
                 }}
                 onDrop={(e) => {
                   e.preventDefault();
@@ -174,7 +194,7 @@ export function Board() {
                   <span className="mono-label-sm text-beige-60">{items.length}</span>
                 </div>
                 <div className="space-y-2.5">
-                  {items.map((i, idx) => (
+                  {items.map((i) => (
                     <div key={i.id}>
                       {dragId && dragId !== i.id && drop?.status === s && drop.beforeId === i.id && (
                         <div className="mb-2.5">
@@ -183,21 +203,13 @@ export function Board() {
                       )}
                       <div
                         draggable
+                        data-card-id={i.id}
                         onDragStart={(e) => {
                           e.dataTransfer.setData("text/plain", i.id);
                           e.dataTransfer.effectAllowed = "move";
                           setDragId(i.id);
                         }}
                         onDragEnd={endDrag}
-                        onDragOver={(e) => {
-                          if (!dragId) return;
-                          e.preventDefault();
-                          e.stopPropagation();
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          const after = e.clientY > rect.top + rect.height / 2;
-                          const beforeId = after ? items[idx + 1]?.id ?? null : i.id;
-                          setDrop({ status: s, beforeId });
-                        }}
                         className={cn(
                           "cursor-grab active:cursor-grabbing",
                           dragId === i.id && "opacity-40"

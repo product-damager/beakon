@@ -7,7 +7,7 @@ export type Status =
   | "in_development"
   | "released";
 export type Visibility = "internal" | "external";
-export type Confidence = "low" | "medium" | "high";
+export type Health = "on_track" | "at_risk" | "blocked";
 export type GroupBy = "theme" | "team" | "owner";
 export type Zoom = "month" | "quarter" | "half";
 export type ViewKey = "timeline" | "board" | "list";
@@ -37,11 +37,12 @@ export interface DeliveryLink {
   type: DeliveryLinkType;
 }
 
+/** RICE inputs — see riceScore(). */
 export interface Scores {
-  impact: number; // 1..5
-  effort: number; // 1..5
-  strategicFit: number; // 1..5
-  urgency: number; // 1..5
+  reach: number; // users / accounts affected per quarter
+  impact: number; // 0.25 | 0.5 | 1 | 2 | 3
+  confidence: number; // 0.5 | 0.8 | 1  (50% / 80% / 100%)
+  effort: number; // person-months
 }
 
 export interface Initiative {
@@ -56,7 +57,7 @@ export interface Initiative {
   themeId: string;
   strategicGoal: string;
   scores: Scores;
-  confidence: Confidence;
+  health: Health;
   targetStart: string; // ISO date
   targetEnd: string; // ISO date
   deliveryLinks: DeliveryLink[];
@@ -69,10 +70,27 @@ export interface Initiative {
 
 // ── Derived helpers ──
 
-/** priority score = impact + strategic fit + urgency - effort (fixed in v1, spec §Scoring). */
-export function priorityScore(s: Scores): number {
-  return s.impact + s.strategicFit + s.urgency - s.effort;
+/** RICE score = (reach × impact × confidence) ÷ effort. Rounded; 0 when effort is 0. */
+export function riceScore(s: Scores): number {
+  if (!s.effort) return 0;
+  return Math.round((s.reach * s.impact * s.confidence) / s.effort);
 }
+
+/** Impact is a discrete multiplier in the RICE model. */
+export const IMPACT_OPTIONS = [
+  { value: 3, label: "Massive" },
+  { value: 2, label: "High" },
+  { value: 1, label: "Medium" },
+  { value: 0.5, label: "Low" },
+  { value: 0.25, label: "Minimal" },
+] as const;
+
+/** Confidence is a percentage in the RICE model. */
+export const CONFIDENCE_OPTIONS = [
+  { value: 1, label: "High", pct: "100%" },
+  { value: 0.8, label: "Medium", pct: "80%" },
+  { value: 0.5, label: "Low", pct: "50%" },
+] as const;
 
 export const TEAMS = [
   "App System",
@@ -130,10 +148,11 @@ export const STATUS_META: Record<Status, StatusMeta> = {
   },
 };
 
-export const CONFIDENCE_META: Record<Confidence, { label: string; tag: string }> = {
-  low: { label: "Low", tag: "bg-red-30 text-red-70" },
-  medium: { label: "Medium", tag: "bg-orange-30 text-orange-70" },
-  high: { label: "High", tag: "bg-green-30 text-green-70" },
+/** Delivery health — a live signal, distinct from the RICE estimate. */
+export const HEALTH_META: Record<Health, { label: string; tag: string; dot: string }> = {
+  on_track: { label: "On track", tag: "bg-green-30 text-green-70", dot: "bg-green-60" },
+  at_risk: { label: "At risk", tag: "bg-orange-30 text-orange-70", dot: "bg-orange-60" },
+  blocked: { label: "Blocked", tag: "bg-red-30 text-red-70", dot: "bg-red-60" },
 };
 
 export const THEME_COLOR_META: Record<ThemeColor, { dot: string; soft: string; text: string }> = {

@@ -3,10 +3,10 @@
 import { type ButtonHTMLAttributes, type ReactNode } from "react";
 import { cn, initials } from "@/lib/cn";
 import {
-  CONFIDENCE_META,
+  HEALTH_META,
   STATUS_META,
   THEME_COLOR_META,
-  type Confidence,
+  type Health,
   type Status,
   type ThemeColor,
 } from "@/lib/types";
@@ -80,9 +80,14 @@ export function StatusTag({ status }: { status: Status }) {
   );
 }
 
-export function ConfidenceTag({ confidence }: { confidence: Confidence }) {
-  const m = CONFIDENCE_META[confidence];
-  return <Tag className={m.tag}>{m.label} confidence</Tag>;
+export function HealthTag({ health }: { health: Health }) {
+  const m = HEALTH_META[health];
+  return (
+    <Tag className={m.tag}>
+      <span className={cn("h-2 w-2 rounded-full", m.dot)} aria-hidden />
+      {m.label}
+    </Tag>
+  );
 }
 
 export function ThemeDot({ color, className }: { color: ThemeColor; className?: string }) {
