@@ -43,7 +43,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Sidebar */}
       <aside className="flex w-60 shrink-0 flex-col bg-green-90 text-white">
         <div className="flex items-center gap-2.5 px-6 py-5">
-          <Logo />
+          <Logo size={30} tile />
           <div className="leading-tight">
             <div className="font-display text-lg font-semibold">Beakon</div>
             <div className="mono-label-sm text-green-40">Roadmap</div>
