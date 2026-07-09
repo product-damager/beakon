@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Kameleoon Product token overrides (ShadCN variable contract) ── */
+:root {
+  --background: 60 20% 96%; /* beige-10 */
+  --foreground: 168 30% 16%; /* green-90 */
+  --card: 0 0% 100%;
+  --card-foreground: 168 30% 16%;
+  --primary: 168 30% 16%; /* green-90 */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 60 16% 95%; /* beige-10 */
+  --secondary-foreground: 168 30% 16%;
+  --muted: 60 16% 95%;
+  --muted-foreground: 60 12% 50%; /* beige-60 */
+  --accent: 73 53% 76%; /* lime-40 */
+  --accent-foreground: 168 30% 16%;
+  --destructive: 356 42% 48%; /* red-60 */
+  --destructive-foreground: 0 0% 100%;
+  --border: 60 12% 92%; /* beige-20 */
+  --input: 60 12% 92%;
+  --ring: 168 30% 16%;
+  --radius: 0.75rem; /* 12px */
+
+  /* Font family variables (referenced by tailwind.config.ts). */
+  --font-inter: "Inter", system-ui, -apple-system, sans-serif;
+  --font-jakarta: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
+  --font-noto-mono: "Noto Sans Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Universal Noto Sans Mono rule — eyebrows, labels, tags, column headers */
+.mono-label {
+  font-family: var(--font-noto-mono), ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.mono-label-sm {
+  font-family: var(--font-noto-mono), ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.font-display {
+  font-family: var(--font-jakarta), var(--font-inter), sans-serif;
+}
+
+/* Thin, calm scrollbars for the timeline canvas */
+.calm-scroll::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+.calm-scroll::-webkit-scrollbar-thumb {
+  background: #d6d6cd; /* beige-40 */
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.calm-scroll::-webkit-scrollbar-thumb:hover {
+  background: #b8b8a8; /* beige-50 */
+  background-clip: content-box;
+}
+.calm-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Skeleton pulse */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.skeleton {
+  background: #f4f4f1;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
