@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import { formatDateEN, quarterLabelFromISO } from "@/lib/dates";
-import { DELIVERY_TYPE_LABEL, riceScore, THEME_COLOR_META } from "@/lib/types";
+import { DELIVERY_TYPE_LABEL, REACH_OPTIONS, riceScore, THEME_COLOR_META } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Drawer } from "./Drawer";
 import { Avatar, Button, HealthTag, Eyebrow, StatusTag, Tag } from "./ui";
@@ -113,7 +113,7 @@ export function InitiativeDrawer() {
                 </div>
                 <div className="grid grid-cols-4 gap-2 text-center">
                   {[
-                    { label: "Reach", value: i.scores.reach.toLocaleString() },
+                    { label: "Reach", value: REACH_OPTIONS.find((o) => o.value === i.scores.reach)?.label ?? String(i.scores.reach) },
                     { label: "Impact", value: `${i.scores.impact}×` },
                     { label: "Confidence", value: `${Math.round(i.scores.confidence * 100)}%` },
                     { label: "Effort", value: `${i.scores.effort} pm` },

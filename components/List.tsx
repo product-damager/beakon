@@ -57,7 +57,7 @@ export function List() {
     setSort((s) => (s.key === key ? { key, dir: (s.dir * -1) as 1 | -1 } : { key, dir: 1 }));
 
   const Th = ({ k, label, align = "left" }: { k: SortKey; label: string; align?: "left" | "right" | "center" }) => (
-    <th className={cn("sticky top-0 z-10 bg-beige-5 px-3 py-0", align === "right" && "text-right", align === "center" && "text-center")}>
+    <th className={cn("bg-beige-5 px-3 py-0", align === "right" && "text-right", align === "center" && "text-center")}>
       <button
         onClick={() => toggle(k)}
         className={cn(
@@ -75,9 +75,9 @@ export function List() {
   return (
     <div className="flex h-full flex-col">
       <FilterBar />
-      <div className="calm-scroll flex-1 overflow-auto">
+      <div className="calm-scroll min-h-0 flex-1 overflow-auto">
         <table className="w-full border-collapse text-sm">
-          <thead>
+          <thead className="sticky top-0 z-10">
             <tr className="border-b border-beige-20">
               <Th k="title" label="Initiative" />
               <Th k="owner" label="Owner" />

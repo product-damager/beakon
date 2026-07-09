@@ -8,6 +8,7 @@ import {
   DELIVERY_TYPE_LABEL,
   HEALTH_META,
   IMPACT_OPTIONS,
+  REACH_OPTIONS,
   riceScore,
   STATUS_META,
   STATUSES,
@@ -179,13 +180,17 @@ function EditorForm({ draft }: { draft: Initiative }) {
             </span>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Reach" hint="Users / accounts per quarter">
-              <TextInput
-                type="number"
-                min={0}
+            <Field label="Reach" hint="Accounts reached per month">
+              <NativeSelect
                 value={d.scores.reach}
-                onChange={(e) => setScore("reach", Math.max(0, Number(e.target.value) || 0))}
-              />
+                onChange={(e) => setScore("reach", Number(e.target.value))}
+              >
+                {REACH_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label} — score {o.value}
+                  </option>
+                ))}
+              </NativeSelect>
             </Field>
             <Field label="Effort" hint="Person-months">
               <TextInput

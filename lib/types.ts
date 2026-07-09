@@ -39,7 +39,7 @@ export interface DeliveryLink {
 
 /** RICE inputs — see riceScore(). */
 export interface Scores {
-  reach: number; // users / accounts affected per quarter
+  reach: number; // bucket score: 2 | 4 | 6 | 8 | 10  (accounts/month: 1-5 | 6-25 | 26-100 | 101-500 | 501+)
   impact: number; // 0.25 | 0.5 | 1 | 2 | 3
   confidence: number; // 0.5 | 0.8 | 1  (50% / 80% / 100%)
   effort: number; // person-months
@@ -75,6 +75,18 @@ export function riceScore(s: Scores): number {
   if (!s.effort) return 0;
   return Math.round((s.reach * s.impact * s.confidence) / s.effort);
 }
+
+/**
+ * Reach is a scored bucket representing accounts reached per month.
+ * 1–5 → 2 | 6–25 → 4 | 26–100 → 6 | 101–500 → 8 | 501+ → 10
+ */
+export const REACH_OPTIONS = [
+  { value: 10, label: "501+", range: "501+ accounts / month" },
+  { value: 8, label: "101–500", range: "101–500 accounts / month" },
+  { value: 6, label: "26–100", range: "26–100 accounts / month" },
+  { value: 4, label: "6–25", range: "6–25 accounts / month" },
+  { value: 2, label: "1–5", range: "1–5 accounts / month" },
+] as const;
 
 /** Impact is a discrete multiplier in the RICE model. */
 export const IMPACT_OPTIONS = [

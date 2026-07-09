@@ -97,11 +97,13 @@ export function Timeline() {
       {filtered.length === 0 ? (
         <EmptyState />
       ) : (
-        <div className="calm-scroll relative flex-1 overflow-auto">
-          <div style={{ minWidth: LABEL_W + canvasWidth }}>
-            {/* Header: month / quarter labels */}
-            <div className="sticky top-0 z-20 flex border-b border-beige-20 bg-background">
-              <div className="sticky left-0 z-30 flex w-[268px] shrink-0 items-end bg-background px-6 pb-2 pt-3">
+        /* Single horizontal scroll wrapper — header + body scroll together left/right.
+           The body then scrolls independently on the vertical axis.              */
+        <div className="calm-scroll flex min-h-0 flex-1 flex-col overflow-x-auto">
+          <div style={{ minWidth: LABEL_W + canvasWidth }} className="flex min-h-0 flex-1 flex-col">
+            {/* Column header — frozen vertically, scrolls with content horizontally */}
+            <div className="flex shrink-0 border-b border-beige-20 bg-background">
+              <div className="flex w-[268px] shrink-0 items-end bg-background px-6 pb-2 pt-3">
                 <span className="mono-label text-beige-60">{groupBy}</span>
               </div>
               <div className="relative h-12" style={{ width: canvasWidth }}>
@@ -122,95 +124,98 @@ export function Timeline() {
               </div>
             </div>
 
-            {/* Body */}
-            <div className="relative">
-              {/* Gridlines + today marker */}
-              <div
-                className="pointer-events-none absolute inset-0 z-0"
-                style={{ marginLeft: LABEL_W }}
-              >
-                <div className="relative h-full" style={{ width: canvasWidth }}>
-                  {quarterCols.map((c) => (
-                    <div
-                      key={c.key}
-                      className="absolute bottom-0 top-0 border-l border-beige-20"
-                      style={{ left: `${c.leftPct}%` }}
-                    />
-                  ))}
-                  {today !== null && (
-                    <div
-                      className="absolute bottom-0 top-0 border-l-2 border-dashed border-lime-50"
-                      style={{ left: `${today}%` }}
-                    >
-                      <span className="mono-label-sm absolute -top-0 left-1 text-lime-70">
-                        Today
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {groups.map((g) => (
-                <div key={g.key}>
-                  {/* Group header */}
-                  <div className="flex border-b border-beige-20 bg-beige-5/70">
-                    <div className="sticky left-0 z-10 flex w-[268px] shrink-0 items-center gap-2 bg-beige-5 px-6 py-2">
-                      {g.color && (
-                        <span className={cn("h-2.5 w-2.5 rounded-full", THEME_COLOR_META[g.color].dot)} />
-                      )}
-                      <span className="truncate text-[13px] font-semibold text-green-90">
-                        {g.label}
-                      </span>
-                      <span className="mono-label-sm text-beige-60">{g.items.length}</span>
-                    </div>
-                    <div className="relative" style={{ width: canvasWidth }} />
-                  </div>
-
-                  {/* Initiative rows */}
-                  {g.items.map((i) => {
-                    const pos = barPosition(i.targetStart, i.targetEnd, window);
-                    const meta = STATUS_META[i.status];
-                    const isSelected = selectedId === i.id;
-                    const isPrereq = prereqs.has(i.id);
-                    const owner = owners.find((o) => o.id === i.ownerId);
-                    return (
+            {/* Scrollable body — vertical axis only */}
+            <div className="relative min-h-0 flex-1 overflow-y-auto">
+              {/* Body */}
+              <div className="relative">
+                {/* Gridlines + today marker */}
+                <div
+                  className="pointer-events-none absolute inset-0 z-0"
+                  style={{ marginLeft: LABEL_W }}
+                >
+                  <div className="relative h-full" style={{ width: canvasWidth }}>
+                    {quarterCols.map((c) => (
                       <div
-                        key={i.id}
-                        className="group flex items-stretch border-b border-beige-10 hover:bg-beige-5/60"
+                        key={c.key}
+                        className="absolute bottom-0 top-0 border-l border-beige-20"
+                        style={{ left: `${c.leftPct}%` }}
+                      />
+                    ))}
+                    {today !== null && (
+                      <div
+                        className="absolute bottom-0 top-0 border-l-2 border-dashed border-lime-50"
+                        style={{ left: `${today}%` }}
                       >
-                        <div className="sticky left-0 z-10 flex w-[268px] shrink-0 items-center gap-2.5 bg-background px-6 py-2.5 group-hover:bg-beige-5">
-                          {owner && <Avatar name={owner.name} className="h-6 w-6 text-[10px]" />}
-                          <button
-                            onClick={() => select(i.id)}
-                            className="truncate text-left text-[13px] font-medium text-green-90 hover:text-green-60"
-                            title={i.title}
-                          >
-                            {i.title}
-                          </button>
-                        </div>
-                        <div className="relative py-2.5" style={{ width: canvasWidth }}>
-                          <button
-                            onClick={() => select(i.id)}
-                            title={`${i.title} · ${meta.label}`}
-                            className={cn(
-                              "absolute top-1/2 flex h-7 -translate-y-1/2 items-center overflow-hidden rounded-md px-2.5 text-left text-xs font-medium shadow-sm transition-all hover:brightness-105",
-                              meta.bar,
-                              isSelected && "ring-2 ring-green-90 ring-offset-1",
-                              isPrereq && "outline-dashed outline-2 outline-offset-1 outline-lime-60"
-                            )}
-                            style={{
-                              left: `${pos.leftPct}%`,
-                              width: `max(28px, ${pos.widthPct}%)`,
-                            }}
-                          >
-                            <span className="truncate">{i.title}</span>
-                          </button>
-                        </div>
+                        <span className="mono-label-sm absolute -top-0 left-1 text-lime-70">
+                          Today
+                        </span>
                       </div>
-                    );
-                  })}
+                    )}
+                  </div>
                 </div>
-              ))}
+
+                {groups.map((g) => (
+                  <div key={g.key}>
+                    {/* Group header */}
+                    <div className="flex border-b border-beige-20 bg-beige-5/70">
+                      <div className="sticky left-0 z-10 flex w-[268px] shrink-0 items-center gap-2 bg-beige-5 px-6 py-2">
+                        {g.color && (
+                          <span className={cn("h-2.5 w-2.5 rounded-full", THEME_COLOR_META[g.color].dot)} />
+                        )}
+                        <span className="truncate text-[13px] font-semibold text-green-90">
+                          {g.label}
+                        </span>
+                        <span className="mono-label-sm text-beige-60">{g.items.length}</span>
+                      </div>
+                      <div className="relative" style={{ width: canvasWidth }} />
+                    </div>
+
+                    {/* Initiative rows */}
+                    {g.items.map((i) => {
+                      const pos = barPosition(i.targetStart, i.targetEnd, window);
+                      const meta = STATUS_META[i.status];
+                      const isSelected = selectedId === i.id;
+                      const isPrereq = prereqs.has(i.id);
+                      const owner = owners.find((o) => o.id === i.ownerId);
+                      return (
+                        <div
+                          key={i.id}
+                          className="group flex items-stretch border-b border-beige-10 hover:bg-beige-5/60"
+                        >
+                          <div className="sticky left-0 z-10 flex w-[268px] shrink-0 items-center gap-2.5 bg-background px-6 py-2.5 group-hover:bg-beige-5">
+                            {owner && <Avatar name={owner.name} className="h-6 w-6 text-[10px]" />}
+                            <button
+                              onClick={() => select(i.id)}
+                              className="truncate text-left text-[13px] font-medium text-green-90 hover:text-green-60"
+                              title={i.title}
+                            >
+                              {i.title}
+                            </button>
+                          </div>
+                          <div className="relative py-2.5" style={{ width: canvasWidth }}>
+                            <button
+                              onClick={() => select(i.id)}
+                              title={`${i.title} · ${meta.label}`}
+                              className={cn(
+                                "absolute top-1/2 flex h-7 -translate-y-1/2 items-center overflow-hidden rounded-md px-2.5 text-left text-xs font-medium shadow-sm transition-all hover:brightness-105",
+                                meta.bar,
+                                isSelected && "ring-2 ring-green-90 ring-offset-1",
+                                isPrereq && "outline-dashed outline-2 outline-offset-1 outline-lime-60"
+                              )}
+                              style={{
+                                left: `${pos.leftPct}%`,
+                                width: `max(28px, ${pos.widthPct}%)`,
+                              }}
+                            >
+                              <span className="truncate">{i.title}</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>

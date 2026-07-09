@@ -146,7 +146,7 @@ export function Board() {
     <div className="flex h-full flex-col">
       <FilterBar />
       <div className="calm-scroll flex-1 overflow-auto p-6">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <div className="flex min-w-max gap-4">
           {STATUSES.map((s) => {
             const items = columns[s];
             const isTarget = Boolean(dragId) && drop?.status === s;
@@ -156,10 +156,6 @@ export function Board() {
                 onDragOver={(e) => {
                   if (!dragId) return;
                   e.preventDefault();
-                  // Compute the insertion point from card geometry so the placeholder is
-                  // stable and lands exactly where the cursor is — including between two
-                  // existing cards. The placeholder is pointer-events-none, so hovering it
-                  // falls through to this single handler (no competing per-card handlers).
                   const cardEls = Array.from(
                     e.currentTarget.querySelectorAll("[data-card-id]")
                   );
@@ -184,7 +180,7 @@ export function Board() {
                   commitDrop(s);
                 }}
                 className={cn(
-                  "flex min-h-[120px] flex-col rounded-xl p-3 transition-colors",
+                  "flex w-56 shrink-0 flex-col rounded-xl p-3 transition-colors",
                   isTarget ? "bg-green-10/70 ring-1 ring-green-40" : "bg-beige-5/60"
                 )}
               >

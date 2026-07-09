@@ -129,7 +129,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       team: "App System",
       themeId: themes[0]?.id ?? "",
       strategicGoal: "",
-      scores: { reach: 500, impact: 1, confidence: 0.8, effort: 3 },
+      scores: { reach: 8, impact: 1, confidence: 0.8, effort: 3 },
       health: "on_track",
       targetStart: start,
       targetEnd: start,
