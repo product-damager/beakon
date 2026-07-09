@@ -43,7 +43,7 @@ export function applyFilters(
 
   return initiatives.filter((i) => {
     if (i.archived) return false;
-    if (!f.showDone && i.status === "done") return false;
+    if (!f.showDone && i.status === "released") return false;
     if (f.owners.length && !f.owners.includes(i.ownerId)) return false;
     if (f.teams.length && !f.teams.includes(i.team)) return false;
     if (f.themes.length && !f.themes.includes(i.themeId)) return false;

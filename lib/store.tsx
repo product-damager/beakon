@@ -10,7 +10,7 @@ import {
 } from "react";
 import { INITIATIVES, OWNERS, THEMES } from "./seed";
 import { EMPTY_FILTERS, type Filters } from "./filters";
-import type { GroupBy, Initiative, Owner, Theme, Zoom } from "./types";
+import type { GroupBy, Initiative, Owner, Status, Theme, Zoom } from "./types";
 import { todayISO } from "./dates";
 
 interface RoadmapState {
@@ -34,6 +34,8 @@ interface RoadmapState {
 
   select: (id: string | null) => void;
   saveInitiative: (i: Initiative) => void;
+  /** Board drag: set status and place before `beforeId` (null = end of target column). */
+  moveInitiative: (id: string, toStatus: Status, beforeId: string | null) => void;
   archiveInitiative: (id: string) => void;
   newDraft: () => Initiative;
   openCreate: () => void;
@@ -75,6 +77,38 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const moveInitiative = useCallback(
+    (id: string, toStatus: Status, beforeId: string | null) => {
+      if (beforeId === id) return; // dropped onto itself — no-op
+      setInitiatives((prev) => {
+        const dragged = prev.find((x) => x.id === id);
+        if (!dragged) return prev;
+        const stamped =
+          dragged.status === toStatus
+            ? { ...dragged }
+            : { ...dragged, status: toStatus, updatedAt: new Date().toISOString() };
+        const without = prev.filter((x) => x.id !== id);
+        let insertAt: number;
+        if (beforeId) {
+          insertAt = without.findIndex((x) => x.id === beforeId);
+          if (insertAt < 0) insertAt = without.length;
+        } else {
+          // No anchor: append after the last card already in the target column.
+          insertAt = without.length;
+          for (let k = without.length - 1; k >= 0; k--) {
+            if (without[k].status === toStatus) {
+              insertAt = k + 1;
+              break;
+            }
+          }
+        }
+        without.splice(insertAt, 0, stamped);
+        return without;
+      });
+    },
+    []
+  );
+
   const archiveInitiative = useCallback((id: string) => {
     setInitiatives((prev) =>
       prev.map((x) => (x.id === id ? { ...x, archived: true, updatedAt: new Date().toISOString() } : x))
@@ -92,7 +126,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       expectedOutcome: "",
       status: "planned",
       ownerId: owners[0]?.id ?? "",
-      team: "Web Experimentation",
+      team: "App System",
       themeId: themes[0]?.id ?? "",
       strategicGoal: "",
       scores: { impact: 3, effort: 3, strategicFit: 3, urgency: 3 },
@@ -138,6 +172,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       setPresentation,
       select: setSelectedId,
       saveInitiative,
+      moveInitiative,
       archiveInitiative,
       newDraft,
       openCreate,
@@ -160,6 +195,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       patchFilters,
       resetFilters,
       saveInitiative,
+      moveInitiative,
       archiveInitiative,
       newDraft,
       openCreate,

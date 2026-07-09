@@ -9,12 +9,13 @@ import { Logo } from "./Logo";
 
 const LABEL_W = 240;
 
-// External-facing statuses use friendlier language; "at risk" is not exposed publicly.
+// External-facing statuses use friendlier, audience-ready language.
 const PUBLIC_STATUS: Record<string, string> = {
   planned: "Planned",
-  in_progress: "In progress",
-  at_risk: "In progress",
-  done: "Shipped",
+  opportunity_framing: "Exploring",
+  solution_framing: "Designing",
+  in_development: "In progress",
+  released: "Shipped",
 };
 
 export function ExternalRoadmap() {
@@ -58,7 +59,7 @@ export function ExternalRoadmap() {
       <main className="mx-auto max-w-5xl px-8 py-10">
         {/* Legend */}
         <div className="mb-6 flex flex-wrap items-center gap-x-5 gap-y-2">
-          {STATUSES.filter((s) => s !== "at_risk").map((s) => (
+          {STATUSES.map((s) => (
             <span key={s} className="flex items-center gap-1.5 text-xs text-green-70">
               <span className={cn("h-2.5 w-2.5 rounded-sm", STATUS_META[s].dot)} />
               {PUBLIC_STATUS[s]}

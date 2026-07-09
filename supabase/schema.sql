@@ -1,10 +1,10 @@
 -- Beakon roadmap workspace — Postgres schema for Supabase.
 -- Run this in the Supabase SQL editor, then run seed.sql.
 
-create type initiative_status as enum ('planned', 'in_progress', 'at_risk', 'done');
+create type initiative_status as enum ('planned', 'opportunity_framing', 'solution_framing', 'in_development', 'released');
 create type initiative_visibility as enum ('internal', 'external');
 create type initiative_confidence as enum ('low', 'medium', 'high');
-create type delivery_link_type as enum ('jira', 'linear', 'notion', 'spec', 'doc', 'other');
+create type delivery_link_type as enum ('redmine', 'figma', 'spec', 'notion', 'other');
 
 create table themes (
   id text primary key,

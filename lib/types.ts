@@ -1,6 +1,11 @@
 // ── Core domain types for Beakon ──
 
-export type Status = "planned" | "in_progress" | "at_risk" | "done";
+export type Status =
+  | "planned"
+  | "opportunity_framing"
+  | "solution_framing"
+  | "in_development"
+  | "released";
 export type Visibility = "internal" | "external";
 export type Confidence = "low" | "medium" | "high";
 export type GroupBy = "theme" | "team" | "owner";
@@ -10,7 +15,7 @@ export type ViewKey = "timeline" | "board" | "list";
 /** Kameleoon palette family used to color a theme. */
 export type ThemeColor = "green" | "blue" | "lime" | "pink" | "orange" | "beige";
 
-export type DeliveryLinkType = "jira" | "linear" | "notion" | "spec" | "doc" | "other";
+export type DeliveryLinkType = "redmine" | "figma" | "spec" | "notion" | "other";
 
 export interface Owner {
   id: string;
@@ -70,14 +75,19 @@ export function priorityScore(s: Scores): number {
 }
 
 export const TEAMS = [
-  "Web Experimentation",
-  "Feature Management",
-  "AI & Personalization",
-  "Platform",
-  "Data & Analytics",
+  "App System",
+  "Tech & Perso Builders",
+  "Visual Builders",
 ] as const;
 
-export const STATUSES: Status[] = ["planned", "in_progress", "at_risk", "done"];
+/** Delivery funnel order: discovery → shaping → build → ship. */
+export const STATUSES: Status[] = [
+  "planned",
+  "opportunity_framing",
+  "solution_framing",
+  "in_development",
+  "released",
+];
 
 export interface StatusMeta {
   label: string;
@@ -94,23 +104,29 @@ export const STATUS_META: Record<Status, StatusMeta> = {
     dot: "bg-blue-50",
     tag: "bg-blue-30 text-blue-70",
   },
-  in_progress: {
-    label: "In progress",
-    bar: "bg-green-60 text-white",
-    dot: "bg-green-60",
-    tag: "bg-green-30 text-green-70",
+  opportunity_framing: {
+    label: "Opportunity Framing",
+    bar: "bg-pink-60 text-white",
+    dot: "bg-pink-60",
+    tag: "bg-pink-30 text-pink-60",
   },
-  at_risk: {
-    label: "At risk",
+  solution_framing: {
+    label: "Solution Framing",
     bar: "bg-orange-60 text-white",
     dot: "bg-orange-60",
     tag: "bg-orange-30 text-orange-70",
   },
-  done: {
-    label: "Done",
-    bar: "bg-green-30 text-green-70",
-    dot: "bg-green-40",
-    tag: "bg-beige-30 text-beige-60",
+  in_development: {
+    label: "In Development",
+    bar: "bg-green-60 text-white",
+    dot: "bg-green-60",
+    tag: "bg-green-30 text-green-70",
+  },
+  released: {
+    label: "Released",
+    bar: "bg-green-90 text-white",
+    dot: "bg-green-90",
+    tag: "bg-green-90 text-white",
   },
 };
 
@@ -130,10 +146,9 @@ export const THEME_COLOR_META: Record<ThemeColor, { dot: string; soft: string; t
 };
 
 export const DELIVERY_TYPE_LABEL: Record<DeliveryLinkType, string> = {
-  jira: "Jira",
-  linear: "Linear",
-  notion: "Notion",
+  redmine: "Redmine",
+  figma: "Figma",
   spec: "Spec",
-  doc: "Doc",
-  other: "Link",
+  notion: "Notion",
+  other: "Other",
 };

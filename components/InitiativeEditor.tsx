@@ -40,7 +40,7 @@ function EditorForm({ draft }: { draft: Initiative }) {
   const addLink = () =>
     set("deliveryLinks", [
       ...d.deliveryLinks,
-      { id: `d-${Math.random().toString(36).slice(2, 8)}`, label: "", url: "", type: "jira" },
+      { id: `d-${Math.random().toString(36).slice(2, 8)}`, label: "", url: "", type: "redmine" },
     ]);
   const updateLink = (id: string, patch: Partial<DeliveryLink>) =>
     set("deliveryLinks", d.deliveryLinks.map((l) => (l.id === id ? { ...l, ...patch } : l)));
@@ -211,42 +211,47 @@ function EditorForm({ draft }: { draft: Initiative }) {
           </div>
           <div className="space-y-2">
             {d.deliveryLinks.map((l) => (
-              <div key={l.id} className="flex items-center gap-2">
-                <div className="w-28 shrink-0">
-                  <NativeSelect
-                    value={l.type}
-                    onChange={(e) => updateLink(l.id, { type: e.target.value as DeliveryLinkType })}
+              <div key={l.id} className="rounded-lg border border-beige-20 bg-beige-5 p-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-32 shrink-0">
+                    <NativeSelect
+                      value={l.type}
+                      onChange={(e) => updateLink(l.id, { type: e.target.value as DeliveryLinkType })}
+                    >
+                      {(Object.keys(DELIVERY_TYPE_LABEL) as DeliveryLinkType[]).map((t) => (
+                        <option key={t} value={t}>
+                          {DELIVERY_TYPE_LABEL[t]}
+                        </option>
+                      ))}
+                    </NativeSelect>
+                  </div>
+                  <TextInput
+                    value={l.label}
+                    onChange={(e) => updateLink(l.id, { label: e.target.value })}
+                    placeholder="Label"
+                    className="flex-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeLink(l.id)}
+                    className="shrink-0 rounded-md p-2 text-beige-60 hover:bg-beige-10 hover:text-red-60"
+                    aria-label="Remove link"
                   >
-                    {(Object.keys(DELIVERY_TYPE_LABEL) as DeliveryLinkType[]).map((t) => (
-                      <option key={t} value={t}>
-                        {DELIVERY_TYPE_LABEL[t]}
-                      </option>
-                    ))}
-                  </NativeSelect>
+                    <Trash2 size={15} />
+                  </button>
                 </div>
-                <TextInput
-                  value={l.label}
-                  onChange={(e) => updateLink(l.id, { label: e.target.value })}
-                  placeholder="Label"
-                  className="w-32 shrink-0"
-                />
                 <TextInput
                   value={l.url}
                   onChange={(e) => updateLink(l.id, { url: e.target.value })}
                   placeholder="https://"
+                  className="mt-2"
                 />
-                <button
-                  type="button"
-                  onClick={() => removeLink(l.id)}
-                  className="shrink-0 rounded-md p-2 text-beige-60 hover:bg-beige-10 hover:text-red-60"
-                  aria-label="Remove link"
-                >
-                  <Trash2 size={15} />
-                </button>
               </div>
             ))}
             {d.deliveryLinks.length === 0 && (
-              <p className="text-sm text-beige-60">Link Jira, Linear, specs or docs.</p>
+              <p className="text-sm text-beige-60">
+                Link Redmine, Figma, Specs or anything else you want here.
+              </p>
             )}
           </div>
         </div>

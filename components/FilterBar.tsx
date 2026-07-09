@@ -65,7 +65,7 @@ function MultiSelect({
         <ChevronDown size={14} strokeWidth={2} />
       </button>
       {open && (
-        <div className="absolute left-0 top-full z-30 mt-1 max-h-72 w-56 overflow-auto rounded-xl border border-beige-20 bg-white p-1 shadow-lg">
+        <div className="absolute left-0 top-full z-50 mt-1 max-h-72 w-56 overflow-auto rounded-xl border border-beige-20 bg-white p-1 shadow-lg">
           {options.map((o) => {
             const on = selected.includes(o.value);
             return (
@@ -147,7 +147,7 @@ export function FilterBar({
   const count = activeFilterCount(filters);
 
   return (
-    <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 border-b border-beige-20 bg-background/90 px-6 py-3 backdrop-blur">
+    <div className="sticky top-0 z-40 flex flex-wrap items-center gap-2 border-b border-beige-20 bg-background/90 px-6 py-3 backdrop-blur">
       <div className="relative">
         <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-beige-60" />
         <input
