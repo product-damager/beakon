@@ -1,13 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
-import { useRoadmap } from "@/lib/store";
+import { useEffect, useMemo, useState } from "react";
 import { barPosition, buildColumns, buildWindow } from "@/lib/dates";
-import { STATUS_META, STATUSES, THEME_COLOR_META } from "@/lib/types";
+import { STATUS_META, STATUSES, THEME_COLOR_META, type Theme } from "@/lib/types";
+import { isSupabaseConfigured } from "@/lib/supabase";
+import { fetchExternalRoadmap, type PublicInitiative } from "@/lib/data";
+import { INITIATIVES, THEMES } from "@/lib/seed";
 import { cn } from "@/lib/cn";
 import { Logo } from "./Logo";
-
-const LABEL_W = 240;
 
 // External-facing statuses use friendlier, audience-ready language.
 const PUBLIC_STATUS: Record<string, string> = {
@@ -18,22 +18,50 @@ const PUBLIC_STATUS: Record<string, string> = {
   released: "Shipped",
 };
 
-export function ExternalRoadmap() {
-  const { initiatives, themes } = useRoadmap();
+// Seed fallback for local/demo mode (no Supabase env).
+const SEED_EXTERNAL: PublicInitiative[] = INITIATIVES.filter(
+  (i) => i.visibility === "external" && !i.archived
+).map((i) => ({
+  id: i.id,
+  title: i.title,
+  status: i.status,
+  themeId: i.themeId,
+  targetStart: i.targetStart,
+  targetEnd: i.targetEnd,
+}));
 
-  const external = useMemo(
-    () => initiatives.filter((i) => i.visibility === "external" && !i.archived),
-    [initiatives]
+export function ExternalRoadmap() {
+  // The public page reads the anon-safe external_roadmap view directly, never
+  // the authenticated workspace store — so it works with no session.
+  const [items, setItems] = useState<PublicInitiative[]>(
+    isSupabaseConfigured ? [] : SEED_EXTERNAL
   );
+  const [themes, setThemes] = useState<Theme[]>(isSupabaseConfigured ? [] : THEMES);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    let active = true;
+    fetchExternalRoadmap()
+      .then((r) => {
+        if (!active) return;
+        setItems(r.items);
+        setThemes(r.themes);
+      })
+      .catch((e) => console.error("[beakon] external roadmap load failed", e));
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const window = useMemo(
-    () => buildWindow(external.map((i) => ({ start: i.targetStart, end: i.targetEnd }))),
-    [external]
+    () => buildWindow(items.map((i) => ({ start: i.targetStart, end: i.targetEnd }))),
+    [items]
   );
   const columns = useMemo(() => buildColumns(window, "quarter"), [window]);
   const canvasWidth = Math.max(640, columns.length * 200);
 
   const groups = themes
-    .map((t) => ({ theme: t, items: external.filter((i) => i.themeId === t.id) }))
+    .map((t) => ({ theme: t, items: items.filter((i) => i.themeId === t.id) }))
     .filter((g) => g.items.length > 0);
 
   return (

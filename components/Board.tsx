@@ -5,7 +5,7 @@ import { GripVertical } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import { applyFilters } from "@/lib/filters";
 import { quarterLabelFromISO } from "@/lib/dates";
-import { riceScore, STATUS_META, STATUSES, THEME_COLOR_META, type Initiative, type Status } from "@/lib/types";
+import { diveScore, STATUS_META, STATUSES, THEME_COLOR_META, type Initiative, type Status } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Avatar, Eyebrow } from "./ui";
 import { FilterBar } from "./FilterBar";
@@ -71,9 +71,9 @@ function Card({
       <div className="mt-3 flex items-center justify-between">
         <span className="mono-label-sm text-beige-60">{quarterLabelFromISO(initiative.targetStart)}</span>
         <span className="flex items-center gap-1 text-xs text-beige-60">
-          RICE
+          DIVE
           <span className="font-display text-sm font-semibold text-green-90">
-            {riceScore(initiative.scores)}
+            {diveScore(initiative.scores)}
           </span>
         </span>
       </div>

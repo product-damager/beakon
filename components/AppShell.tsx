@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarRange, Columns3, Plus, Rows3, Share2 } from "lucide-react";
+import { AlertTriangle, CalendarRange, Columns3, LogOut, Plus, Rows3, Share2, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useRoadmap } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import { Avatar, Button } from "./ui";
 import { Logo } from "./Logo";
 import { InitiativeDrawer } from "./InitiativeDrawer";
@@ -24,8 +25,10 @@ const TITLES: Record<string, string> = {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { owners, openCreate, presentation } = useRoadmap();
-  const me = owners[0];
+  const { owners, openCreate, presentation, error, dismissError, loading } = useRoadmap();
+  const { authRequired, email, signOut } = useAuth();
+  // Signed-in identity when auth is on; otherwise fall back to the first owner.
+  const displayName = authRequired ? email ?? "Signed in" : owners[0]?.name;
 
   if (presentation) {
     // Presentation mode drops all chrome for a clean, room-ready timeline.
@@ -86,13 +89,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
         </nav>
 
-        {me && (
+        {displayName && (
           <div className="flex items-center gap-3 border-t border-green-80 px-5 py-4">
-            <Avatar name={me.name} />
-            <div className="min-w-0 leading-tight">
-              <div className="truncate text-sm font-medium text-white">{me.name}</div>
+            <Avatar name={displayName} />
+            <div className="min-w-0 flex-1 leading-tight">
+              <div className="truncate text-sm font-medium text-white">{displayName}</div>
               <div className="truncate text-xs text-green-40">Product team · Editor</div>
             </div>
+            {authRequired && (
+              <button
+                onClick={() => signOut()}
+                className="shrink-0 rounded-md p-1.5 text-green-40 transition-colors hover:bg-green-80 hover:text-white"
+                aria-label="Sign out"
+                title="Sign out"
+              >
+                <LogOut size={16} />
+              </button>
+            )}
           </div>
         )}
       </aside>
@@ -109,7 +122,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Button>
         </header>
 
-        <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
+        {error && (
+          <div className="flex items-center gap-2 border-b border-red-30 bg-red-30/50 px-6 py-2 text-[13px] text-red-70">
+            <AlertTriangle size={15} className="shrink-0" />
+            <span className="flex-1 truncate">{error}</span>
+            <button
+              onClick={dismissError}
+              className="shrink-0 rounded p-0.5 hover:bg-red-30"
+              aria-label="Dismiss"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        )}
+
+        <main className="min-h-0 flex-1 overflow-hidden">
+          {loading ? (
+            <div className="flex h-full items-center justify-center">
+              <div className="flex flex-col items-center gap-3 text-beige-60">
+                <Logo size={26} tile className="animate-pulse" />
+                <span className="mono-label-sm">Loading roadmap…</span>
+              </div>
+            </div>
+          ) : (
+            children
+          )}
+        </main>
       </div>
 
       <InitiativeDrawer />

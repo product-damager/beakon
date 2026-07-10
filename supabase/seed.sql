@@ -1,5 +1,8 @@
--- Beakon seed data (sample). The canonical demo dataset lives in lib/seed.ts;
--- this file seeds enough to validate the schema and the external_roadmap view.
+-- Beakon seed data — the full canonical demo dataset (mirrors lib/seed.ts).
+-- Run this in the PREVIEW project only, after schema.sql. Do NOT run it in prod.
+-- Re-running is safe: it clears the app tables first (auth users are untouched).
+
+truncate delivery_links, initiatives, themes, owners restart identity cascade;
 
 insert into owners (id, name, role) values
   ('u-magali', 'Magali Roux', 'Head of Product'),
@@ -16,22 +19,133 @@ insert into themes (id, name, description, color) values
   ('t-platform', 'Platform & Scale', 'Performance, reliability, and enterprise readiness.', 'orange');
 
 insert into initiatives
-  (id, title, summary, expected_outcome, status, owner_id, team, theme_id, strategic_goal,
-   reach, impact, confidence, effort, health, target_start, target_end, visibility, notes)
+  (id, title, summary, problem, expected_outcome, status, owner_id, team, theme_id, strategic_goal,
+   demand, impact, viability, effort, health, target_start, target_end, depends_on, visibility, notes,
+   position, updated_at)
 values
   ('i-pbx', 'PBX predictive targeting v2',
-   'Second-generation predictive segments powering audience targeting.',
-   'Adopting accounts see a measurable lift in conversion within one quarter.',
+   'Second-generation predictive segments powering audience targeting across web and feature flags.',
+   'Manual segment building is slow and misses high-intent users; teams want targeting that adapts automatically.',
+   'Adopting accounts see a measurable lift in conversion on personalized experiences within one quarter.',
    'in_development', 'u-magali', 'Tech & Perso Builders', 't-ai', 'Lead the market on AI-driven experimentation',
-   1200, 3, 0.8, 8, 'on_track', '2026-04-01', '2026-09-30', 'external',
-   'Legal reviewing model card language before we can name accuracy figures externally.'),
+   1000, 10, 0.8, 8, 'on_track', '2026-04-01', '2026-09-30', '{i-stats}', 'external',
+   'Legal reviewing model card language before we can name accuracy figures externally.',
+   1000, '2026-07-02T09:20:00Z'),
+
   ('i-flicker', 'Zero-flicker rendering engine',
    'Rewrite the client-side apply path to eliminate flicker on slow connections.',
+   'Flicker on first paint undermines trust in client-side tests, especially on media sites.',
    'Sub-50ms apply time on P75 pages; flicker complaints drop to near zero.',
    'in_development', 'u-helene', 'Visual Builders', 't-web', 'Best-in-class web testing experience',
-   2000, 3, 1, 5, 'on_track', '2026-05-01', '2026-08-15', 'external', 'Perf budget agreed with SDK team.'),
+   1000, 10, 1, 5, 'on_track', '2026-05-01', '2026-08-15', '{}', 'external',
+   'Perf budget agreed with SDK team. Watch bundle size regression.',
+   2000, '2026-07-06T14:05:00Z'),
+
   ('i-stats', 'Bayesian stats engine GA',
    'Graduate the Bayesian results engine from beta to general availability.',
+   'Customers want faster, more interpretable results than frequentist-only reporting allows.',
    'Bayesian reporting available to all plans with clear decision guidance.',
    'solution_framing', 'u-nadia', 'Tech & Perso Builders', 't-trust', 'Results people can trust',
-   900, 2, 0.5, 8, 'at_risk', '2026-03-01', '2026-07-31', 'internal', 'Validation dataset behind schedule.');
+   1000, 3, 0.5, 8, 'at_risk', '2026-03-01', '2026-07-31', '{}', 'internal',
+   'Validation dataset behind schedule; risk to July GA. Considering a two-week slip.',
+   3000, '2026-07-07T08:40:00Z'),
+
+  ('i-flags-approvals', 'Feature flag change approvals',
+   'Add approval workflows and audit trails to flag changes in production.',
+   'Enterprise accounts need governance before flags touch production traffic.',
+   'Approvals, roles, and full audit history available for flag changes.',
+   'planned', 'u-seimour', 'App System', 't-fm', 'Enterprise-grade feature control',
+   250, 3, 0.8, 5, 'on_track', '2026-08-01', '2026-11-30', '{}', 'external', '',
+   4000, '2026-06-28T11:15:00Z'),
+
+  ('i-sdk-edge', 'Edge SDK for server-side testing',
+   'Ship an edge-optimized SDK for Cloudflare Workers and Vercel Edge.',
+   'Teams on edge runtimes lack a low-latency way to run server-side experiments.',
+   'Officially supported edge SDK with <5ms decision latency.',
+   'opportunity_framing', 'u-tom', 'App System', 't-platform', 'Meet developers where they build',
+   250, 3, 0.8, 6, 'on_track', '2026-09-01', '2026-12-31', '{i-flicker}', 'internal',
+   'Sequenced after rendering engine work frees up SDK capacity.',
+   5000, '2026-06-20T16:00:00Z'),
+
+  ('i-personalization', 'AI content personalization',
+   'Generate and test personalized copy variants with an AI assist.',
+   'Building many variants by hand is expensive; teams under-test personalization.',
+   'Users create tested personalization campaigns in minutes, not days.',
+   'opportunity_framing', 'u-magali', 'Tech & Perso Builders', 't-ai', 'Lead the market on AI-driven experimentation',
+   1000, 10, 0.5, 10, 'at_risk', '2026-10-01', '2027-02-28', '{i-pbx}', 'internal',
+   'Still in discovery. Depends on PBX v2 shipping the segment API.',
+   6000, '2026-07-01T10:30:00Z'),
+
+  ('i-consent', 'Consent-mode analytics bridge',
+   'Respect consent signals end-to-end and reconcile with analytics partners.',
+   'Privacy regulations require consent-aware measurement without breaking reporting.',
+   'Consent-aware data collection with no gaps in trusted reporting.',
+   'in_development', 'u-nadia', 'Tech & Perso Builders', 't-trust', 'Privacy-first by design',
+   1000, 1, 1, 4, 'on_track', '2026-06-01', '2026-09-15', '{}', 'internal',
+   'Coordinating with the Google consent-mode v2 timeline.',
+   7000, '2026-07-05T13:10:00Z'),
+
+  ('i-mobile', 'Mobile app experimentation',
+   'Native iOS/Android experimentation with a unified results model.',
+   'Mobile teams run tests in a separate tool with inconsistent metrics.',
+   'One experimentation model spanning web and mobile.',
+   'planned', 'u-seimour', 'App System', 't-fm', 'One platform across surfaces',
+   1000, 3, 0.5, 12, 'blocked', '2026-11-01', '2027-03-31', '{}', 'internal',
+   'Needs staffing decision in Q4 planning.',
+   8000, '2026-06-15T09:00:00Z'),
+
+  ('i-onboarding', 'Guided onboarding revamp',
+   'Rebuild first-run onboarding so new accounts launch a test in day one.',
+   'Time-to-first-test is too long; new accounts stall during setup.',
+   'Median time-to-first-test cut in half.',
+   'released', 'u-helene', 'Visual Builders', 't-web', 'Best-in-class web testing experience',
+   1000, 1, 1, 3, 'on_track', '2026-02-01', '2026-05-15', '{}', 'external',
+   'Shipped. Monitoring activation funnel for the next month.',
+   9000, '2026-05-16T17:45:00Z'),
+
+  ('i-warehouse', 'Warehouse-native export',
+   'Stream raw experiment data to Snowflake and BigQuery.',
+   'Data teams want experiment data in their warehouse for custom analysis.',
+   'Reliable, documented exports to major warehouses.',
+   'solution_framing', 'u-tom', 'App System', 't-platform', 'Open, composable data',
+   250, 1, 0.8, 4, 'on_track', '2026-09-15', '2026-12-15', '{i-consent}', 'internal', '',
+   10000, '2026-06-18T12:00:00Z'),
+
+  ('i-cro-assist', 'CRO assistant (beta)',
+   'An assistant that suggests test ideas from site behavior and past results.',
+   'Teams run out of test ideas and repeat low-impact experiments.',
+   'A steady stream of ranked, evidence-backed test ideas.',
+   'in_development', 'u-magali', 'Tech & Perso Builders', 't-ai', 'Lead the market on AI-driven experimentation',
+   1000, 3, 0.5, 6, 'at_risk', '2026-05-15', '2026-08-31', '{i-stats}', 'internal',
+   'Quality of suggestions inconsistent; may narrow beta scope.',
+   11000, '2026-07-04T15:30:00Z'),
+
+  ('i-rollback', 'One-click experiment rollback',
+   'Instantly revert a running experiment or flag from any results view.',
+   'Reverting a bad variant takes too many steps during incidents.',
+   'Single action to safely roll back, with confirmation and audit.',
+   'released', 'u-seimour', 'App System', 't-fm', 'Enterprise-grade feature control',
+   250, 1, 1, 2, 'on_track', '2026-03-15', '2026-05-01', '{}', 'external',
+   'Shipped and well received in support tickets.',
+   12000, '2026-05-02T10:00:00Z'),
+
+  ('i-sso', 'SCIM provisioning & SSO groups',
+   'Automated user provisioning and group-to-role mapping via SCIM.',
+   'Large accounts manage users by hand; access drifts out of sync.',
+   'Users and roles stay in sync with the customer''s IdP automatically.',
+   'planned', 'u-nadia', 'App System', 't-platform', 'Enterprise readiness',
+   250, 1, 1, 3, 'on_track', '2026-08-15', '2026-10-31', '{}', 'internal',
+   'Requested by two enterprise renewals this year.',
+   13000, '2026-06-25T14:20:00Z');
+
+insert into delivery_links (id, initiative_id, label, url, type, position) values
+  ('d1', 'i-pbx', 'PBX-1420', 'https://kameleoon.atlassian.net/browse/PBX-1420', 'redmine', 1),
+  ('d2', 'i-pbx', 'Model spec', 'https://www.notion.so/kameleoon/pbx-v2', 'spec', 2),
+  ('d3', 'i-flicker', 'WEB-980', 'https://kameleoon.atlassian.net/browse/WEB-980', 'redmine', 1),
+  ('d4', 'i-stats', 'Stats validation', 'https://www.notion.so/kameleoon/stats-ga', 'other', 1),
+  ('d5', 'i-flags-approvals', 'FM-233', 'https://kameleoon.atlassian.net/browse/FM-233', 'redmine', 1),
+  ('d6', 'i-personalization', 'Discovery doc', 'https://www.notion.so/kameleoon/ai-personalization', 'notion', 1),
+  ('d7', 'i-consent', 'DATA-77', 'https://kameleoon.atlassian.net/browse/DATA-77', 'redmine', 1),
+  ('d8', 'i-onboarding', 'Launch notes', 'https://www.notion.so/kameleoon/onboarding-launch', 'other', 1),
+  ('d9', 'i-cro-assist', 'AI-51', 'https://kameleoon.atlassian.net/browse/AI-51', 'redmine', 1),
+  ('d10', 'i-rollback', 'FM-198', 'https://kameleoon.atlassian.net/browse/FM-198', 'redmine', 1);

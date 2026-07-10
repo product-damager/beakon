@@ -37,11 +37,20 @@ export interface DeliveryLink {
   type: DeliveryLinkType;
 }
 
-/** RICE inputs — see riceScore(). */
+/**
+ * DIVE inputs — see diveScore(). DIVE is a log-calibrated take on RICE: because
+ * product value is heavy-tailed, each factor is scored on its real order of
+ * magnitude so the multiply (which is addition in log-space) rewards the rare
+ * transformative bet instead of flattening it.
+ *   D — Demand    (was Reach)      : accounts reached / month, log bands
+ *   I — Impact    (was Impact)     : size of the outcome, stretched log
+ *   V — Viability (was Confidence) : how sure we are
+ *   E — Effort    (was Effort)     : person-months
+ */
 export interface Scores {
-  reach: number; // bucket score: 2 | 4 | 6 | 8 | 10  (accounts/month: 1-5 | 6-25 | 26-100 | 101-500 | 501+)
-  impact: number; // 0.25 | 0.5 | 1 | 2 | 3
-  confidence: number; // 0.5 | 0.8 | 1  (50% / 80% / 100%)
+  demand: number; // 3 | 15 | 50 | 250 | 1000  (band midpoints, accounts/month)
+  impact: number; // 0.25 | 0.5 | 1 | 3 | 10
+  viability: number; // 0.5 | 0.8 | 1  (hopeful / evidence / proven)
   effort: number; // person-months
 }
 
@@ -66,42 +75,64 @@ export interface Initiative {
   notes: string; // internal-only, excluded from external share
   updatedAt: string; // ISO datetime
   archived: boolean;
+  /**
+   * Global sort order (board drag, list/timeline order). Optional at construction:
+   * the store assigns it on load (from Supabase, or by index in seed mode) and on
+   * save, so every initiative held in state has a defined position.
+   */
+  position?: number;
 }
 
 // ── Derived helpers ──
 
-/** RICE score = (reach × impact × confidence) ÷ effort. Rounded; 0 when effort is 0. */
-export function riceScore(s: Scores): number {
+/** DIVE score = (Demand × Impact × Viability) ÷ Effort. Rounded; 0 when effort is 0. */
+export function diveScore(s: Scores): number {
   if (!s.effort) return 0;
-  return Math.round((s.reach * s.impact * s.confidence) / s.effort);
+  return Math.round((s.demand * s.impact * s.viability) / s.effort);
 }
 
 /**
- * Reach is a scored bucket representing accounts reached per month.
- * 1–5 → 2 | 6–25 → 4 | 26–100 → 6 | 101–500 → 8 | 501+ → 10
+ * Score tier — a puffin dives for the biggest fish, not surface nibbles.
+ * Kills false precision: rank by tier, not by 1247-vs-1183.
  */
-export const REACH_OPTIONS = [
-  { value: 10, label: "501+", range: "501+ accounts / month" },
-  { value: 8, label: "101–500", range: "101–500 accounts / month" },
-  { value: 6, label: "26–100", range: "26–100 accounts / month" },
-  { value: 4, label: "6–25", range: "6–25 accounts / month" },
-  { value: 2, label: "1–5", range: "1–5 accounts / month" },
+export interface ScoreTier {
+  label: string;
+  emoji: string;
+  tag: string; // badge classes
+}
+export function scoreTier(score: number): ScoreTier {
+  if (score >= 500) return { label: "Big catch", emoji: "🐟", tag: "bg-green-30 text-green-70" };
+  if (score >= 50) return { label: "Worth a dive", emoji: "🌊", tag: "bg-blue-30 text-blue-70" };
+  return { label: "Surface nibble", emoji: "💧", tag: "bg-beige-30 text-beige-60" };
+}
+
+/**
+ * Demand — accounts reached per month, scored as the geometric midpoint of each
+ * band so the score reflects real order of magnitude (~333× top to bottom).
+ * 1–5 → 3 | 6–25 → 15 | 26–100 → 50 | 101–500 → 250 | 501+ → 1000
+ */
+export const DEMAND_OPTIONS = [
+  { value: 1000, label: "501+", range: "501+ accounts / month" },
+  { value: 250, label: "101–500", range: "101–500 accounts / month" },
+  { value: 50, label: "26–100", range: "26–100 accounts / month" },
+  { value: 15, label: "6–25", range: "6–25 accounts / month" },
+  { value: 3, label: "1–5", range: "1–5 accounts / month" },
 ] as const;
 
-/** Impact is a discrete multiplier in the RICE model. */
+/** Impact — stretched log multiplier so a transformative bet outweighs a tweak. */
 export const IMPACT_OPTIONS = [
-  { value: 3, label: "Massive" },
-  { value: 2, label: "High" },
+  { value: 10, label: "Massive" },
+  { value: 3, label: "High" },
   { value: 1, label: "Medium" },
   { value: 0.5, label: "Low" },
   { value: 0.25, label: "Minimal" },
 ] as const;
 
-/** Confidence is a percentage in the RICE model. */
-export const CONFIDENCE_OPTIONS = [
-  { value: 1, label: "High", pct: "100%" },
-  { value: 0.8, label: "Medium", pct: "80%" },
-  { value: 0.5, label: "Low", pct: "50%" },
+/** Viability — how sure we are the bet pays off. */
+export const VIABILITY_OPTIONS = [
+  { value: 1, label: "Proven", pct: "100%" },
+  { value: 0.8, label: "Evidence", pct: "80%" },
+  { value: 0.5, label: "Hopeful", pct: "50%" },
 ] as const;
 
 export const TEAMS = [

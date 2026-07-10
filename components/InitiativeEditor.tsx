@@ -4,20 +4,22 @@ import { useState } from "react";
 import { Plus, Trash2, X } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import {
-  CONFIDENCE_OPTIONS,
   DELIVERY_TYPE_LABEL,
+  DEMAND_OPTIONS,
+  diveScore,
   HEALTH_META,
   IMPACT_OPTIONS,
-  REACH_OPTIONS,
-  riceScore,
+  scoreTier,
   STATUS_META,
   STATUSES,
   TEAMS,
+  VIABILITY_OPTIONS,
   type DeliveryLink,
   type DeliveryLinkType,
   type Health,
   type Initiative,
 } from "@/lib/types";
+import { cn } from "@/lib/cn";
 import { Drawer } from "./Drawer";
 import { Button, Eyebrow } from "./ui";
 import { Field, NativeSelect, TextArea, TextInput } from "./form";
@@ -170,24 +172,31 @@ function EditorForm({ draft }: { draft: Initiative }) {
           />
         </Field>
 
-        {/* Scoring — RICE */}
+        {/* Scoring — DIVE */}
         <div className="rounded-xl border border-beige-20 bg-beige-5 p-4">
           <div className="mb-3 flex items-center justify-between">
-            <Eyebrow>Prioritization · RICE</Eyebrow>
-            <span className="text-sm text-green-90">
-              RICE score{" "}
-              <span className="font-display text-lg font-semibold">{riceScore(d.scores)}</span>
+            <Eyebrow>Prioritization · DIVE</Eyebrow>
+            <span className="flex items-center gap-2 text-sm text-green-90">
+              <span
+                className={cn(
+                  "mono-label inline-flex items-center gap-1 rounded-md px-2 py-1 leading-none",
+                  scoreTier(diveScore(d.scores)).tag
+                )}
+              >
+                {scoreTier(diveScore(d.scores)).emoji} {scoreTier(diveScore(d.scores)).label}
+              </span>
+              <span className="font-display text-lg font-semibold">{diveScore(d.scores)}</span>
             </span>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Reach" hint="Accounts reached per month">
+            <Field label="Demand" hint="Accounts reached per month">
               <NativeSelect
-                value={d.scores.reach}
-                onChange={(e) => setScore("reach", Number(e.target.value))}
+                value={d.scores.demand}
+                onChange={(e) => setScore("demand", Number(e.target.value))}
               >
-                {REACH_OPTIONS.map((o) => (
+                {DEMAND_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
-                    {o.label} — score {o.value}
+                    {o.range}
                   </option>
                 ))}
               </NativeSelect>
@@ -213,12 +222,12 @@ function EditorForm({ draft }: { draft: Initiative }) {
                 ))}
               </NativeSelect>
             </Field>
-            <Field label="Confidence">
+            <Field label="Viability">
               <NativeSelect
-                value={d.scores.confidence}
-                onChange={(e) => setScore("confidence", Number(e.target.value))}
+                value={d.scores.viability}
+                onChange={(e) => setScore("viability", Number(e.target.value))}
               >
-                {CONFIDENCE_OPTIONS.map((o) => (
+                {VIABILITY_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label} ({o.pct})
                   </option>
@@ -227,7 +236,7 @@ function EditorForm({ draft }: { draft: Initiative }) {
             </Field>
           </div>
           <p className="mt-3 text-xs text-beige-60">
-            RICE = (Reach × Impact × Confidence) ÷ Effort
+            DIVE = (Demand × Impact × Viability) ÷ Effort
           </p>
         </div>
 

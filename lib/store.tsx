@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -12,11 +13,38 @@ import { INITIATIVES, OWNERS, THEMES } from "./seed";
 import { EMPTY_FILTERS, type Filters } from "./filters";
 import type { GroupBy, Initiative, Owner, Status, Theme, Zoom } from "./types";
 import { todayISO } from "./dates";
+import { isSupabaseConfigured } from "./supabase";
+import { useAuth } from "./auth";
+import {
+  fetchWorkspace,
+  persistArchive,
+  persistInitiative,
+  persistMove,
+} from "./data";
+
+/** Seed the in-memory store with stable positions (demo/local mode only). */
+function seededInitiatives(): Initiative[] {
+  return INITIATIVES.map((i, idx) => ({ ...i, position: (idx + 1) * 1000 }));
+}
+
+/** Midpoint between two neighbours' positions (fractional insert, no rewrites). */
+function between(left: number | null, right: number | null): number {
+  if (left === null && right === null) return 0;
+  if (left === null) return (right as number) - 1000;
+  if (right === null) return left + 1000;
+  return (left + right) / 2;
+}
 
 interface RoadmapState {
   initiatives: Initiative[];
   themes: Theme[];
   owners: Owner[];
+
+  /** True while the initial Supabase load is in flight. */
+  loading: boolean;
+  /** Last sync error (a failed persist or load), or null. */
+  error: string | null;
+  dismissError: () => void;
 
   filters: Filters;
   groupBy: GroupBy;
@@ -50,11 +78,17 @@ interface RoadmapState {
 const Ctx = createContext<RoadmapState | null>(null);
 
 export function RoadmapProvider({ children }: { children: ReactNode }) {
-  // v1 runs on seed data in memory. Swap this initializer for a Supabase fetch
-  // (see lib/supabase.ts and supabase/schema.sql) without touching the UI.
-  const [initiatives, setInitiatives] = useState<Initiative[]>(INITIATIVES);
-  const [themes] = useState<Theme[]>(THEMES);
-  const [owners] = useState<Owner[]>(OWNERS);
+  const { session } = useAuth();
+
+  // Local/demo mode (no Supabase env) runs on seed data immediately. With
+  // Supabase configured, we start empty and load once a session is present.
+  const [initiatives, setInitiatives] = useState<Initiative[]>(() =>
+    isSupabaseConfigured ? [] : seededInitiatives()
+  );
+  const [themes, setThemes] = useState<Theme[]>(() => (isSupabaseConfigured ? [] : THEMES));
+  const [owners, setOwners] = useState<Owner[]>(() => (isSupabaseConfigured ? [] : OWNERS));
+  const [loading, setLoading] = useState<boolean>(isSupabaseConfigured);
+  const [error, setError] = useState<string | null>(null);
 
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [groupBy, setGroupBy] = useState<GroupBy>("theme");
@@ -63,19 +97,71 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editorDraft, setEditorDraft] = useState<Initiative | null>(null);
 
+  // Load from Supabase whenever the signed-in user changes. The workspace is
+  // gated behind auth and the dataset is shared across all users, so we don't
+  // clear on sign-out — the next sign-in refetches and replaces it.
+  const userId = session?.user?.id ?? null;
+  useEffect(() => {
+    if (!isSupabaseConfigured || !userId) return;
+    let active = true;
+    fetchWorkspace()
+      .then((w) => {
+        if (!active) return;
+        setError(null);
+        setInitiatives(w.initiatives);
+        setThemes(w.themes);
+        setOwners(w.owners);
+      })
+      .catch((e: unknown) => {
+        if (!active) return;
+        setError(e instanceof Error ? e.message : "Failed to load workspace.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [userId]);
+
   const patchFilters = useCallback(
     (p: Partial<Filters>) => setFilters((prev) => ({ ...prev, ...p })),
     []
   );
   const resetFilters = useCallback(() => setFilters(EMPTY_FILTERS), []);
+  const dismissError = useCallback(() => setError(null), []);
 
-  const saveInitiative = useCallback((i: Initiative) => {
-    const stamped = { ...i, updatedAt: new Date().toISOString() };
-    setInitiatives((prev) => {
-      const exists = prev.some((x) => x.id === i.id);
-      return exists ? prev.map((x) => (x.id === i.id ? stamped : x)) : [stamped, ...prev];
-    });
+  const reportError = useCallback((e: unknown, action: string) => {
+    console.error(`[beakon] ${action} failed`, e);
+    setError(
+      e instanceof Error ? e.message : `Could not ${action}. Your change may not be saved.`
+    );
   }, []);
+
+  const saveInitiative = useCallback(
+    (i: Initiative) => {
+      setInitiatives((prev) => {
+        const exists = prev.some((x) => x.id === i.id);
+        // New items appear on top (smallest position), matching the old prepend.
+        const position = exists
+          ? i.position
+          : i.position ??
+            (prev.length ? Math.min(...prev.map((x) => x.position ?? 0)) - 1000 : 0);
+        const stamped: Initiative = {
+          ...i,
+          position,
+          updatedAt: new Date().toISOString(),
+        };
+        if (isSupabaseConfigured) {
+          queueMicrotask(() =>
+            persistInitiative(stamped).catch((e) => reportError(e, "save"))
+          );
+        }
+        return exists ? prev.map((x) => (x.id === i.id ? stamped : x)) : [stamped, ...prev];
+      });
+    },
+    [reportError]
+  );
 
   const moveInitiative = useCallback(
     (id: string, toStatus: Status, beforeId: string | null) => {
@@ -83,11 +169,8 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       setInitiatives((prev) => {
         const dragged = prev.find((x) => x.id === id);
         if (!dragged) return prev;
-        const stamped =
-          dragged.status === toStatus
-            ? { ...dragged }
-            : { ...dragged, status: toStatus, updatedAt: new Date().toISOString() };
         const without = prev.filter((x) => x.id !== id);
+
         let insertAt: number;
         if (beforeId) {
           insertAt = without.findIndex((x) => x.id === beforeId);
@@ -102,19 +185,46 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
             }
           }
         }
-        without.splice(insertAt, 0, stamped);
+
+        const leftPos = insertAt > 0 ? without[insertAt - 1].position ?? 0 : null;
+        const rightPos = insertAt < without.length ? without[insertAt].position ?? 0 : null;
+        const position = between(leftPos, rightPos);
+        const statusChanged = dragged.status !== toStatus;
+
+        const moved: Initiative = {
+          ...dragged,
+          status: toStatus,
+          position,
+          updatedAt: statusChanged ? new Date().toISOString() : dragged.updatedAt,
+        };
+
+        if (isSupabaseConfigured) {
+          queueMicrotask(() =>
+            persistMove(id, toStatus, position).catch((e) => reportError(e, "move"))
+          );
+        }
+
+        without.splice(insertAt, 0, moved);
         return without;
       });
     },
-    []
+    [reportError]
   );
 
-  const archiveInitiative = useCallback((id: string) => {
-    setInitiatives((prev) =>
-      prev.map((x) => (x.id === id ? { ...x, archived: true, updatedAt: new Date().toISOString() } : x))
-    );
-    setSelectedId((cur) => (cur === id ? null : cur));
-  }, []);
+  const archiveInitiative = useCallback(
+    (id: string) => {
+      setInitiatives((prev) =>
+        prev.map((x) =>
+          x.id === id ? { ...x, archived: true, updatedAt: new Date().toISOString() } : x
+        )
+      );
+      setSelectedId((cur) => (cur === id ? null : cur));
+      if (isSupabaseConfigured) {
+        queueMicrotask(() => persistArchive(id).catch((e) => reportError(e, "archive")));
+      }
+    },
+    [reportError]
+  );
 
   const newDraft = useCallback((): Initiative => {
     const start = todayISO();
@@ -129,7 +239,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       team: "App System",
       themeId: themes[0]?.id ?? "",
       strategicGoal: "",
-      scores: { reach: 8, impact: 1, confidence: 0.8, effort: 3 },
+      scores: { demand: 250, impact: 1, viability: 0.8, effort: 3 },
       health: "on_track",
       targetStart: start,
       targetEnd: start,
@@ -158,6 +268,9 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       initiatives,
       themes,
       owners,
+      loading,
+      error,
+      dismissError,
       filters,
       groupBy,
       zoom,
@@ -186,6 +299,9 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       initiatives,
       themes,
       owners,
+      loading,
+      error,
+      dismissError,
       filters,
       groupBy,
       zoom,

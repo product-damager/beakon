@@ -6,8 +6,8 @@ import { useRoadmap } from "@/lib/store";
 import { applyFilters } from "@/lib/filters";
 import { formatShortEN, quarterLabelFromISO } from "@/lib/dates";
 import {
+  diveScore,
   HEALTH_META,
-  riceScore,
   STATUSES,
   THEME_COLOR_META,
   type Health,
@@ -39,7 +39,7 @@ export function List() {
         case "theme": return getTheme(i.themeId)?.name.toLowerCase() ?? "";
         case "status": return STATUSES.indexOf(i.status);
         case "quarter": return i.targetStart;
-        case "priority": return riceScore(i.scores);
+        case "priority": return diveScore(i.scores);
         case "health": return HEALTH_ORDER[i.health];
         case "updated": return i.updatedAt;
       }
@@ -84,7 +84,7 @@ export function List() {
               <Th k="team" label="Team" />
               <Th k="status" label="Status" />
               <Th k="quarter" label="Quarter" />
-              <Th k="priority" label="RICE" align="right" />
+              <Th k="priority" label="DIVE" align="right" />
               <Th k="health" label="Health" />
               <Th k="updated" label="Updated" align="right" />
             </tr>
@@ -122,7 +122,7 @@ export function List() {
                     {quarterLabelFromISO(i.targetStart)}
                   </td>
                   <td className="px-3 py-2.5 text-right font-display font-semibold text-green-90">
-                    {riceScore(i.scores)}
+                    {diveScore(i.scores)}
                   </td>
                   <td className="px-3 py-2.5">
                     <span className={cn("mono-label inline-flex items-center gap-1 rounded-md px-2 py-1", HEALTH_META[i.health].tag)}>
