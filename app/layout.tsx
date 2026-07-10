@@ -4,8 +4,8 @@ import { AuthProvider } from "@/lib/auth";
 import { RoadmapProvider } from "@/lib/store";
 
 export const metadata: Metadata = {
-  title: "Beakon — Roadmap Workspace",
-  description: "A calm, timeline-first roadmap workspace for the Kameleoon product team.",
+  title: "Beakon",
+  description: "A calm roadmap workspace where birds are watching YOU 🫵.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

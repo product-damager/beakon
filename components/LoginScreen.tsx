@@ -61,8 +61,7 @@ export function LoginScreen() {
             <>
               <h1 className="font-display text-lg font-semibold text-green-90">Sign in</h1>
               <p className="mt-1 text-sm text-green-70">
-                Use your Kameleoon email. We&apos;ll send you a one-time magic link — no password
-                needed.
+                Use your Kameleoon email. Puffin will send you a one-time magic link to enter the tool.
               </p>
               <form onSubmit={submit} className="mt-5">
                 <Field label="Work email">
@@ -85,7 +84,7 @@ export function LoginScreen() {
         </div>
 
         <p className="mt-6 text-center text-xs text-beige-60">
-          Access is limited to the Kameleoon product team.
+          Access is limited...
         </p>
       </div>
     </div>

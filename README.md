@@ -1,6 +1,6 @@
 # Beakon
 
-A calm, **timeline-first roadmap workspace** for the Kameleoon product team. One canonical
+A calm roadmap workspace where birds are watching YOU 🫵. One canonical
 place for initiatives, with audience-ready views — and a controlled path to a curated external
 roadmap later.
 

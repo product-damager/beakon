@@ -2,7 +2,7 @@
   "name": "beakon",
   "version": "0.1.0",
   "private": true,
-  "description": "Beakon — a calm, timeline-first roadmap workspace for the Kameleoon product team.",
+  "description": "Beakon — A calm roadmap workspace where birds are watching YOU 🫵",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
