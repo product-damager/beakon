@@ -1,0 +1,11 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+# Activates the Next.js Runtime so SSR, redirects (app/page.tsx -> /timeline),
+# and App Router routes are handled instead of served as static files.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[build.environment]
+  NODE_VERSION = "20"
