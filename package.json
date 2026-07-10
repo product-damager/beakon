@@ -5,6 +5,7 @@
   "description": "Beakon — A calm roadmap workspace where birds are watching YOU 🫵",
   "scripts": {
     "dev": "next dev",
+    "dev:demo": "NEXT_PUBLIC_SUPABASE_URL= NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY= next dev -p 3210",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
