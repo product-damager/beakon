@@ -14,7 +14,7 @@ import {
 import { cn } from "@/lib/cn";
 import { useRoadmap } from "@/lib/store";
 import { activeFilterCount } from "@/lib/filters";
-import { STATUS_META, STATUSES, TEAMS, type GroupBy, type Status, type Visibility, type Zoom } from "@/lib/types";
+import { ownerName, STATUS_META, STATUSES, TEAMS, type GroupBy, type Status, type Visibility, type Zoom } from "@/lib/types";
 import { Button } from "./ui";
 
 interface Option {
@@ -185,7 +185,7 @@ export function FilterBar({
         label="Owner"
         selected={filters.owners}
         onToggle={(v) => toggle("owners", v)}
-        options={owners.map((o) => ({ value: o.id, label: o.name }))}
+        options={owners.map((o) => ({ value: o.id, label: ownerName(o) }))}
       />
       <MultiSelect
         label="Team"

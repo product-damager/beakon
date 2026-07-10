@@ -1,12 +1,12 @@
 # Beakon
 
-A calm roadmap workspace where birds are watching YOU 🫵. One canonical
-place for initiatives, with audience-ready views — and a controlled path to a curated external
+A calm roadmap workspace where the birds are watching YOU 🫵. One canonical
+nest for initiatives, with audience-ready views — and a controlled flight path to a curated external
 roadmap later.
 
-Built with Next.js (App Router) + TypeScript + Tailwind, styled with the Kameleoon Product
-design system. Runs on in-memory seed data out of the box; swaps to Supabase (Postgres + auth)
-when you're ready.
+Built with Next.js (App Router) + TypeScript + Tailwind, styled with a focused product design
+system. Runs on in-memory seed data out of the box; migrates to Supabase (Postgres + auth)
+when you're ready to leave the nest.
 
 ## Quick start
 
@@ -15,8 +15,8 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000 — it lands on the **Timeline**. No accounts or environment
-variables are needed for the demo; it ships with a realistic seeded roadmap.
+Open http://localhost:3000 — it lands on the **Timeline** for a bird's-eye view. No accounts or
+environment variables are needed for the demo; it ships with a realistic seeded roadmap.
 
 Other scripts: `npm run build`, `npm run start`, `npm run typecheck`.
 
@@ -47,7 +47,7 @@ lets the zoom control move between month, quarter, and half-year without changin
 app/
   layout.tsx              root layout, fonts, RoadmapProvider
   page.tsx                redirects / → /timeline
-  globals.css             Kameleoon token overrides
+  globals.css             design-token overrides
   (workspace)/            app shell (sidebar + top bar)
     timeline|board|list/  the three internal views
   share/                  external read-only roadmap
@@ -78,15 +78,17 @@ The app is written against a swappable data layer so no UI changes are needed.
 
 ## Design system
 
-Kameleoon **Product** pillar: ShadCN/Tailwind numeric defaults, brand colors and fonts only
-(green-90 sidebar, beige surfaces, lime accents; Plus Jakarta Sans titles, Inter body, Noto Sans
-Mono for labels/tags). Status is the meaning-bearing color on the timeline; lime is reserved for
-UI accents.
+A focused product design system, so every view sings from the same songbook: ShadCN/Tailwind
+numeric defaults with a tight, opinionated palette and type scale (deep-green sidebar, beige
+surfaces, lime accents; Plus Jakarta Sans titles, Inter body, Noto Sans Mono for labels/tags).
+Status is the meaning-bearing color on the timeline; lime is reserved for UI accents.
 
 ## Deployment
 
-Optimized for Vercel — push to a Git repo and import. The build is fully static/SSR and needs no
-special configuration; add the Supabase env vars in the Vercel project when you connect a backend.
+Ready to take flight on any modern hosting/deployment service that runs Next.js — push to a Git
+repo and import. The build is fully static/SSR and needs no special configuration; add the
+Supabase env vars in your host's project settings when you connect a backend. See
+[`DEPLOY.md`](DEPLOY.md) for a concrete step-by-step walkthrough.
 
 ## Not yet built (later milestones)
 

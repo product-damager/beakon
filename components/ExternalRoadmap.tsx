@@ -71,14 +71,14 @@ export function ExternalRoadmap() {
         <div className="mx-auto max-w-5xl px-8 py-10">
           <div className="flex items-center gap-2.5">
             <Logo size={26} />
-            <span className="font-display text-lg font-semibold text-green-90">Kameleoon</span>
+            <span className="font-display text-lg font-semibold text-green-90">Product team</span>
           </div>
           <div className="mono-label mt-8 text-lime-70">Product roadmap</div>
           <h1 className="mt-2 max-w-2xl font-display text-4xl font-semibold leading-tight text-green-90">
             What we&apos;re building next
           </h1>
           <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-green-70">
-            A curated look at where the Kameleoon platform is heading. Dates are directional and
+            A curated look at where our team is heading. Dates are directional and
             subject to change.
           </p>
         </div>

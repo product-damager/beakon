@@ -1,9 +1,9 @@
 import type { Config } from "tailwindcss";
 
 /**
- * Kameleoon Product Design tokens.
+ * Product Design tokens.
  * ShadCN/Tailwind defaults are the numerical source of truth (spacing, radius scale,
- * component sizing). Kameleoon overrides only COLORS and FONTS.
+ * component sizing). Product overrides only COLORS and FONTS.
  */
 const config: Config = {
   content: [
@@ -14,7 +14,7 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Kameleoon primitive palette (from brand-tokens.ts)
+        // Product primitive palette (from brand-tokens.ts)
         green: {
           5: "#f1f9f7", 10: "#e7f4f1", 20: "#d2eae5", 30: "#b6ddd5", 40: "#97cec2",
           50: "#54a08f", 60: "#348372", 70: "#2c5d52", 80: "#1c3b34", 90: "#1d342f",
@@ -65,11 +65,16 @@ const config: Config = {
       keyframes: {
         "fade-in": { from: { opacity: "0" }, to: { opacity: "1" } },
         "slide-in": { from: { transform: "translateX(100%)" }, to: { transform: "translateX(0)" } },
+        "slide-up": {
+          from: { opacity: "0", transform: "translateY(8px) scale(0.98)" },
+          to: { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
         pulse: { "0%,100%": { opacity: "1" }, "50%": { opacity: "0.5" } },
       },
       animation: {
         "fade-in": "fade-in 0.2s ease-out",
         "slide-in": "slide-in 0.25s cubic-bezier(0.22,1,0.36,1)",
+        "slide-up": "slide-up 0.2s cubic-bezier(0.22,1,0.36,1)",
       },
     },
   },

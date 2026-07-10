@@ -16,10 +16,12 @@ import { todayISO } from "./dates";
 import { isSupabaseConfigured } from "./supabase";
 import { useAuth } from "./auth";
 import {
+  createTheme,
   fetchWorkspace,
   persistArchive,
   persistInitiative,
   persistMove,
+  persistOwner,
 } from "./data";
 
 /** Seed the in-memory store with stable positions (demo/local mode only). */
@@ -46,6 +48,9 @@ interface RoadmapState {
   error: string | null;
   dismissError: () => void;
 
+  /** The owner row matching the signed-in user's email, if any. */
+  currentOwner: Owner | undefined;
+
   filters: Filters;
   groupBy: GroupBy;
   zoom: Zoom;
@@ -62,6 +67,10 @@ interface RoadmapState {
 
   select: (id: string | null) => void;
   saveInitiative: (i: Initiative) => void;
+  /** Create a new theme (persists + adds to state). */
+  addTheme: (t: Theme) => void;
+  /** Update the signed-in user's profile (name / surname / team). */
+  saveProfile: (patch: { name: string; surname: string; team: string }) => void;
   /** Board drag: set status and place before `beforeId` (null = end of target column). */
   moveInitiative: (id: string, toStatus: Status, beforeId: string | null) => void;
   archiveInitiative: (id: string) => void;
@@ -211,6 +220,16 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
     [reportError]
   );
 
+  const addTheme = useCallback(
+    (t: Theme) => {
+      setThemes((prev) => (prev.some((x) => x.id === t.id) ? prev : [...prev, t]));
+      if (isSupabaseConfigured) {
+        queueMicrotask(() => createTheme(t).catch((e) => reportError(e, "create theme")));
+      }
+    },
+    [reportError]
+  );
+
   const archiveInitiative = useCallback(
     (id: string) => {
       setInitiatives((prev) =>
@@ -226,6 +245,42 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
     [reportError]
   );
 
+  // Match the signed-in user to a seeded owner row by email — lets the app
+  // "know who you are" and default new initiatives to you as owner. In local/
+  // demo mode (no auth) the first owner stands in as "you".
+  const currentOwner = useMemo<Owner | undefined>(() => {
+    const email = session?.user?.email?.toLowerCase();
+    if (!email) return isSupabaseConfigured ? undefined : owners[0];
+    return owners.find((o) => o.email?.toLowerCase() === email);
+  }, [owners, session]);
+
+  const saveProfile = useCallback(
+    (patch: { name: string; surname: string; team: string }) => {
+      const email = session?.user?.email ?? undefined;
+      // Edit the matched owner row if there is one; otherwise create a profile
+      // keyed to the signed-in email so anyone in the domain can identify.
+      const base: Owner =
+        currentOwner ??
+        { id: `u-${Math.random().toString(36).slice(2, 9)}`, name: "", role: "", email };
+      const next: Owner = {
+        ...base,
+        name: patch.name.trim(),
+        surname: patch.surname.trim() || undefined,
+        team: patch.team || undefined,
+        email: base.email ?? email,
+      };
+      setOwners((prev) =>
+        prev.some((o) => o.id === next.id)
+          ? prev.map((o) => (o.id === next.id ? next : o))
+          : [...prev, next]
+      );
+      if (isSupabaseConfigured) {
+        queueMicrotask(() => persistOwner(next).catch((e) => reportError(e, "save profile")));
+      }
+    },
+    [currentOwner, session, reportError]
+  );
+
   const newDraft = useCallback((): Initiative => {
     const start = todayISO();
     return {
@@ -235,7 +290,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       problem: "",
       expectedOutcome: "",
       status: "planned",
-      ownerId: owners[0]?.id ?? "",
+      ownerId: currentOwner?.id ?? owners[0]?.id ?? "",
       team: "App System",
       themeId: themes[0]?.id ?? "",
       strategicGoal: "",
@@ -250,7 +305,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       updatedAt: new Date().toISOString(),
       archived: false,
     };
-  }, [owners, themes]);
+  }, [owners, themes, currentOwner]);
 
   const openCreate = useCallback(() => setEditorDraft(newDraft()), [newDraft]);
   const openEdit = useCallback((i: Initiative) => setEditorDraft({ ...i }), []);
@@ -268,6 +323,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       initiatives,
       themes,
       owners,
+      currentOwner,
       loading,
       error,
       dismissError,
@@ -285,6 +341,8 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       setPresentation,
       select: setSelectedId,
       saveInitiative,
+      addTheme,
+      saveProfile,
       moveInitiative,
       archiveInitiative,
       newDraft,
@@ -299,6 +357,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       initiatives,
       themes,
       owners,
+      currentOwner,
       loading,
       error,
       dismissError,
@@ -311,6 +370,8 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       patchFilters,
       resetFilters,
       saveInitiative,
+      addTheme,
+      saveProfile,
       moveInitiative,
       archiveInitiative,
       newDraft,

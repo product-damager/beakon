@@ -8,6 +8,7 @@ import { formatShortEN, quarterLabelFromISO } from "@/lib/dates";
 import {
   diveScore,
   HEALTH_META,
+  ownerName,
   STATUSES,
   THEME_COLOR_META,
   type Health,
@@ -34,7 +35,7 @@ export function List() {
     const val = (i: Initiative): string | number => {
       switch (sort.key) {
         case "title": return i.title.toLowerCase();
-        case "owner": return getOwner(i.ownerId)?.name.toLowerCase() ?? "";
+        case "owner": return ownerName(getOwner(i.ownerId)).toLowerCase();
         case "team": return i.team.toLowerCase();
         case "theme": return getTheme(i.themeId)?.name.toLowerCase() ?? "";
         case "status": return STATUSES.indexOf(i.status);
@@ -112,8 +113,8 @@ export function List() {
                   </td>
                   <td className="px-3 py-2.5">
                     <span className="flex items-center gap-2 text-green-90">
-                      {owner && <Avatar name={owner.name} className="h-6 w-6 text-[10px]" />}
-                      <span className="whitespace-nowrap">{owner?.name}</span>
+                      {owner && <Avatar name={ownerName(owner)} className="h-6 w-6 text-[10px]" />}
+                      <span className="whitespace-nowrap">{ownerName(owner)}</span>
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-green-70">{i.team}</td>

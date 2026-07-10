@@ -12,7 +12,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
-        {/* Kameleoon Product fonts — Plus Jakarta Sans (titles), Inter (body), Noto Sans Mono (labels). */}
+        {/* Product fonts — Plus Jakarta Sans (titles), Inter (body), Noto Sans Mono (labels). */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link

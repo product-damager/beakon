@@ -5,7 +5,7 @@ import { GripVertical } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import { applyFilters } from "@/lib/filters";
 import { quarterLabelFromISO } from "@/lib/dates";
-import { diveScore, STATUS_META, STATUSES, THEME_COLOR_META, type Initiative, type Status } from "@/lib/types";
+import { diveScore, ownerName, STATUS_META, STATUSES, THEME_COLOR_META, type Initiative, type Status } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Avatar, Eyebrow } from "./ui";
 import { FilterBar } from "./FilterBar";
@@ -79,16 +79,17 @@ function Card({
       </div>
       {/* Quick edit */}
       <div className="mt-3 flex items-center gap-2 border-t border-beige-10 pt-2.5">
-        {owner && <Avatar name={owner.name} className="h-6 w-6 text-[10px]" />}
+        {owner && <Avatar name={ownerName(owner)} className="h-6 w-6 text-[10px]" />}
         <select
           value={initiative.ownerId}
           onChange={(e) => saveInitiative({ ...initiative, ownerId: e.target.value })}
           className="min-w-0 flex-1 truncate rounded-md border border-beige-20 bg-beige-5 px-2 py-1 text-xs text-green-90 focus:outline-none focus:ring-1 focus:ring-green-90"
           aria-label="Owner"
         >
+          <option value="">Unassigned</option>
           {owners.map((o) => (
             <option key={o.id} value={o.id}>
-              {o.name}
+              {ownerName(o)}
             </option>
           ))}
         </select>

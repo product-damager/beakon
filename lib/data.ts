@@ -118,6 +118,37 @@ function rowToTheme(t: { id: string; name: string; description: string | null; c
   return { id: t.id, name: t.name, description: t.description ?? "", color: t.color as ThemeColor };
 }
 
+interface OwnerRow {
+  id: string;
+  name: string;
+  surname: string | null;
+  role: string | null;
+  email: string | null;
+  team: string | null;
+}
+
+function rowToOwner(o: OwnerRow): Owner {
+  return {
+    id: o.id,
+    name: o.name,
+    surname: o.surname ?? undefined,
+    role: o.role ?? "",
+    email: o.email ?? undefined,
+    team: o.team ?? undefined,
+  };
+}
+
+function ownerToRow(o: Owner) {
+  return {
+    id: o.id,
+    name: o.name,
+    surname: o.surname ?? "",
+    role: o.role ?? "",
+    email: o.email ?? null,
+    team: o.team ?? null,
+  };
+}
+
 export interface Workspace {
   initiatives: Initiative[];
   themes: Theme[];
@@ -150,11 +181,7 @@ export async function fetchWorkspace(): Promise<Workspace> {
     rowToInitiative(row, linksByInitiative.get(row.id) ?? [])
   );
   const themes = (themeRes.data ?? []).map(rowToTheme);
-  const owners = ((ownerRes.data ?? []) as Owner[]).map((o) => ({
-    id: o.id,
-    name: o.name,
-    role: o.role ?? "",
-  }));
+  const owners = ((ownerRes.data ?? []) as OwnerRow[]).map(rowToOwner);
 
   return { initiatives, themes, owners };
 }
@@ -197,6 +224,25 @@ export async function persistMove(id: string, status: Status, position: number):
 export async function persistArchive(id: string): Promise<void> {
   const sb = client();
   const { error } = await sb.from("initiatives").update({ archived: true }).eq("id", id);
+  if (error) throw error;
+}
+
+/** Upsert an owner profile (name/surname/team edited from settings). */
+export async function persistOwner(o: Owner): Promise<void> {
+  const sb = client();
+  const { error } = await sb.from("owners").upsert(ownerToRow(o));
+  if (error) throw error;
+}
+
+/** Insert a new theme (id generated client-side). */
+export async function createTheme(t: Theme): Promise<void> {
+  const sb = client();
+  const { error } = await sb.from("themes").insert({
+    id: t.id,
+    name: t.name,
+    description: t.description,
+    color: t.color,
+  });
   if (error) throw error;
 }
 

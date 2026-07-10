@@ -5,7 +5,7 @@ import { CalendarRange, Minimize2 } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import { applyFilters, groupInitiatives } from "@/lib/filters";
 import { barPosition, buildColumns, buildWindow, todayMarker } from "@/lib/dates";
-import { STATUS_META, STATUSES, THEME_COLOR_META, type Zoom } from "@/lib/types";
+import { ownerName, STATUS_META, STATUSES, THEME_COLOR_META, type Zoom } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Avatar, Button, Eyebrow } from "./ui";
 import { FilterBar } from "./FilterBar";
@@ -183,7 +183,7 @@ export function Timeline() {
                           className="group flex items-stretch border-b border-beige-10 hover:bg-beige-5/60"
                         >
                           <div className="sticky left-0 z-10 flex w-[268px] shrink-0 items-center gap-2.5 bg-background px-6 py-2.5 group-hover:bg-beige-5">
-                            {owner && <Avatar name={owner.name} className="h-6 w-6 text-[10px]" />}
+                            {owner && <Avatar name={ownerName(owner)} className="h-6 w-6 text-[10px]" />}
                             <button
                               onClick={() => select(i.id)}
                               className="truncate text-left text-[13px] font-medium text-green-90 hover:text-green-60"

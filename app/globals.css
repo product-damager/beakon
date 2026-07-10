@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Kameleoon Product token overrides (ShadCN variable contract) ── */
+/* ── Product token overrides (ShadCN variable contract) ── */
 :root {
   --background: 60 20% 96%; /* beige-10 */
   --foreground: 168 30% 16%; /* green-90 */

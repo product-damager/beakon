@@ -11,7 +11,7 @@ import {
   type ThemeColor,
 } from "@/lib/types";
 
-// ── Button (ShadCN variant mapping, Kameleoon colors, Inter sentence case) ──
+// ── Button (ShadCN variant mapping, Product colors, Inter sentence case) ──
 type Variant = "default" | "secondary" | "outline" | "ghost" | "destructive";
 type Size = "sm" | "default" | "lg" | "icon";
 

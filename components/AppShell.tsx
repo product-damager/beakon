@@ -1,15 +1,18 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AlertTriangle, CalendarRange, Columns3, LogOut, Plus, Rows3, Share2, X } from "lucide-react";
+import { AlertTriangle, CalendarRange, Columns3, LogOut, Plus, Rows3, Settings, Share2, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useRoadmap } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
+import { ownerName } from "@/lib/types";
 import { Avatar, Button } from "./ui";
 import { Logo } from "./Logo";
 import { InitiativeDrawer } from "./InitiativeDrawer";
 import { InitiativeEditor } from "./InitiativeEditor";
+import { SettingsDialog } from "./SettingsDialog";
 
 const NAV = [
   { href: "/timeline", label: "Timeline", icon: CalendarRange },
@@ -25,10 +28,13 @@ const TITLES: Record<string, string> = {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { owners, openCreate, presentation, error, dismissError, loading } = useRoadmap();
+  const { currentOwner, openCreate, presentation, error, dismissError, loading } = useRoadmap();
   const { authRequired, email, signOut } = useAuth();
-  // Signed-in identity when auth is on; otherwise fall back to the first owner.
-  const displayName = authRequired ? email ?? "Signed in" : owners[0]?.name;
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // Prefer the matched owner profile; fall back to email (or a demo label).
+  const displayName = ownerName(currentOwner) || (authRequired ? email ?? "Signed in" : "You");
+  const subtitle =
+    [currentOwner?.team, currentOwner?.role].filter(Boolean).join(" · ") || "Product team";
 
   if (presentation) {
     // Presentation mode drops all chrome for a clean, room-ready timeline.
@@ -90,12 +96,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         {displayName && (
-          <div className="flex items-center gap-3 border-t border-green-80 px-5 py-4">
-            <Avatar name={displayName} />
-            <div className="min-w-0 flex-1 leading-tight">
-              <div className="truncate text-sm font-medium text-white">{displayName}</div>
-              <div className="truncate text-xs text-green-40">Product team · Editor</div>
-            </div>
+          <div className="flex items-center gap-1 border-t border-green-80 px-3 py-3">
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className="group flex min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-green-80/60"
+              title="Profile settings"
+            >
+              <Avatar name={displayName} />
+              <div className="min-w-0 flex-1 leading-tight">
+                <div className="truncate text-sm font-medium text-white">{displayName}</div>
+                <div className="truncate text-xs text-green-40">{subtitle}</div>
+              </div>
+              <Settings
+                size={15}
+                className="shrink-0 text-green-40 opacity-0 transition-opacity group-hover:opacity-100"
+              />
+            </button>
             {authRequired && (
               <button
                 onClick={() => signOut()}
@@ -152,6 +168,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <InitiativeDrawer />
       <InitiativeEditor />
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }

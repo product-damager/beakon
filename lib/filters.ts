@@ -1,3 +1,4 @@
+import { ownerName } from "./types";
 import type { GroupBy, Initiative, Owner, Status, Theme, ThemeColor, Visibility } from "./types";
 
 export interface Filters {
@@ -38,7 +39,7 @@ export function applyFilters(
   owners: Owner[]
 ): Initiative[] {
   const themeName = (id: string) => themes.find((t) => t.id === id)?.name ?? "";
-  const ownerName = (id: string) => owners.find((o) => o.id === id)?.name ?? "";
+  const ownerLabel = (id: string) => ownerName(owners.find((o) => o.id === id));
   const q = f.search.trim().toLowerCase();
 
   return initiatives.filter((i) => {
@@ -54,7 +55,7 @@ export function applyFilters(
         i.title,
         i.summary,
         themeName(i.themeId),
-        ownerName(i.ownerId),
+        ownerLabel(i.ownerId),
         i.team,
       ]
         .join(" ")
@@ -100,7 +101,7 @@ export function groupInitiatives(
       ensure(i.team, i.team).items.push(i);
     } else {
       const o = owners.find((x) => x.id === i.ownerId);
-      ensure(i.ownerId, o?.name ?? "Unassigned", undefined, o?.role).items.push(i);
+      ensure(i.ownerId, ownerName(o) || "Unassigned", undefined, o?.role).items.push(i);
     }
   }
 

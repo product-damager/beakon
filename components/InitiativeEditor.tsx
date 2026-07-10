@@ -9,15 +9,19 @@ import {
   diveScore,
   HEALTH_META,
   IMPACT_OPTIONS,
+  ownerName,
   scoreTier,
   STATUS_META,
   STATUSES,
   TEAMS,
+  THEME_COLOR_META,
   VIABILITY_OPTIONS,
   type DeliveryLink,
   type DeliveryLinkType,
   type Health,
   type Initiative,
+  type Theme,
+  type ThemeColor,
 } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Drawer } from "./Drawer";
@@ -34,7 +38,7 @@ export function InitiativeEditor() {
 }
 
 function EditorForm({ draft }: { draft: Initiative }) {
-  const { themes, owners, initiatives, saveInitiative, closeEditor } = useRoadmap();
+  const { themes, owners, initiatives, saveInitiative, addTheme, closeEditor } = useRoadmap();
   const [d, setD] = useState<Initiative>(draft);
   const isNew = !initiatives.some((x) => x.id === draft.id);
 
@@ -122,9 +126,10 @@ function EditorForm({ draft }: { draft: Initiative }) {
           </Field>
           <Field label="Owner">
             <NativeSelect value={d.ownerId} onChange={(e) => set("ownerId", e.target.value)}>
+              <option value="">Unassigned</option>
               {owners.map((o) => (
                 <option key={o.id} value={o.id}>
-                  {o.name}
+                  {ownerName(o)}
                 </option>
               ))}
             </NativeSelect>
@@ -140,12 +145,19 @@ function EditorForm({ draft }: { draft: Initiative }) {
           </Field>
           <Field label="Theme">
             <NativeSelect value={d.themeId} onChange={(e) => set("themeId", e.target.value)}>
+              <option value="">No theme</option>
               {themes.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name}
                 </option>
               ))}
             </NativeSelect>
+            <ThemeCreator
+              onCreate={(t) => {
+                addTheme(t);
+                set("themeId", t.id);
+              }}
+            />
           </Field>
           <Field label="Health">
             <NativeSelect value={d.health} onChange={(e) => set("health", e.target.value as Health)}>
@@ -343,5 +355,86 @@ function EditorForm({ draft }: { draft: Initiative }) {
         </Button>
       </div>
     </>
+  );
+}
+
+/** Inline "＋ New theme" creator shown under the Theme picker. */
+function ThemeCreator({ onCreate }: { onCreate: (t: Theme) => void }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [color, setColor] = useState<ThemeColor>("green");
+
+  const reset = () => {
+    setName("");
+    setColor("green");
+    setOpen(false);
+  };
+
+  const create = () => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    onCreate({
+      id: `t-${Math.random().toString(36).slice(2, 8)}`,
+      name: trimmed,
+      description: "",
+      color,
+    });
+    reset();
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-1.5 flex items-center gap-1 text-[13px] font-medium text-green-70 hover:text-green-60"
+      >
+        <Plus size={14} /> New theme
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-2 rounded-lg border border-beige-20 bg-beige-5 p-2.5">
+      <TextInput
+        value={name}
+        autoFocus
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Theme name"
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            create();
+          }
+        }}
+      />
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {(Object.keys(THEME_COLOR_META) as ThemeColor[]).map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => setColor(c)}
+            aria-label={c}
+            className={cn(
+              "h-6 w-6 rounded-full ring-offset-1 transition",
+              THEME_COLOR_META[c].dot,
+              color === c ? "ring-2 ring-green-90" : "ring-0"
+            )}
+          />
+        ))}
+      </div>
+      <div className="mt-2.5 flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={reset}
+          className="text-[13px] font-medium text-beige-60 hover:text-green-90"
+        >
+          Cancel
+        </button>
+        <Button size="sm" onClick={create} disabled={!name.trim()}>
+          Add theme
+        </Button>
+      </div>
+    </div>
   );
 }

@@ -12,7 +12,7 @@ export type GroupBy = "theme" | "team" | "owner";
 export type Zoom = "month" | "quarter" | "half";
 export type ViewKey = "timeline" | "board" | "list";
 
-/** Kameleoon palette family used to color a theme. */
+/** Product friendly palette family used to color a theme. */
 export type ThemeColor = "green" | "blue" | "lime" | "pink" | "orange" | "beige";
 
 export type DeliveryLinkType = "redmine" | "figma" | "spec" | "notion" | "other";
@@ -20,7 +20,23 @@ export type DeliveryLinkType = "redmine" | "figma" | "spec" | "notion" | "other"
 export interface Owner {
   id: string;
   name: string;
+  /** Family name; optional. Combined with `name` for display — see ownerName(). */
+  surname?: string;
   role: string;
+  /** Product team sign-in email; used to auto-identify the signed-in user as owner. */
+  email?: string;
+  /** The person's team (one of TEAMS); set from profile settings. */
+  team?: string;
+}
+
+/**
+ * Human label for an owner: "Name Surname" when both exist, whichever single one
+ * is present, else the email. Trims so stray/whitespace-only fields don't show.
+ */
+export function ownerName(o: Owner | undefined): string {
+  if (!o) return "";
+  const full = [o.name, o.surname].map((s) => s?.trim()).filter(Boolean).join(" ");
+  return full || o.email?.trim() || "";
 }
 
 export interface Theme {

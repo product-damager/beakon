@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import { formatDateEN, quarterLabelFromISO } from "@/lib/dates";
-import { DELIVERY_TYPE_LABEL, DEMAND_OPTIONS, diveScore, scoreTier, THEME_COLOR_META } from "@/lib/types";
+import { DELIVERY_TYPE_LABEL, DEMAND_OPTIONS, diveScore, ownerName, scoreTier, THEME_COLOR_META } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Drawer } from "./Drawer";
 import { Avatar, Button, HealthTag, Eyebrow, StatusTag, Tag } from "./ui";
@@ -81,8 +81,8 @@ export function InitiativeDrawer() {
             <div className="grid grid-cols-2 gap-4">
               <Row label="Owner">
                 <span className="flex items-center gap-2">
-                  {owner && <Avatar name={owner.name} className="h-6 w-6 text-[10px]" />}
-                  {owner?.name ?? "Unassigned"}
+                  {owner && <Avatar name={ownerName(owner)} className="h-6 w-6 text-[10px]" />}
+                  {ownerName(owner) || "Unassigned"}
                 </span>
               </Row>
               <Row label="Team">{i.team}</Row>

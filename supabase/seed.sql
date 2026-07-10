@@ -1,22 +1,29 @@
 -- Beakon seed data — the full canonical demo dataset (mirrors lib/seed.ts).
 -- Run this in the PREVIEW project only, after schema.sql. Do NOT run it in prod.
 -- Re-running is safe: it clears the app tables first (auth users are untouched).
+-- Richer than seed_prod.sql on purpose: 8 owners, 6 themes, 19 initiatives.
+-- Owner emails are demo values — set one to your own sign-in email if you want
+-- the profile/identity features to match you when testing against preview.
 
 truncate delivery_links, initiatives, themes, owners restart identity cascade;
 
-insert into owners (id, name, role) values
-  ('u-magali', 'Magali Roux', 'Head of Product'),
-  ('u-helene', 'Hélène Dupont', 'Senior PM'),
-  ('u-seimour', 'Seimour Karim', 'Product Manager'),
-  ('u-nadia', 'Nadia Belhaj', 'PM, Platform'),
-  ('u-tom', 'Tom Verhoeven', 'Engineering Manager');
+insert into owners (id, name, surname, role, email, team) values
+  ('u-magali',  'Magali',  'Roux',      'Head of Product',      'mroux@example.com',      'App System'),
+  ('u-helene',  'Hélène',  'Dupont',    'Senior PM',            'hdupont@example.com',    'Tech & Perso Builders'),
+  ('u-seimour', 'Seimour', 'Karim',     'Product Manager',      'skarim@example.com',     'Visual Builders'),
+  ('u-nadia',   'Nadia',   'Belhaj',    'PM, Platform',         'nbelhaj@example.com',    'App System'),
+  ('u-tom',     'Tom',     'Verhoeven', 'Engineering Manager',  'tverhoeven@example.com', 'Tech & Perso Builders'),
+  ('u-lea',     'Léa',     'Fontaine',  'Senior PM',            'lfontaine@example.com',  'Tech & Perso Builders'),
+  ('u-marc',    'Marc',    'Dubois',    'Staff Engineer',       'mdubois@example.com',    'App System'),
+  ('u-sofia',   'Sofia',   'Almeida',   'Design Lead',          'salmeida@example.com',   'Visual Builders');
 
 insert into themes (id, name, description, color) values
   ('t-ai', 'AI-led Experimentation', 'Make testing and personalization smarter with predictive models.', 'lime'),
   ('t-fm', 'Feature Management', 'Ship and control features safely with flags and rollouts.', 'blue'),
   ('t-web', 'Web Experimentation', 'Faster, flicker-free client-side and server-side testing.', 'green'),
   ('t-trust', 'Data & Trust', 'Statistical rigor, privacy, and results people can rely on.', 'pink'),
-  ('t-platform', 'Platform & Scale', 'Performance, reliability, and enterprise readiness.', 'orange');
+  ('t-platform', 'Platform & Scale', 'Performance, reliability, and enterprise readiness.', 'orange'),
+  ('t-dx', 'Developer Experience', 'SDKs, docs, and APIs that make integration effortless.', 'beige');
 
 insert into initiatives
   (id, title, summary, problem, expected_outcome, status, owner_id, team, theme_id, strategic_goal,
@@ -136,16 +143,73 @@ values
    'planned', 'u-nadia', 'App System', 't-platform', 'Enterprise readiness',
    250, 1, 1, 3, 'on_track', '2026-08-15', '2026-10-31', '{}', 'internal',
    'Requested by two enterprise renewals this year.',
-   13000, '2026-06-25T14:20:00Z');
+   13000, '2026-06-25T14:20:00Z'),
+
+  ('i-visual-editor', 'Visual editor 3.0',
+   'A faster, block-based visual editor for building experiments without code.',
+   'The current editor struggles on complex pages and slows non-technical users down.',
+   'Non-technical users build and launch a variant in under ten minutes.',
+   'opportunity_framing', 'u-sofia', 'Visual Builders', 't-web', 'Best-in-class web testing experience',
+   250, 3, 0.8, 7, 'on_track', '2026-09-01', '2027-01-15', '{}', 'external',
+   'Design system alignment needed before build.',
+   14000, '2026-06-30T10:00:00Z'),
+
+  ('i-holdout', 'Global holdout groups',
+   'Reserve a global holdout audience to measure the true incremental impact of all experiments.',
+   'Teams can''t quantify the aggregate lift of their experimentation program.',
+   'A trustworthy program-level incrementality number per account.',
+   'planned', 'u-nadia', 'Tech & Perso Builders', 't-trust', 'Results people can trust',
+   50, 3, 1, 3, 'on_track', '2026-10-01', '2026-12-31', '{i-stats}', 'internal', '',
+   15000, '2026-06-22T09:30:00Z'),
+
+  ('i-api-v3', 'Public API v3',
+   'A consistent, well-documented REST API covering experiments, flags, and results.',
+   'The current API is inconsistent and blocks deeper customer integrations.',
+   'Partners and customers automate workflows against a stable v3 API.',
+   'solution_framing', 'u-marc', 'App System', 't-dx', 'Open, composable platform',
+   250, 1, 0.8, 5, 'on_track', '2026-08-15', '2026-11-30', '{}', 'external', '',
+   16000, '2026-06-27T11:00:00Z'),
+
+  ('i-ai-insights', 'AI results insights',
+   'Natural-language summaries that explain what an experiment''s results mean and what to do next.',
+   'Interpreting results correctly requires stats expertise many teams lack.',
+   'Every result ships with a clear, trustworthy recommendation.',
+   'opportunity_framing', 'u-lea', 'Tech & Perso Builders', 't-ai', 'Lead the market on AI-driven experimentation',
+   1000, 3, 0.5, 8, 'at_risk', '2026-11-01', '2027-03-31', '{i-stats}', 'internal',
+   'Depends on Bayesian GA for reliable inputs.',
+   17000, '2026-07-03T14:00:00Z'),
+
+  ('i-mab', 'Multi-armed bandit optimizer',
+   'Auto-allocate traffic to winning variants to reduce regret during a test.',
+   'Fixed traffic splits waste conversions on losing variants.',
+   'Optional bandit mode that maximizes conversions while a test runs.',
+   'planned', 'u-magali', 'Tech & Perso Builders', 't-ai', 'Lead the market on AI-driven experimentation',
+   250, 3, 0.8, 6, 'on_track', '2026-10-15', '2027-02-15', '{i-stats}', 'internal', '',
+   18000, '2026-06-24T13:00:00Z'),
+
+  ('i-sdk-docs', 'SDK docs & quickstarts',
+   'Rewritten SDK documentation with copy-paste quickstarts for every framework.',
+   'Developers stall during integration because docs are outdated and scattered.',
+   'Time-to-first-SDK-call drops sharply across supported languages.',
+   'released', 'u-marc', 'App System', 't-dx', 'Meet developers where they build',
+   250, 0.5, 1, 2, 'on_track', '2026-04-01', '2026-06-15', '{}', 'external',
+   'Shipped; tracking docs bounce rate.',
+   19000, '2026-06-16T09:00:00Z');
 
 insert into delivery_links (id, initiative_id, label, url, type, position) values
-  ('d1', 'i-pbx', 'PBX-1420', 'https://kameleoon.atlassian.net/browse/PBX-1420', 'redmine', 1),
-  ('d2', 'i-pbx', 'Model spec', 'https://www.notion.so/kameleoon/pbx-v2', 'spec', 2),
-  ('d3', 'i-flicker', 'WEB-980', 'https://kameleoon.atlassian.net/browse/WEB-980', 'redmine', 1),
-  ('d4', 'i-stats', 'Stats validation', 'https://www.notion.so/kameleoon/stats-ga', 'other', 1),
-  ('d5', 'i-flags-approvals', 'FM-233', 'https://kameleoon.atlassian.net/browse/FM-233', 'redmine', 1),
-  ('d6', 'i-personalization', 'Discovery doc', 'https://www.notion.so/kameleoon/ai-personalization', 'notion', 1),
-  ('d7', 'i-consent', 'DATA-77', 'https://kameleoon.atlassian.net/browse/DATA-77', 'redmine', 1),
-  ('d8', 'i-onboarding', 'Launch notes', 'https://www.notion.so/kameleoon/onboarding-launch', 'other', 1),
-  ('d9', 'i-cro-assist', 'AI-51', 'https://kameleoon.atlassian.net/browse/AI-51', 'redmine', 1),
-  ('d10', 'i-rollback', 'FM-198', 'https://kameleoon.atlassian.net/browse/FM-198', 'redmine', 1);
+  ('d1', 'i-pbx', 'PBX-1420', 'https://example.atlassian.net/browse/PBX-1420', 'redmine', 1),
+  ('d2', 'i-pbx', 'Model spec', 'https://www.notion.so/example/pbx-v2', 'spec', 2),
+  ('d3', 'i-flicker', 'WEB-980', 'https://example.atlassian.net/browse/WEB-980', 'redmine', 1),
+  ('d4', 'i-stats', 'Stats validation', 'https://www.notion.so/example/stats-ga', 'other', 1),
+  ('d5', 'i-flags-approvals', 'FM-233', 'https://example.atlassian.net/browse/FM-233', 'redmine', 1),
+  ('d6', 'i-personalization', 'Discovery doc', 'https://www.notion.so/example/ai-personalization', 'notion', 1),
+  ('d7', 'i-consent', 'DATA-77', 'https://example.atlassian.net/browse/DATA-77', 'redmine', 1),
+  ('d8', 'i-onboarding', 'Launch notes', 'https://www.notion.so/example/onboarding-launch', 'other', 1),
+  ('d9', 'i-cro-assist', 'AI-51', 'https://example.atlassian.net/browse/AI-51', 'redmine', 1),
+  ('d10', 'i-rollback', 'FM-198', 'https://example.atlassian.net/browse/FM-198', 'redmine', 1),
+  ('d11', 'i-visual-editor', 'VIS-120', 'https://example.atlassian.net/browse/VIS-120', 'redmine', 1),
+  ('d12', 'i-visual-editor', 'Editor redesign', 'https://www.figma.com/file/example/editor-3', 'figma', 2),
+  ('d13', 'i-api-v3', 'API-88', 'https://example.atlassian.net/browse/API-88', 'redmine', 1),
+  ('d14', 'i-api-v3', 'API spec', 'https://www.notion.so/example/api-v3', 'notion', 2),
+  ('d15', 'i-ai-insights', 'AI-77', 'https://example.atlassian.net/browse/AI-77', 'redmine', 1),
+  ('d16', 'i-sdk-docs', 'DX-12', 'https://example.atlassian.net/browse/DX-12', 'redmine', 1);

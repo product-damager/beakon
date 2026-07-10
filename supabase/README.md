@@ -17,12 +17,12 @@ seeded **preview** playground and a clean **production** database.
 
 ## The two-project model
 
-Beakon uses **two separate free Supabase projects** so demo data never mixes with real data:
+Beakon keeps **two separate free Supabase projects** in **two separate nests** so demo data never mixes with real data:
 
 | Project | Contains | Fed by |
 |---------|----------|--------|
-| `beakon-preview` | Seed data (13 sample initiatives) | Vercel **Preview** deployments + local dev |
-| `beakon-prod` | Real initiatives only | Vercel **Production** deployment |
+| `beakon-preview` | Seed data (13 sample initiatives) | **Preview**/branch deployments + local dev |
+| `beakon-prod` | Real initiatives only | **Production** deployment |
 
 Both run the **same** `schema.sql`. Only preview gets `seed.sql`.
 
@@ -36,8 +36,8 @@ Both run the **same** `schema.sql`. Only preview gets `seed.sql`.
 4. **Preview only** — paste all of `seed.sql` → **Run**.
 5. **Authentication → Providers → Email:** enable it, with _Confirm email_ (magic link) on.
 6. **Authentication → URL Configuration:**
-   - **Site URL:** `http://localhost:3000` (local) / your Vercel URL (prod).
-   - **Redirect URLs:** add `http://localhost:3000/**` and every deployed URL, e.g. `https://beakon.vercel.app/**`.
+   - **Site URL:** `http://localhost:3000` (local) / your deployed URL (prod).
+   - **Redirect URLs:** add `http://localhost:3000/**` and every deployed URL, e.g. `https://<your-deployed-domain>/**`.
 7. **Project settings → API → Project API keys:** copy the **Project URL** and the **Publishable key** (`sb_publishable_…`).
 
 ### Environment variables
@@ -49,7 +49,7 @@ NEXT_PUBLIC_SUPABASE_URL=https://<preview-ref>.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 ```
 
-On Vercel, set the same two vars per environment: Preview → preview keys, Production → prod keys.
+On your hosting service, set the same two vars per environment: Preview → preview keys, Production → prod keys.
 
 > **Keys:** use the new **publishable** key (`sb_publishable_…`), which replaces the
 > deprecated `anon` key (legacy keys stop working end of 2026). **Never** put a
@@ -60,9 +60,9 @@ On Vercel, set the same two vars per environment: Preview → preview keys, Prod
 ## Auth model
 
 - **Magic link (passwordless).** People enter their email and click a one-time link.
-- **Domain-locked.** The `enforce_company_domain` trigger rejects any signup that
-  isn't `@kameleoon.com` or an address in its allow-list array. Add personal
-  emails to that array in `schema.sql`.
+- **Domain-locked.** The `enforce_company_domain` trigger keeps stray birds out —
+  it rejects any signup whose address isn't on your company's domain or in its
+  allow-list array. Set your domain and add personal emails to that array in `schema.sql`.
 - Sessions live in the browser (publishable key); the workspace is gated by
   `components/AuthGate.tsx`. The public `/share` page needs no login.
 
@@ -98,7 +98,7 @@ what powers the public `/share` page.
 ## Resetting preview
 
 Preview holds only disposable seed data, so when the schema changes (new columns,
-new constraints), just rebuild it. In the **preview** SQL Editor:
+new constraints), just build the nest fresh. In the **preview** SQL Editor:
 
 ```sql
 drop table if exists delivery_links, initiatives, themes, owners cascade;

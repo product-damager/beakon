@@ -32,9 +32,18 @@ create table if not exists themes (
 
 create table if not exists owners (
   id text primary key,
-  name text not null,
-  role text not null default ''
+  name text not null default '',
+  surname text not null default '',
+  role text not null default '',
+  email text, -- optional; matches the signed-in user's email to auto-set them as owner
+  team text   -- optional; the person's team, chosen in profile settings
 );
+
+-- Added after initial deploy; safe to re-run.
+alter table owners add column if not exists email text;
+alter table owners add column if not exists surname text not null default '';
+alter table owners add column if not exists team text;
+alter table owners alter column name set default '';
 
 -- ── Initiatives ──
 -- DIVE inputs match lib/types.ts exactly (log-calibrated, not linear buckets):
@@ -156,7 +165,7 @@ exception when duplicate_object then null; end $$;
 
 -- ══════════════════════════════════════════════════════════════════════
 -- Lock signups to the company domain (+ explicit personal allowlist)
--- Only @kameleoon.com emails — plus the individually allow-listed addresses
+-- Only team emails — plus the individually allow-listed addresses
 -- below — can ever create an account. Add more personal emails to the array.
 -- ══════════════════════════════════════════════════════════════════════
 create or replace function enforce_company_domain() returns trigger as $$
@@ -165,7 +174,7 @@ declare
 begin
   if new.email is null
      or (new.email !~* '@kameleoon\.com$' and not (lower(new.email) = any (allowed_emails))) then
-    raise exception 'Signups are restricted to @kameleoon.com or an allow-listed address';
+    raise exception 'Signups are restricted to our team email or an allow-listed address';
   end if;
   return new;
 end;
