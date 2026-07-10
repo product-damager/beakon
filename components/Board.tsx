@@ -222,7 +222,7 @@ export function Board() {
                   {/* Placeholder / hint at the end of the column */}
                   {dragId && drop?.status === s && drop.beforeId === null && <Placeholder />}
                   {items.length === 0 && !isTarget && (
-                    <div className="rounded-lg border border-dashed border-beige-30 py-6 text-center text-xs text-beige-60">
+                    <div className="flex min-h-[92px] items-center justify-center rounded-lg border border-dashed border-beige-30 px-4 py-6 text-center text-xs leading-relaxed text-balance text-beige-60">
                       Drop here to mark {STATUS_META[s].label.toLowerCase()}
                     </div>
                   )}
