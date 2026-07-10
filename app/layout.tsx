@@ -5,7 +5,7 @@ import { RoadmapProvider } from "@/lib/store";
 
 export const metadata: Metadata = {
   title: "Beakon",
-  description: "A calm roadmap workspace where birds are watching YOU 🫵.",
+  description: "A calm roadmap workspace where birds are watching YOU 🫵",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
