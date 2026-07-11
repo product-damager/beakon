@@ -1,6 +1,9 @@
 import { ownerName } from "./types";
 import type { GroupBy, Initiative, Owner, Status, Theme, ThemeColor, Visibility } from "./types";
 
+/** Whether a value filter includes (is) or excludes (is not) its selected values. */
+export type FilterMode = "is" | "is_not";
+
 export interface Filters {
   search: string;
   owners: string[];
@@ -9,6 +12,12 @@ export interface Filters {
   statuses: Status[];
   visibility: Visibility[];
   showDone: boolean;
+  // Per-field operator. "is" keeps only matches; "is_not" excludes them.
+  ownersMode: FilterMode;
+  teamsMode: FilterMode;
+  themesMode: FilterMode;
+  statusesMode: FilterMode;
+  visibilityMode: FilterMode;
 }
 
 export const EMPTY_FILTERS: Filters = {
@@ -19,7 +28,19 @@ export const EMPTY_FILTERS: Filters = {
   statuses: [],
   visibility: [],
   showDone: true,
+  ownersMode: "is",
+  teamsMode: "is",
+  themesMode: "is",
+  statusesMode: "is",
+  visibilityMode: "is",
 };
+
+/** True when an initiative's value passes a field filter given its selected values + mode. */
+function matchesField(values: string[], mode: FilterMode, value: string): boolean {
+  if (!values.length) return true;
+  const inSet = values.includes(value);
+  return mode === "is_not" ? !inSet : inSet;
+}
 
 export function activeFilterCount(f: Filters): number {
   return (
@@ -45,11 +66,11 @@ export function applyFilters(
   return initiatives.filter((i) => {
     if (i.archived) return false;
     if (!f.showDone && i.status === "released") return false;
-    if (f.owners.length && !f.owners.includes(i.ownerId)) return false;
-    if (f.teams.length && !f.teams.includes(i.team)) return false;
-    if (f.themes.length && !f.themes.includes(i.themeId)) return false;
-    if (f.statuses.length && !f.statuses.includes(i.status)) return false;
-    if (f.visibility.length && !f.visibility.includes(i.visibility)) return false;
+    if (!matchesField(f.owners, f.ownersMode, i.ownerId)) return false;
+    if (!matchesField(f.teams, f.teamsMode, i.team)) return false;
+    if (!matchesField(f.themes, f.themesMode, i.themeId)) return false;
+    if (!matchesField(f.statuses, f.statusesMode, i.status)) return false;
+    if (!matchesField(f.visibility, f.visibilityMode, i.visibility)) return false;
     if (q) {
       const hay = [
         i.title,
