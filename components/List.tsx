@@ -118,7 +118,7 @@ export function List() {
                 <tr
                   key={i.id}
                   onClick={() => {
-                    // Don't hijack a text drag-selection as a row click.
+                    // Don't make click on a text drag-selection as a row click.
                     if (window.getSelection()?.toString()) return;
                     select(i.id);
                   }}
