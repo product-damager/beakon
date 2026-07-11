@@ -100,15 +100,27 @@ export function ThemeDot({ color, className }: { color: ThemeColor; className?: 
 }
 
 // ── Avatar ──
+// text-green-90 ink on the light -30 tints keeps every tone ≥ 4.5:1 (pink-60 ink
+// was 2.39:1 and failed AA). `neutral` drops the hue entirely — used where a
+// coloured avatar would add a competing colour dimension (e.g. the Timeline).
 const AVATAR_TONES = [
-  "bg-green-30 text-green-70",
-  "bg-blue-30 text-blue-70",
-  "bg-lime-30 text-lime-70",
-  "bg-pink-30 text-pink-60",
-  "bg-orange-30 text-orange-70",
+  "bg-green-30 text-green-90",
+  "bg-blue-30 text-green-90",
+  "bg-lime-30 text-green-90",
+  "bg-pink-30 text-green-90",
+  "bg-orange-30 text-green-90",
 ];
-export function Avatar({ name, className }: { name: string; className?: string }) {
-  const tone = AVATAR_TONES[name.charCodeAt(0) % AVATAR_TONES.length];
+const AVATAR_NEUTRAL = "bg-beige-30 text-green-90";
+export function Avatar({
+  name,
+  className,
+  neutral = false,
+}: {
+  name: string;
+  className?: string;
+  neutral?: boolean;
+}) {
+  const tone = neutral ? AVATAR_NEUTRAL : AVATAR_TONES[name.charCodeAt(0) % AVATAR_TONES.length];
   return (
     <span
       title={name}

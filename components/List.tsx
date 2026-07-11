@@ -18,7 +18,7 @@ import { cn } from "@/lib/cn";
 import { Avatar, StatusTag } from "./ui";
 import { FilterBar } from "./FilterBar";
 
-type SortKey = "title" | "owner" | "team" | "theme" | "status" | "quarter" | "priority" | "health" | "updated";
+type SortKey = "title" | "owner" | "team" | "theme" | "status" | "target" | "priority" | "health" | "updated";
 
 const HEALTH_ORDER: Record<Health, number> = { on_track: 0, at_risk: 1, blocked: 2 };
 
@@ -39,7 +39,7 @@ export function List() {
         case "team": return i.team.toLowerCase();
         case "theme": return getTheme(i.themeId)?.name.toLowerCase() ?? "";
         case "status": return STATUSES.indexOf(i.status);
-        case "quarter": return i.targetStart;
+        case "target": return i.targetEnd;
         case "priority": return diveScore(i.scores);
         case "health": return HEALTH_ORDER[i.health];
         case "updated": return i.updatedAt;
@@ -57,8 +57,25 @@ export function List() {
   const toggle = (key: SortKey) =>
     setSort((s) => (s.key === key ? { key, dir: (s.dir * -1) as 1 | -1 } : { key, dir: 1 }));
 
-  const Th = ({ k, label, align = "left" }: { k: SortKey; label: string; align?: "left" | "right" | "center" }) => (
-    <th className={cn("bg-beige-5 px-3 py-0", align === "right" && "text-right", align === "center" && "text-center")}>
+  const Th = ({
+    k,
+    label,
+    align = "left",
+    className,
+  }: {
+    k: SortKey;
+    label: string;
+    align?: "left" | "right" | "center";
+    className?: string;
+  }) => (
+    <th
+      className={cn(
+        "bg-beige-5 px-3 py-0",
+        align === "right" && "text-right",
+        align === "center" && "text-center",
+        className
+      )}
+    >
       <button
         onClick={() => toggle(k)}
         className={cn(
@@ -68,7 +85,10 @@ export function List() {
         )}
       >
         {label}
-        {sort.key === k && (sort.dir === 1 ? <ChevronUp size={13} /> : <ChevronDown size={13} />)}
+        {/* Reserve the chevron slot always, so toggling sort never reflows the column. */}
+        <span className="flex w-3.5 shrink-0 justify-center text-green-60">
+          {sort.key === k && (sort.dir === 1 ? <ChevronUp size={13} /> : <ChevronDown size={13} />)}
+        </span>
       </button>
     </th>
   );
@@ -84,8 +104,8 @@ export function List() {
               <Th k="owner" label="Owner" />
               <Th k="team" label="Team" />
               <Th k="status" label="Status" />
-              <Th k="quarter" label="Quarter" />
-              <Th k="priority" label="DIVE" align="right" />
+              <Th k="target" label="Target" />
+              <Th k="priority" label="DIVE" align="right" className="w-24" />
               <Th k="health" label="Health" />
               <Th k="updated" label="Updated" align="right" />
             </tr>
@@ -97,7 +117,11 @@ export function List() {
               return (
                 <tr
                   key={i.id}
-                  onClick={() => select(i.id)}
+                  onClick={() => {
+                    // Don't hijack a text drag-selection as a row click.
+                    if (window.getSelection()?.toString()) return;
+                    select(i.id);
+                  }}
                   className="cursor-pointer border-b border-beige-10 hover:bg-beige-5"
                 >
                   <td className="px-3 py-2.5">
@@ -120,9 +144,9 @@ export function List() {
                   <td className="whitespace-nowrap px-3 py-2.5 text-green-70">{i.team}</td>
                   <td className="px-3 py-2.5"><StatusTag status={i.status} /></td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-green-70">
-                    {quarterLabelFromISO(i.targetStart)}
+                    {quarterLabelFromISO(i.targetEnd)}
                   </td>
-                  <td className="px-3 py-2.5 text-right font-display font-semibold text-green-90">
+                  <td className="w-24 px-3 py-2.5 text-right font-display font-semibold text-green-90">
                     {diveScore(i.scores)}
                   </td>
                   <td className="px-3 py-2.5">

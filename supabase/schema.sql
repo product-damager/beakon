@@ -30,6 +30,19 @@ create table if not exists themes (
   color text not null default 'green' -- green | blue | lime | pink | orange | beige
 );
 
+-- Added after initial deploy; safe to re-run.
+-- Constrain color to the six palette keys the app knows (lib/types.ts
+-- THEME_COLOR_META). Normalize any legacy/hand-edited value outside the set to
+-- the schema default first so the constraint can be added without failing —
+-- this mirrors normalizeThemeColor()'s fallback in the app.
+update themes set color = 'green'
+  where color not in ('green', 'blue', 'lime', 'pink', 'orange', 'beige');
+
+do $$ begin
+  alter table themes add constraint themes_color_check
+    check (color in ('green', 'blue', 'lime', 'pink', 'orange', 'beige'));
+exception when duplicate_object then null; end $$;
+
 create table if not exists owners (
   id text primary key,
   name text not null default '',

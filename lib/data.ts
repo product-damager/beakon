@@ -4,13 +4,13 @@
 // these; the UI never touches Supabase directly.
 
 import { supabase } from "./supabase";
+import { normalizeThemeColor } from "./types";
 import type {
   DeliveryLink,
   Initiative,
   Owner,
   Status,
   Theme,
-  ThemeColor,
 } from "./types";
 
 function client() {
@@ -115,7 +115,7 @@ function initiativeToRow(i: Initiative) {
 }
 
 function rowToTheme(t: { id: string; name: string; description: string | null; color: string }): Theme {
-  return { id: t.id, name: t.name, description: t.description ?? "", color: t.color as ThemeColor };
+  return { id: t.id, name: t.name, description: t.description ?? "", color: normalizeThemeColor(t.color) };
 }
 
 interface OwnerRow {

@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useSyncExternalStore } from "react";
-import { CalendarRange, Minimize2, Plus } from "lucide-react";
+import { useMemo, useState, useSyncExternalStore } from "react";
+import { CalendarRange, ChevronRight, Minimize2, Plus } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import { activeFilterCount, applyFilters, groupInitiatives } from "@/lib/filters";
 import { barPosition, buildColumns, buildWindow, todayMarker } from "@/lib/dates";
@@ -67,6 +67,18 @@ export function Timeline() {
   const today = mounted ? todayMarker(window) : null;
   const selected = selectedId ? getInitiative(selectedId) : undefined;
   const prereqs = new Set(selected?.dependsOn ?? []);
+
+  // Per-group collapse (Timeline-local; keyed by group key so it resets naturally
+  // when the grouping dimension changes). Lets you fold away groups you are not
+  // focused on to declutter the timeline.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggleGroup = (key: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   return (
     <div className="flex h-full flex-col">
@@ -161,24 +173,46 @@ export function Timeline() {
                 </div>
               </div>
 
-              {groups.map((g) => (
+              {groups.map((g) => {
+                const isCollapsed = collapsed.has(g.key);
+                return (
                 <div key={g.key}>
-                  {/* Group header */}
-                  <div className="flex border-b border-beige-20 bg-beige-5/70">
-                    <div className="sticky left-0 z-10 flex w-[268px] shrink-0 items-center gap-2 bg-beige-5 px-6 py-2">
+                  {/* Group header — a toggle button that reads as a section band via
+                      weight, height and rules; the chevron folds the group's rows away. */}
+                  <div className="flex border-y border-beige-40 bg-beige-20/70">
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(g.key)}
+                      aria-expanded={!isCollapsed}
+                      aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${g.label}`}
+                      className="sticky left-0 z-10 flex w-[268px] shrink-0 items-center gap-2 bg-beige-20 px-6 py-3 text-left transition-colors hover:bg-beige-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-green-90"
+                    >
+                      <ChevronRight
+                        size={15}
+                        className={cn(
+                          "shrink-0 text-beige-60 transition-transform",
+                          !isCollapsed && "rotate-90"
+                        )}
+                      />
                       {g.color && (
-                        <span className={cn("h-2.5 w-2.5 rounded-full", THEME_COLOR_META[g.color].dot)} />
+                        <span
+                          className={cn(
+                            "h-3 w-3 rounded-full ring-1 ring-inset ring-black/20",
+                            THEME_COLOR_META[g.color].dot
+                          )}
+                        />
                       )}
-                      <span className="truncate text-[13px] font-semibold text-green-90">
+                      <span className="truncate text-sm font-semibold text-green-90">
                         {g.label}
                       </span>
-                      <span className="mono-label-sm text-beige-60">{g.items.length}</span>
-                    </div>
+                      <span className="mono-label-sm text-green-70">{g.items.length}</span>
+                    </button>
                     <div className="relative" style={{ width: canvasWidth }} />
                   </div>
 
                   {/* Initiative rows */}
-                  {g.items.map((i) => {
+                  {!isCollapsed &&
+                    g.items.map((i) => {
                       const pos = barPosition(i.targetStart, i.targetEnd, window);
                       const meta = STATUS_META[i.status];
                       const isSelected = selectedId === i.id;
@@ -194,7 +228,7 @@ export function Timeline() {
                           className="group flex items-stretch border-b border-beige-10 hover:bg-beige-5/60"
                         >
                           <div className="sticky left-0 z-10 flex w-[268px] shrink-0 items-center gap-2.5 bg-background px-6 py-2.5 group-hover:bg-beige-5">
-                            {owner && <Avatar name={ownerName(owner)} className="h-6 w-6 text-[10px]" />}
+                            {owner && <Avatar name={ownerName(owner)} className="h-6 w-6 text-[10px]" neutral />}
                             <button
                               onClick={() => select(i.id)}
                               className="truncate text-left text-[13px] font-medium text-green-90 hover:text-green-60"
@@ -238,7 +272,8 @@ export function Timeline() {
                       );
                     })}
                   </div>
-                ))}
+                );
+              })}
             </div>
           </div>
         </div>

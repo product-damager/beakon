@@ -223,6 +223,19 @@ export const THEME_COLOR_META: Record<ThemeColor, { dot: string; soft: string; t
   beige: { dot: "bg-beige-50", soft: "bg-beige-20", text: "text-beige-60" },
 };
 
+/**
+ * Coerce an arbitrary color string (e.g. a DB value) into a known ThemeColor.
+ * The `themes.color` column is free `text`, so a hand-edited or legacy row can
+ * hold a value outside the six keys — indexing THEME_COLOR_META with it yields
+ * `undefined` and any downstream `.dot`/`.tag` deref would white-screen a view.
+ * Matching is trimmed and case-insensitive; anything unknown falls back to the
+ * schema default, "green".
+ */
+export function normalizeThemeColor(color: string | null | undefined): ThemeColor {
+  const key = (color ?? "").trim().toLowerCase();
+  return key in THEME_COLOR_META ? (key as ThemeColor) : "green";
+}
+
 export const DELIVERY_TYPE_LABEL: Record<DeliveryLinkType, string> = {
   redmine: "Redmine",
   figma: "Figma",
