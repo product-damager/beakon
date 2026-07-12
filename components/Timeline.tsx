@@ -1,11 +1,26 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { CalendarRange, ChevronRight, Minimize2, Plus } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
-import { activeFilterCount, applyFilters, groupInitiatives } from "@/lib/filters";
+import { activeFilterCount, applyFilters, groupInitiatives, sortInitiatives } from "@/lib/filters";
 import { barPosition, buildColumns, buildWindow, todayMarker } from "@/lib/dates";
-import { ownerName, STATUS_META, STATUSES, THEME_COLOR_META, type Zoom } from "@/lib/types";
+import {
+  ownerName,
+  STATUS_META,
+  STATUSES,
+  THEME_COLOR_META,
+  ZOOM_SCALE_MAX,
+  ZOOM_SCALE_MIN,
+  type Zoom,
+} from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Avatar, Button, Eyebrow } from "./ui";
 import { FilterBar } from "./FilterBar";
@@ -38,12 +53,17 @@ export function Timeline() {
     owners,
     groupBy,
     zoom,
+    zoomScale,
+    setZoomScale,
+    density,
+    timelineSort,
     presentation,
     selectedId,
     select,
     getInitiative,
     setPresentation,
   } = useRoadmap();
+  const dense = density === "compact";
 
   const filtered = useMemo(
     () => applyFilters(initiatives, filters, themes, owners),
@@ -55,12 +75,58 @@ export function Timeline() {
   );
   const columns = useMemo(() => buildColumns(window, zoom), [window, zoom]);
   const quarterCols = useMemo(() => buildColumns(window, "quarter"), [window]);
+  // Sort the flat list before grouping so each group inherits the chosen order.
+  const sorted = useMemo(() => sortInitiatives(filtered, timelineSort), [filtered, timelineSort]);
   const groups = useMemo(
-    () => groupInitiatives(filtered, groupBy, themes, owners),
-    [filtered, groupBy, themes, owners]
+    () => groupInitiatives(sorted, groupBy, themes, owners),
+    [sorted, groupBy, themes, owners]
   );
 
-  const canvasWidth = Math.max(720, columns.length * UNIT[zoom]);
+  const canvasWidth = Math.max(720, columns.length * UNIT[zoom] * zoomScale);
+
+  // ── Cursor-anchored zoom (⌘/Ctrl + wheel) ──────────────────────────────────
+  // Bars/gridlines are all %-positioned, so scaling canvasWidth zooms everything.
+  // We keep the point under the cursor fixed by adjusting scrollLeft once the new
+  // width is committed. Refs hold the latest values so the wheel listener binds once.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const zoomScaleRef = useRef(zoomScale);
+  const canvasWidthRef = useRef(canvasWidth);
+  const zoomAnchor = useRef<{ fraction: number; viewportX: number; nextScale: number } | null>(null);
+  useEffect(() => {
+    zoomScaleRef.current = zoomScale;
+    canvasWidthRef.current = canvasWidth;
+  });
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return; // plain scroll passes through untouched
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const viewportX = e.clientX - rect.left;
+      const contentX = el.scrollLeft + viewportX;
+      const fraction = Math.min(1, Math.max(0, (contentX - LABEL_W) / canvasWidthRef.current));
+      // Chain successive events within a burst via the pending anchor scale.
+      const base = zoomAnchor.current?.nextScale ?? zoomScaleRef.current;
+      const nextScale = Math.min(
+        ZOOM_SCALE_MAX,
+        Math.max(ZOOM_SCALE_MIN, base * Math.exp(-e.deltaY * 0.0015))
+      );
+      zoomAnchor.current = { fraction, viewportX, nextScale };
+      setZoomScale(nextScale);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [setZoomScale]);
+  // After the width recomputes, restore the anchored point under the cursor.
+  useLayoutEffect(() => {
+    const anchor = zoomAnchor.current;
+    const el = scrollRef.current;
+    if (!anchor || !el) return;
+    el.scrollLeft = LABEL_W + anchor.fraction * canvasWidth - anchor.viewportX;
+    zoomAnchor.current = null;
+  }, [canvasWidth]);
+
   // "Today" is derived from the current clock, which differs between the server
   // render and client hydration. Gate it on the client so both renders match.
   const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
@@ -116,7 +182,7 @@ export function Timeline() {
           header frozen while scrolling down and the label column frozen while scrolling
           right, so row labels never disappear. The grid stays rendered even when empty. */}
       <div className="relative min-h-0 flex-1">
-        <div className="calm-scroll h-full overflow-auto">
+        <div ref={scrollRef} className="calm-scroll h-full overflow-auto">
           <div className="flex min-h-full flex-col" style={{ minWidth: LABEL_W + canvasWidth }}>
             {/* Time-axis header — sticky to the top, scrolls horizontally with the canvas */}
             <div className="sticky top-0 z-20 flex shrink-0 border-b border-beige-20 bg-background">
@@ -227,8 +293,19 @@ export function Timeline() {
                           key={i.id}
                           className="group flex items-stretch border-b border-beige-10 hover:bg-beige-5/60"
                         >
-                          <div className="sticky left-0 z-10 flex w-[268px] shrink-0 items-center gap-2.5 bg-background px-6 py-2.5 group-hover:bg-beige-5">
-                            {owner && <Avatar name={ownerName(owner)} className="h-6 w-6 text-[10px]" neutral />}
+                          <div
+                            className={cn(
+                              "sticky left-0 z-10 flex w-[268px] shrink-0 items-center gap-2.5 bg-background px-6 group-hover:bg-beige-5",
+                              dense ? "py-1" : "py-2.5"
+                            )}
+                          >
+                            {owner && (
+                              <Avatar
+                                name={ownerName(owner)}
+                                className={cn(dense ? "h-5 w-5 text-[9px]" : "h-6 w-6 text-[10px]")}
+                                neutral
+                              />
+                            )}
                             <button
                               onClick={() => select(i.id)}
                               className="truncate text-left text-[13px] font-medium text-green-90 hover:text-green-60"
@@ -237,12 +314,13 @@ export function Timeline() {
                               {i.title}
                             </button>
                           </div>
-                          <div className="relative py-2.5" style={{ width: canvasWidth }}>
+                          <div className={cn("relative", dense ? "py-1" : "py-2.5")} style={{ width: canvasWidth }}>
                             <button
                               onClick={() => select(i.id)}
                               title={`${i.title} · ${meta.label}`}
                               className={cn(
-                                "absolute top-1/2 flex h-7 -translate-y-1/2 items-center overflow-hidden rounded-md px-2.5 text-left text-xs font-medium shadow-sm transition-all hover:brightness-105",
+                                "absolute top-1/2 flex -translate-y-1/2 items-center overflow-hidden rounded-md px-2.5 text-left text-xs font-medium shadow-sm transition-all hover:brightness-105",
+                                dense ? "h-5" : "h-7",
                                 meta.bar,
                                 isSelected && "ring-2 ring-green-90 ring-offset-1",
                                 isPrereq && "outline-dashed outline-2 outline-offset-1 outline-lime-60"

@@ -10,7 +10,25 @@ export type Visibility = "internal" | "external";
 export type Health = "on_track" | "at_risk" | "blocked";
 export type GroupBy = "theme" | "team" | "owner";
 export type Zoom = "month" | "quarter" | "half";
+/** Sort dimension for timeline rows within each group. */
+export type TimelineSortKey = "start" | "score" | "status" | "title";
+export interface TimelineSort {
+  key: TimelineSortKey;
+  /** 1 = ascending, -1 = descending. */
+  dir: 1 | -1;
+}
+/** Timeline row density — trades vertical space for how many rows fit on screen. */
+export type Density = "comfortable" | "compact";
 export type ViewKey = "timeline" | "board" | "list";
+
+/**
+ * Continuous timeline zoom multiplier applied on top of the Zoom granularity —
+ * scales the canvas width (and therefore every %-positioned bar/gridline) so you
+ * can magnify past the base "Month" view or pull back for a denser overview.
+ */
+export const ZOOM_SCALE_MIN = 0.5;
+export const ZOOM_SCALE_MAX = 3;
+export const ZOOM_SCALE_STEP = 0.2;
 
 /** Product friendly palette family used to color a theme. */
 export type ThemeColor = "green" | "blue" | "lime" | "pink" | "orange" | "beige";

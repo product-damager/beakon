@@ -1,5 +1,14 @@
-import { ownerName } from "./types";
-import type { GroupBy, Initiative, Owner, Status, Theme, ThemeColor, Visibility } from "./types";
+import { diveScore, ownerName, STATUSES } from "./types";
+import type {
+  GroupBy,
+  Initiative,
+  Owner,
+  Status,
+  Theme,
+  ThemeColor,
+  TimelineSort,
+  Visibility,
+} from "./types";
 
 /** Whether a value filter includes (is) or excludes (is not) its selected values. */
 export type FilterMode = "is" | "is_not";
@@ -84,6 +93,29 @@ export function applyFilters(
       if (!hay.includes(q)) return false;
     }
     return true;
+  });
+}
+
+/**
+ * Sort initiatives for timeline display. Sorting the flat list before grouping
+ * makes each group inherit this order (grouping is stable), so "Start date asc"
+ * gives the classic Gantt cascade. Ties fall back to source order.
+ */
+export function sortInitiatives(items: Initiative[], sort: TimelineSort): Initiative[] {
+  const val = (i: Initiative): string | number => {
+    switch (sort.key) {
+      case "start": return i.targetStart; // ISO date — lexical order is chronological
+      case "score": return diveScore(i.scores);
+      case "status": return STATUSES.indexOf(i.status);
+      case "title": return i.title.toLowerCase();
+    }
+  };
+  return [...items].sort((a, b) => {
+    const av = val(a);
+    const bv = val(b);
+    if (av < bv) return -1 * sort.dir;
+    if (av > bv) return 1 * sort.dir;
+    return 0;
   });
 }
 

@@ -11,7 +11,17 @@ import {
 } from "react";
 import { INITIATIVES, OWNERS, THEMES } from "./seed";
 import { EMPTY_FILTERS, type Filters } from "./filters";
-import type { GroupBy, Initiative, Owner, Status, Theme, Zoom } from "./types";
+import { TEAMS, ZOOM_SCALE_MAX, ZOOM_SCALE_MIN } from "./types";
+import type {
+  Density,
+  GroupBy,
+  Initiative,
+  Owner,
+  Status,
+  Theme,
+  TimelineSort,
+  Zoom,
+} from "./types";
 import { todayISO } from "./dates";
 import { isSupabaseConfigured } from "./supabase";
 import { useAuth } from "./auth";
@@ -54,6 +64,12 @@ interface RoadmapState {
   filters: Filters;
   groupBy: GroupBy;
   zoom: Zoom;
+  /** Continuous zoom multiplier on top of `zoom` (clamped to ZOOM_SCALE_MIN..MAX). */
+  zoomScale: number;
+  /** Timeline row density. */
+  density: Density;
+  /** How timeline rows are ordered within each group. */
+  timelineSort: TimelineSort;
   presentation: boolean;
   selectedId: string | null;
   editorDraft: Initiative | null;
@@ -63,6 +79,10 @@ interface RoadmapState {
   resetFilters: () => void;
   setGroupBy: (g: GroupBy) => void;
   setZoom: (z: Zoom) => void;
+  /** Set the continuous zoom multiplier; clamped to the allowed range. */
+  setZoomScale: (n: number) => void;
+  setDensity: (d: Density) => void;
+  setTimelineSort: (s: TimelineSort) => void;
   setPresentation: (v: boolean) => void;
 
   select: (id: string | null) => void;
@@ -102,6 +122,9 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [groupBy, setGroupBy] = useState<GroupBy>("theme");
   const [zoom, setZoom] = useState<Zoom>("quarter");
+  const [zoomScale, setZoomScaleRaw] = useState(1);
+  const [density, setDensity] = useState<Density>("comfortable");
+  const [timelineSort, setTimelineSort] = useState<TimelineSort>({ key: "start", dir: 1 });
   const [presentation, setPresentation] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editorDraft, setEditorDraft] = useState<Initiative | null>(null);
@@ -138,6 +161,10 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
     []
   );
   const resetFilters = useCallback(() => setFilters(EMPTY_FILTERS), []);
+  const setZoomScale = useCallback(
+    (n: number) => setZoomScaleRaw(Math.min(ZOOM_SCALE_MAX, Math.max(ZOOM_SCALE_MIN, n))),
+    []
+  );
   const dismissError = useCallback(() => setError(null), []);
 
   const reportError = useCallback((e: unknown, action: string) => {
@@ -291,7 +318,9 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       expectedOutcome: "",
       status: "planned",
       ownerId: currentOwner?.id ?? owners[0]?.id ?? "",
-      team: "App System",
+      // Default to the creator's own team so they don't have to switch off a
+      // fixed default; falls back to the first team when it's not set yet.
+      team: currentOwner?.team ?? TEAMS[0],
       themeId: themes[0]?.id ?? "",
       strategicGoal: "",
       scores: { demand: 250, impact: 1, viability: 0.8, effort: 3 },
@@ -330,6 +359,9 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       filters,
       groupBy,
       zoom,
+      zoomScale,
+      density,
+      timelineSort,
       presentation,
       selectedId,
       editorDraft,
@@ -338,6 +370,9 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       resetFilters,
       setGroupBy,
       setZoom,
+      setZoomScale,
+      setDensity,
+      setTimelineSort,
       setPresentation,
       select: setSelectedId,
       saveInitiative,
@@ -364,11 +399,15 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       filters,
       groupBy,
       zoom,
+      zoomScale,
+      density,
+      timelineSort,
       presentation,
       selectedId,
       editorDraft,
       patchFilters,
       resetFilters,
+      setZoomScale,
       saveInitiative,
       addTheme,
       saveProfile,

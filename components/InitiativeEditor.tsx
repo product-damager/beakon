@@ -9,6 +9,7 @@ import {
   diveScore,
   HEALTH_META,
   IMPACT_OPTIONS,
+  normalizeThemeColor,
   ownerName,
   scoreTier,
   STATUS_META,
@@ -26,7 +27,7 @@ import {
 import { cn } from "@/lib/cn";
 import { Drawer } from "./Drawer";
 import { Button, Eyebrow } from "./ui";
-import { Field, NativeSelect, TextArea, TextInput } from "./form";
+import { Field, NativeSelect, SearchableSelect, TextArea, TextInput } from "./form";
 
 export function InitiativeEditor() {
   const { editorDraft, closeEditor } = useRoadmap();
@@ -144,14 +145,20 @@ function EditorForm({ draft }: { draft: Initiative }) {
             </NativeSelect>
           </Field>
           <Field label="Theme">
-            <NativeSelect value={d.themeId} onChange={(e) => set("themeId", e.target.value)}>
-              <option value="">No theme</option>
-              {themes.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </NativeSelect>
+            <SearchableSelect
+              ariaLabel="Theme"
+              value={d.themeId}
+              onChange={(v) => set("themeId", v)}
+              placeholder="No theme"
+              options={[
+                { value: "", label: "No theme" },
+                ...themes.map((t) => ({
+                  value: t.id,
+                  label: t.name,
+                  dot: THEME_COLOR_META[normalizeThemeColor(t.color)].dot,
+                })),
+              ]}
+            />
             <ThemeCreator
               onCreate={(t) => {
                 addTheme(t);

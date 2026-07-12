@@ -1,17 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Check,
   ChevronRight,
   Group,
   Maximize2,
+  Minus,
   Plus,
   RotateCcw,
+  Rows2,
+  Rows3,
   Search,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { useOutsideClose } from "./hooks";
 import { useRoadmap } from "@/lib/store";
 import { activeFilterCount, type FilterMode, type Filters } from "@/lib/filters";
 import {
@@ -20,7 +27,11 @@ import {
   STATUSES,
   TEAMS,
   THEME_COLOR_META,
+  ZOOM_SCALE_MAX,
+  ZOOM_SCALE_MIN,
+  ZOOM_SCALE_STEP,
   type GroupBy,
+  type TimelineSortKey,
   type Zoom,
 } from "@/lib/types";
 import { Button } from "./ui";
@@ -47,22 +58,6 @@ interface FieldDef {
   searchable: boolean;
 }
 
-/** Close a popover when the user clicks/taps outside of `ref`. */
-function useOutsideClose(
-  ref: React.RefObject<HTMLElement | null>,
-  open: boolean,
-  close: () => void
-) {
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) close();
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open, ref, close]);
-}
-
 function Segmented<T extends string>({
   options,
   value,
@@ -86,6 +81,73 @@ function Segmented<T extends string>({
           {o.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+// ── Timeline sort control (key + direction) ─────────────────────────────────
+const TIMELINE_SORT_OPTIONS: { key: TimelineSortKey; label: string; defaultDir: 1 | -1 }[] = [
+  { key: "start", label: "Start date", defaultDir: 1 },
+  { key: "score", label: "DIVE score", defaultDir: -1 },
+  { key: "status", label: "Status", defaultDir: 1 },
+  { key: "title", label: "Title", defaultDir: 1 },
+];
+
+function SortControl() {
+  const { timelineSort, setTimelineSort } = useRoadmap();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useOutsideClose(ref, open, () => setOpen(false));
+
+  const current =
+    TIMELINE_SORT_OPTIONS.find((o) => o.key === timelineSort.key) ?? TIMELINE_SORT_OPTIONS[0];
+  const Dir = timelineSort.dir === 1 ? ArrowUp : ArrowDown;
+
+  // Re-picking the active key flips direction; a new key adopts its natural default.
+  const choose = (key: TimelineSortKey, defaultDir: 1 | -1) =>
+    setTimelineSort(
+      key === timelineSort.key
+        ? { key, dir: (timelineSort.dir * -1) as 1 | -1 }
+        : { key, dir: defaultDir }
+    );
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-label="Sort timeline"
+        className={cn(
+          "flex h-9 items-center gap-1.5 rounded-lg border bg-white px-2.5 text-[13px] transition-colors hover:bg-beige-10",
+          open ? "border-green-90" : "border-beige-30"
+        )}
+      >
+        <ArrowUpDown size={14} className="text-beige-60" />
+        <span className="font-medium text-green-90">{current.label}</span>
+        <Dir size={13} className="text-green-70" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-xl border border-beige-20 bg-white p-1.5 shadow-lg">
+          <span className="mono-label-sm mb-1 block px-2.5 pt-1 text-beige-60">Sort by</span>
+          {TIMELINE_SORT_OPTIONS.map((o) => {
+            const active = o.key === timelineSort.key;
+            return (
+              <button
+                key={o.key}
+                onClick={() => choose(o.key, o.defaultDir)}
+                className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm text-green-90 hover:bg-beige-10"
+              >
+                <span className={cn(active && "font-medium")}>{o.label}</span>
+                {active &&
+                  (timelineSort.dir === 1 ? (
+                    <ArrowUp size={14} className="text-green-70" />
+                  ) : (
+                    <ArrowDown size={14} className="text-green-70" />
+                  ))}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -300,6 +362,10 @@ export function FilterBar({
     setGroupBy,
     zoom,
     setZoom,
+    zoomScale,
+    setZoomScale,
+    density,
+    setDensity,
     setPresentation,
   } = useRoadmap();
 
@@ -409,15 +475,75 @@ export function FilterBar({
           </div>
         )}
         {showZoom && (
-          <Segmented<Zoom>
-            value={zoom}
-            onChange={setZoom}
-            options={[
-              { value: "month", label: "Month" },
-              { value: "quarter", label: "Quarter" },
-              { value: "half", label: "Half-year" },
-            ]}
-          />
+          <>
+            <Segmented<Zoom>
+              value={zoom}
+              onChange={setZoom}
+              options={[
+                { value: "month", label: "Month" },
+                { value: "quarter", label: "Quarter" },
+                { value: "half", label: "Half-year" },
+              ]}
+            />
+
+            {/* Continuous zoom — magnifies within the chosen granularity. Click the
+                percentage to snap back to 100%. ⌘/Ctrl + scroll over the canvas also zooms. */}
+            <div className="flex items-center rounded-lg border border-beige-30 bg-white">
+              <button
+                type="button"
+                onClick={() => setZoomScale(zoomScale - ZOOM_SCALE_STEP)}
+                disabled={zoomScale <= ZOOM_SCALE_MIN + 0.001}
+                aria-label="Zoom out"
+                className="flex h-9 w-8 items-center justify-center rounded-l-lg text-green-70 transition-colors hover:bg-beige-10 disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <Minus size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setZoomScale(1)}
+                title="Reset zoom to 100%"
+                className="mono-label-sm h-9 w-12 tabular-nums text-green-70 transition-colors hover:bg-beige-10"
+              >
+                {Math.round(zoomScale * 100)}%
+              </button>
+              <button
+                type="button"
+                onClick={() => setZoomScale(zoomScale + ZOOM_SCALE_STEP)}
+                disabled={zoomScale >= ZOOM_SCALE_MAX - 0.001}
+                aria-label="Zoom in"
+                className="flex h-9 w-8 items-center justify-center rounded-r-lg text-green-70 transition-colors hover:bg-beige-10 disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+
+            {/* Row density */}
+            <div className="flex items-center rounded-lg border border-beige-30 bg-white p-0.5">
+              {(
+                [
+                  { value: "comfortable", icon: Rows2, label: "Comfortable rows" },
+                  { value: "compact", icon: Rows3, label: "Compact rows" },
+                ] as const
+              ).map(({ value, icon: Icon, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setDensity(value)}
+                  title={label}
+                  aria-label={label}
+                  aria-pressed={density === value}
+                  className={cn(
+                    "flex h-7 w-7 items-center justify-center rounded-md transition-colors",
+                    density === value ? "bg-green-90 text-white" : "text-green-70 hover:bg-beige-10"
+                  )}
+                >
+                  <Icon size={15} />
+                </button>
+              ))}
+            </div>
+
+            <SortControl />
+          </>
         )}
         {showPresentation && (
           <Button variant="outline" size="sm" onClick={() => setPresentation(true)}>
