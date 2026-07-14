@@ -32,6 +32,7 @@ import {
   persistInitiative,
   persistMove,
   persistOwner,
+  persistSchedule,
 } from "./data";
 
 /** Seed the in-memory store with stable positions (demo/local mode only). */
@@ -87,6 +88,8 @@ interface RoadmapState {
 
   select: (id: string | null) => void;
   saveInitiative: (i: Initiative) => void;
+  /** Timeline drag: reschedule dates only (targeted persist, no link sync). */
+  rescheduleInitiative: (id: string, targetStart: string, targetEnd: string) => void;
   /** Create a new theme (persists + adds to state). */
   addTheme: (t: Theme) => void;
   /** Update the signed-in user's profile (name / surname / team). */
@@ -195,6 +198,24 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
         }
         return exists ? prev.map((x) => (x.id === i.id ? stamped : x)) : [stamped, ...prev];
       });
+    },
+    [reportError]
+  );
+
+  const rescheduleInitiative = useCallback(
+    (id: string, targetStart: string, targetEnd: string) => {
+      setInitiatives((prev) =>
+        prev.map((x) =>
+          x.id === id
+            ? { ...x, targetStart, targetEnd, updatedAt: new Date().toISOString() }
+            : x
+        )
+      );
+      if (isSupabaseConfigured) {
+        queueMicrotask(() =>
+          persistSchedule(id, targetStart, targetEnd).catch((e) => reportError(e, "save"))
+        );
+      }
     },
     [reportError]
   );
@@ -376,6 +397,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       setPresentation,
       select: setSelectedId,
       saveInitiative,
+      rescheduleInitiative,
       addTheme,
       saveProfile,
       moveInitiative,
@@ -409,6 +431,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       resetFilters,
       setZoomScale,
       saveInitiative,
+      rescheduleInitiative,
       addTheme,
       saveProfile,
       moveInitiative,

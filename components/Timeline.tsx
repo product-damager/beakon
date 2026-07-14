@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type PointerEvent as ReactPointerEvent,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -11,7 +12,7 @@ import {
 import { CalendarRange, ChevronRight, Minimize2, Plus } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import { activeFilterCount, applyFilters, groupInitiatives, sortInitiatives } from "@/lib/filters";
-import { barPosition, buildColumns, buildWindow, todayMarker } from "@/lib/dates";
+import { barPosition, buildColumns, buildWindow, formatShortEN, shiftISODays, todayMarker } from "@/lib/dates";
 import {
   ownerName,
   STATUS_META,
@@ -19,6 +20,7 @@ import {
   THEME_COLOR_META,
   ZOOM_SCALE_MAX,
   ZOOM_SCALE_MIN,
+  type Initiative,
   type Zoom,
 } from "@/lib/types";
 import { cn } from "@/lib/cn";
@@ -31,6 +33,20 @@ const LABEL_W = 268;
 // snapshot (false) during SSR + hydration so both renders match, then flips to true.
 const emptySubscribe = () => () => {};
 const UNIT: Record<Zoom, number> = { month: 116, quarter: 220, half: 320 };
+
+// ── Drag-to-replan ──────────────────────────────────────────────────────────
+const DAY_MS = 86_400_000;
+// Movement under this (px) counts as a click-to-open, not a drag.
+const DRAG_THRESHOLD_PX = 3;
+type DragMode = "move" | "start" | "end";
+interface DragState {
+  id: string;
+  mode: DragMode;
+  originStart: string; // ISO
+  originEnd: string; // ISO
+  startX: number; // clientX at pointerdown
+  moved: boolean;
+}
 
 function StatusLegend() {
   return (
@@ -61,9 +77,13 @@ export function Timeline() {
     selectedId,
     select,
     getInitiative,
+    rescheduleInitiative,
     setPresentation,
   } = useRoadmap();
   const dense = density === "compact";
+  // Direct manipulation is disabled in presentation mode so a stray drag can't
+  // rewrite dates mid-meeting; the timeline stays click-to-open only.
+  const editable = !presentation;
 
   const filtered = useMemo(
     () => applyFilters(initiatives, filters, themes, owners),
@@ -83,6 +103,9 @@ export function Timeline() {
   );
 
   const canvasWidth = Math.max(720, columns.length * UNIT[zoom] * zoomScale);
+  // Milliseconds of the window represented by one canvas pixel — the conversion
+  // that turns a horizontal drag distance into a date delta.
+  const msPerPx = canvasWidth > 0 ? window.spanMs / canvasWidth : 0;
 
   // ── Cursor-anchored zoom (⌘/Ctrl + wheel) ──────────────────────────────────
   // Bars/gridlines are all %-positioned, so scaling canvasWidth zooms everything.
@@ -145,6 +168,104 @@ export function Timeline() {
       else next.add(key);
       return next;
     });
+
+  // ── Drag-to-replan ─────────────────────────────────────────────────────────
+  // Drag a bar to shift both dates; drag an edge to change one. Live preview is
+  // kept in local state (so bars reflow instantly) and committed on drop.
+  const dragRef = useRef<DragState | null>(null);
+  const justDragged = useRef(false); // swallow the click that fires after a real drag
+  const [dragPreview, setDragPreview] = useState<{ id: string; start: string; end: string } | null>(
+    null
+  );
+
+  const previewDates = (d: DragState, clientX: number): { start: string; end: string } => {
+    const deltaDays = Math.round(((clientX - d.startX) * msPerPx) / DAY_MS);
+    if (d.mode === "move") {
+      return { start: shiftISODays(d.originStart, deltaDays), end: shiftISODays(d.originEnd, deltaDays) };
+    }
+    if (d.mode === "start") {
+      const start = shiftISODays(d.originStart, deltaDays);
+      const cap = shiftISODays(d.originEnd, -1); // keep at least one day of duration
+      return { start: start > cap ? cap : start, end: d.originEnd };
+    }
+    const end = shiftISODays(d.originEnd, deltaDays);
+    const floor = shiftISODays(d.originStart, 1);
+    return { start: d.originStart, end: end < floor ? floor : end };
+  };
+
+  const beginDrag = (e: ReactPointerEvent<HTMLElement>, i: Initiative, mode: DragMode) => {
+    if (!editable || e.button !== 0) return;
+    e.stopPropagation();
+    justDragged.current = false; // fresh interaction — never inherit a stale swallow flag
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = {
+      id: i.id,
+      mode,
+      originStart: i.targetStart,
+      originEnd: i.targetEnd,
+      startX: e.clientX,
+      moved: false,
+    };
+    // Preview starts only once the pointer crosses the threshold (see moveDrag),
+    // so a plain click never flashes the drag pill / highlight.
+  };
+
+  const moveDrag = (e: ReactPointerEvent<HTMLElement>) => {
+    const d = dragRef.current;
+    if (!d) return;
+    if (!d.moved) {
+      if (Math.abs(e.clientX - d.startX) <= DRAG_THRESHOLD_PX) return; // still a click
+      d.moved = true;
+    }
+    setDragPreview({ id: d.id, ...previewDates(d, e.clientX) });
+  };
+
+  const endDrag = (e: ReactPointerEvent<HTMLElement>) => {
+    const d = dragRef.current;
+    if (!d) return;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* capture may already be gone */
+    }
+    if (d.moved) {
+      const { start, end } = previewDates(d, e.clientX);
+      const it = getInitiative(d.id);
+      if (it && (start !== it.targetStart || end !== it.targetEnd)) {
+        // Targeted date-only persist — a drag must not rewrite delivery links.
+        rescheduleInitiative(d.id, start, end);
+      }
+      // Only a body (move) drag emits a follow-up click on the bar button that
+      // must be swallowed; resize happens on a grip that has no click handler.
+      if (d.mode === "move") justDragged.current = true;
+    }
+    dragRef.current = null;
+    setDragPreview(null);
+  };
+
+  const cancelDrag = () => {
+    dragRef.current = null;
+    setDragPreview(null);
+  };
+
+  // While dragging, light up the dragged item's dependency neighbourhood, and
+  // flag bars whose dependency order the current position would break.
+  const dragging = dragPreview ? getInitiative(dragPreview.id) : undefined;
+  const dragRelated = new Set<string>();
+  const conflictIds = new Set<string>();
+  if (dragging && dragPreview) {
+    for (const pid of dragging.dependsOn) {
+      dragRelated.add(pid);
+      const p = getInitiative(pid);
+      if (p && dragPreview.start < p.targetEnd) conflictIds.add(dragging.id);
+    }
+    for (const x of initiatives) {
+      if (x.dependsOn.includes(dragging.id)) {
+        dragRelated.add(x.id);
+        if (x.targetStart < dragPreview.end) conflictIds.add(x.id);
+      }
+    }
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -279,10 +400,16 @@ export function Timeline() {
                   {/* Initiative rows */}
                   {!isCollapsed &&
                     g.items.map((i) => {
-                      const pos = barPosition(i.targetStart, i.targetEnd, window);
+                      const pv = dragPreview && dragPreview.id === i.id ? dragPreview : null;
+                      const startDate = pv ? pv.start : i.targetStart;
+                      const endDate = pv ? pv.end : i.targetEnd;
+                      const pos = barPosition(startDate, endDate, window);
                       const meta = STATUS_META[i.status];
                       const isSelected = selectedId === i.id;
                       const isPrereq = prereqs.has(i.id);
+                      const isRelated = dragRelated.has(i.id);
+                      const isConflict = conflictIds.has(i.id);
+                      const isDraggingThis = Boolean(pv);
                       const owner = owners.find((o) => o.id === i.ownerId);
                       // Bars too narrow for their title get the label rendered beside them
                       // instead of clipping it to an unreadable stub.
@@ -315,23 +442,69 @@ export function Timeline() {
                             </button>
                           </div>
                           <div className={cn("relative", dense ? "py-1" : "py-2.5")} style={{ width: canvasWidth }}>
-                            <button
-                              onClick={() => select(i.id)}
-                              title={`${i.title} · ${meta.label}`}
+                            {/* Positioned wrapper — the bar body + edge grips live inside it so a
+                                horizontal drag maps cleanly to a date change. */}
+                            <div
                               className={cn(
-                                "absolute top-1/2 flex -translate-y-1/2 items-center overflow-hidden rounded-md px-2.5 text-left text-xs font-medium shadow-sm transition-all hover:brightness-105",
+                                "group/bar absolute top-1/2 -translate-y-1/2",
                                 dense ? "h-5" : "h-7",
-                                meta.bar,
-                                isSelected && "ring-2 ring-green-90 ring-offset-1",
-                                isPrereq && "outline-dashed outline-2 outline-offset-1 outline-lime-60"
+                                isDraggingThis && "z-20"
                               )}
-                              style={{
-                                left: `${pos.leftPct}%`,
-                                width: `max(28px, ${pos.widthPct}%)`,
-                              }}
+                              style={{ left: `${pos.leftPct}%`, width: `max(28px, ${pos.widthPct}%)` }}
                             >
-                              {!labelOutside && <span className="truncate">{i.title}</span>}
-                            </button>
+                              <button
+                                onClick={() => {
+                                  // A real drag ends in a click we don't want to open the drawer.
+                                  if (justDragged.current) {
+                                    justDragged.current = false;
+                                    return;
+                                  }
+                                  select(i.id);
+                                }}
+                                onPointerDown={(e) => beginDrag(e, i, "move")}
+                                onPointerMove={moveDrag}
+                                onPointerUp={endDrag}
+                                onPointerCancel={cancelDrag}
+                                title={`${i.title} · ${meta.label}`}
+                                className={cn(
+                                  "flex h-full w-full items-center overflow-hidden rounded-md px-2.5 text-left text-xs font-medium shadow-sm transition-[filter,box-shadow] hover:brightness-105",
+                                  meta.bar,
+                                  editable && "cursor-grab touch-none active:cursor-grabbing",
+                                  isSelected && "ring-2 ring-green-90 ring-offset-1",
+                                  (isPrereq || isRelated) &&
+                                    "outline-dashed outline-2 outline-offset-1 outline-lime-60",
+                                  isConflict && "ring-2 ring-red-60 ring-offset-1",
+                                  isDraggingThis && "shadow-md brightness-105"
+                                )}
+                              >
+                                {!labelOutside && <span className="truncate">{i.title}</span>}
+                              </button>
+                              {editable && (
+                                <>
+                                  <span
+                                    onPointerDown={(e) => beginDrag(e, i, "start")}
+                                    onPointerMove={moveDrag}
+                                    onPointerUp={endDrag}
+                                    onPointerCancel={cancelDrag}
+                                    aria-hidden
+                                    className="absolute inset-y-0 left-0 w-2 cursor-ew-resize touch-none rounded-l-md bg-black/10 opacity-0 transition-opacity group-hover/bar:opacity-100"
+                                  />
+                                  <span
+                                    onPointerDown={(e) => beginDrag(e, i, "end")}
+                                    onPointerMove={moveDrag}
+                                    onPointerUp={endDrag}
+                                    onPointerCancel={cancelDrag}
+                                    aria-hidden
+                                    className="absolute inset-y-0 right-0 w-2 cursor-ew-resize touch-none rounded-r-md bg-black/10 opacity-0 transition-opacity group-hover/bar:opacity-100"
+                                  />
+                                </>
+                              )}
+                              {isDraggingThis && (
+                                <span className="mono-label-sm pointer-events-none absolute -top-6 left-0 whitespace-nowrap rounded bg-green-90 px-1.5 py-0.5 text-white shadow-sm">
+                                  {formatShortEN(startDate)} → {formatShortEN(endDate)}
+                                </span>
+                              )}
+                            </div>
                             {labelOutside && (
                               <button
                                 onClick={() => select(i.id)}
