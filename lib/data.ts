@@ -220,6 +220,24 @@ export async function persistMove(id: string, status: Status, position: number):
   if (error) throw error;
 }
 
+/**
+ * Persist a timeline reschedule: just the target dates. A targeted update (like
+ * persistMove) — never touches delivery links, so a date drag can't fail on the
+ * link-replacement step. `updated_at` is trigger-maintained.
+ */
+export async function persistSchedule(
+  id: string,
+  targetStart: string,
+  targetEnd: string
+): Promise<void> {
+  const sb = client();
+  const { error } = await sb
+    .from("initiatives")
+    .update({ target_start: targetStart, target_end: targetEnd })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 /** Soft-delete: archive an initiative. */
 export async function persistArchive(id: string): Promise<void> {
   const sb = client();

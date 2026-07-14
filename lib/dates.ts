@@ -42,6 +42,13 @@ export function addMonths(d: Date, n: number): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, 1));
 }
 
+/** Shift an ISO date string by a whole number of days (used by timeline drag). */
+export function shiftISODays(iso: string, days: number): string {
+  const d = parseISO(iso);
+  d.setUTCDate(d.getUTCDate() + days);
+  return toISODate(d);
+}
+
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
