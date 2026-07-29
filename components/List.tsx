@@ -22,9 +22,59 @@ type SortKey = "title" | "owner" | "team" | "theme" | "status" | "target" | "pri
 
 const HEALTH_ORDER: Record<Health, number> = { on_track: 0, at_risk: 1, blocked: 2 };
 
+type SortState = { key: SortKey; dir: 1 | -1 };
+
+interface Column {
+  k: SortKey;
+  label: string;
+  align?: "left" | "right" | "center";
+  className?: string;
+}
+
+const COLUMNS: Column[] = [
+  { k: "title", label: "Initiative" },
+  { k: "owner", label: "Owner" },
+  { k: "team", label: "Team" },
+  { k: "status", label: "Status" },
+  { k: "target", label: "Target" },
+  { k: "priority", label: "DIVE", align: "right", className: "w-24" },
+  { k: "health", label: "Health" },
+  { k: "updated", label: "Updated", align: "right" },
+];
+
+/** Sortable column header. Module-level so it isn't re-created on every render. */
+function Th({ col, sort, onToggle }: { col: Column; sort: SortState; onToggle: (k: SortKey) => void }) {
+  const { k, label, align = "left", className } = col;
+  return (
+    <th
+      className={cn(
+        "bg-beige-5 px-3 py-0",
+        align === "right" && "text-right",
+        align === "center" && "text-center",
+        className
+      )}
+    >
+      <button
+        onClick={() => onToggle(k)}
+        className={cn(
+          "mono-label flex h-10 items-center gap-1 text-beige-60 hover:text-green-90",
+          align === "right" && "ml-auto",
+          align === "center" && "mx-auto"
+        )}
+      >
+        {label}
+        {/* Reserve the chevron slot always, so toggling sort never reflows the column. */}
+        <span className="flex w-3.5 shrink-0 justify-center text-green-60">
+          {sort.key === k && (sort.dir === 1 ? <ChevronUp size={13} /> : <ChevronDown size={13} />)}
+        </span>
+      </button>
+    </th>
+  );
+}
+
 export function List() {
   const { initiatives, filters, themes, owners, getOwner, getTheme, select } = useRoadmap();
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "priority", dir: -1 });
+  const [sort, setSort] = useState<SortState>({ key: "priority", dir: -1 });
 
   const filtered = useMemo(
     () => applyFilters(initiatives, filters, themes, owners),
@@ -57,42 +107,6 @@ export function List() {
   const toggle = (key: SortKey) =>
     setSort((s) => (s.key === key ? { key, dir: (s.dir * -1) as 1 | -1 } : { key, dir: 1 }));
 
-  const Th = ({
-    k,
-    label,
-    align = "left",
-    className,
-  }: {
-    k: SortKey;
-    label: string;
-    align?: "left" | "right" | "center";
-    className?: string;
-  }) => (
-    <th
-      className={cn(
-        "bg-beige-5 px-3 py-0",
-        align === "right" && "text-right",
-        align === "center" && "text-center",
-        className
-      )}
-    >
-      <button
-        onClick={() => toggle(k)}
-        className={cn(
-          "mono-label flex h-10 items-center gap-1 text-beige-60 hover:text-green-90",
-          align === "right" && "ml-auto",
-          align === "center" && "mx-auto"
-        )}
-      >
-        {label}
-        {/* Reserve the chevron slot always, so toggling sort never reflows the column. */}
-        <span className="flex w-3.5 shrink-0 justify-center text-green-60">
-          {sort.key === k && (sort.dir === 1 ? <ChevronUp size={13} /> : <ChevronDown size={13} />)}
-        </span>
-      </button>
-    </th>
-  );
-
   return (
     <div className="flex h-full flex-col">
       <FilterBar />
@@ -100,14 +114,9 @@ export function List() {
         <table className="w-full border-collapse text-sm">
           <thead className="sticky top-0 z-10">
             <tr className="border-b border-beige-20">
-              <Th k="title" label="Initiative" />
-              <Th k="owner" label="Owner" />
-              <Th k="team" label="Team" />
-              <Th k="status" label="Status" />
-              <Th k="target" label="Target" />
-              <Th k="priority" label="DIVE" align="right" className="w-24" />
-              <Th k="health" label="Health" />
-              <Th k="updated" label="Updated" align="right" />
+              {COLUMNS.map((col) => (
+                <Th key={col.k} col={col} sort={sort} onToggle={toggle} />
+              ))}
             </tr>
           </thead>
           <tbody>
