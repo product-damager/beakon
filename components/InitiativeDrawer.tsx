@@ -11,10 +11,10 @@ import {
 } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import { formatDateEN, quarterLabelFromISO } from "@/lib/dates";
-import { DELIVERY_TYPE_LABEL, DEMAND_OPTIONS, diveScore, ownerName, scoreTier, THEME_COLOR_META } from "@/lib/types";
+import { DELIVERY_TYPE_LABEL, DEMAND_OPTIONS, diveScore, ownerName, THEME_COLOR_META } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Drawer } from "./Drawer";
-import { Avatar, Button, HealthTag, Eyebrow, StatusTag, Tag } from "./ui";
+import { Avatar, Button, HealthTag, Eyebrow, ScoreTierTag, StatusTag, Tag } from "./ui";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -108,14 +108,7 @@ export function InitiativeDrawer() {
                 <div className="mb-3 flex items-baseline justify-between">
                   <span className="flex items-center gap-2 text-sm text-green-90">
                     DIVE score
-                    <span
-                      className={cn(
-                        "mono-label inline-flex items-center gap-1 rounded-md px-2 py-1 leading-none",
-                        scoreTier(diveScore(i.scores)).tag
-                      )}
-                    >
-                      {scoreTier(diveScore(i.scores)).emoji} {scoreTier(diveScore(i.scores)).label}
-                    </span>
+                    <ScoreTierTag score={diveScore(i.scores)} />
                   </span>
                   <span className="font-display text-2xl font-semibold text-green-90">
                     {diveScore(i.scores)}

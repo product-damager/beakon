@@ -4,6 +4,7 @@ import { type ButtonHTMLAttributes, type ReactNode } from "react";
 import { cn, initials } from "@/lib/cn";
 import {
   HEALTH_META,
+  scoreTier,
   STATUS_META,
   THEME_COLOR_META,
   type Health,
@@ -86,6 +87,21 @@ export function HealthTag({ health }: { health: Health }) {
     <Tag className={m.tag}>
       <span className={cn("h-2 w-2 rounded-full", m.dot)} aria-hidden />
       {m.label}
+    </Tag>
+  );
+}
+
+/**
+ * DIVE tier badge (🐟 Big catch / 🌊 Worth a dive / 💧 Surface nibble). Leads
+ * with the tier, not the raw score, so the UI ranks by bucket instead of false
+ * precision. `score` is a computed diveScore(); callers pass diveScore(scores).
+ */
+export function ScoreTierTag({ score, className }: { score: number; className?: string }) {
+  const t = scoreTier(score);
+  return (
+    <Tag className={cn(t.tag, className)}>
+      <span aria-hidden>{t.emoji}</span>
+      {t.label}
     </Tag>
   );
 }

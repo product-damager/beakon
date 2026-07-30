@@ -7,7 +7,7 @@ import { applyFilters } from "@/lib/filters";
 import { quarterLabelFromISO } from "@/lib/dates";
 import { diveScore, ownerName, STATUS_META, STATUSES, THEME_COLOR_META, type Initiative, type Status } from "@/lib/types";
 import { cn } from "@/lib/cn";
-import { Avatar, Eyebrow } from "./ui";
+import { Avatar, Eyebrow, ScoreTierTag } from "./ui";
 import { FilterBar } from "./FilterBar";
 
 /**
@@ -68,14 +68,9 @@ function Card({
           {initiative.title}
         </div>
       </button>
-      <div className="mt-3 flex items-center justify-between">
+      <div className="mt-3 flex items-center justify-between gap-2">
         <span className="mono-label-sm text-beige-60">{quarterLabelFromISO(initiative.targetStart)}</span>
-        <span className="flex items-center gap-1 text-xs text-beige-60">
-          DIVE
-          <span className="font-display text-sm font-semibold text-green-90">
-            {diveScore(initiative.scores)}
-          </span>
-        </span>
+        <ScoreTierTag score={diveScore(initiative.scores)} />
       </div>
       {/* Quick edit */}
       <div className="mt-3 flex items-center gap-2 border-t border-beige-10 pt-2.5">

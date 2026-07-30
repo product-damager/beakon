@@ -11,7 +11,6 @@ import {
   IMPACT_OPTIONS,
   normalizeThemeColor,
   ownerName,
-  scoreTier,
   STATUS_META,
   STATUSES,
   TEAMS,
@@ -26,7 +25,7 @@ import {
 } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Drawer } from "./Drawer";
-import { Button, Eyebrow } from "./ui";
+import { Button, Eyebrow, ScoreTierTag } from "./ui";
 import { Field, NativeSelect, SearchableSelect, TextArea, TextInput } from "./form";
 
 export function InitiativeEditor() {
@@ -196,14 +195,7 @@ function EditorForm({ draft }: { draft: Initiative }) {
           <div className="mb-3 flex items-center justify-between">
             <Eyebrow>Prioritization · DIVE</Eyebrow>
             <span className="flex items-center gap-2 text-sm text-green-90">
-              <span
-                className={cn(
-                  "mono-label inline-flex items-center gap-1 rounded-md px-2 py-1 leading-none",
-                  scoreTier(diveScore(d.scores)).tag
-                )}
-              >
-                {scoreTier(diveScore(d.scores)).emoji} {scoreTier(diveScore(d.scores)).label}
-              </span>
+              <ScoreTierTag score={diveScore(d.scores)} />
               <span className="font-display text-lg font-semibold">{diveScore(d.scores)}</span>
             </span>
           </div>

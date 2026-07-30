@@ -9,6 +9,7 @@ import {
   diveScore,
   HEALTH_META,
   ownerName,
+  scoreTier,
   STATUSES,
   THEME_COLOR_META,
   type Health,
@@ -123,6 +124,8 @@ export function List() {
             {sorted.map((i) => {
               const owner = getOwner(i.ownerId);
               const theme = getTheme(i.themeId);
+              const score = diveScore(i.scores);
+              const tier = scoreTier(score);
               return (
                 <tr
                   key={i.id}
@@ -155,8 +158,14 @@ export function List() {
                   <td className="whitespace-nowrap px-3 py-2.5 text-green-70">
                     {quarterLabelFromISO(i.targetEnd)}
                   </td>
-                  <td className="w-24 px-3 py-2.5 text-right font-display font-semibold text-green-90">
-                    {diveScore(i.scores)}
+                  <td className="w-24 px-3 py-2.5 text-right">
+                    <span
+                      className="inline-flex items-center justify-end gap-1"
+                      title={`${tier.label} · DIVE ${score}`}
+                    >
+                      <span aria-hidden>{tier.emoji}</span>
+                      <span className="font-display font-semibold tabular-nums text-green-90">{score}</span>
+                    </span>
                   </td>
                   <td className="px-3 py-2.5">
                     <span className={cn("mono-label inline-flex items-center gap-1 rounded-md px-2 py-1", HEALTH_META[i.health].tag)}>
