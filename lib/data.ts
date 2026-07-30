@@ -245,6 +245,13 @@ export async function persistArchive(id: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Restore a soft-deleted initiative (the Undo of persistArchive). */
+export async function persistUnarchive(id: string): Promise<void> {
+  const sb = client();
+  const { error } = await sb.from("initiatives").update({ archived: false }).eq("id", id);
+  if (error) throw error;
+}
+
 /** Upsert an owner profile (name/surname/team edited from settings). */
 export async function persistOwner(o: Owner): Promise<void> {
   const sb = client();

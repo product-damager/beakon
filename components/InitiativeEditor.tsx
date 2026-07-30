@@ -38,7 +38,8 @@ export function InitiativeEditor() {
 }
 
 function EditorForm({ draft }: { draft: Initiative }) {
-  const { themes, owners, initiatives, saveInitiative, addTheme, closeEditor } = useRoadmap();
+  const { themes, owners, initiatives, saveInitiative, addTheme, closeEditor, notify, select } =
+    useRoadmap();
   const [d, setD] = useState<Initiative>(draft);
   const isNew = !initiatives.some((x) => x.id === draft.id);
 
@@ -66,6 +67,11 @@ function EditorForm({ draft }: { draft: Initiative }) {
   const save = () => {
     if (!canSave) return;
     saveInitiative(d);
+    notify({
+      message: isNew ? "Initiative created" : "Changes saved",
+      tone: "success",
+      action: isNew ? { label: "View", onClick: () => select(d.id) } : undefined,
+    });
     closeEditor();
   };
 

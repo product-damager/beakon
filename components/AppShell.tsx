@@ -13,6 +13,7 @@ import { Logo } from "./Logo";
 import { InitiativeDrawer } from "./InitiativeDrawer";
 import { InitiativeEditor } from "./InitiativeEditor";
 import { SettingsDialog } from "./SettingsDialog";
+import { Toaster } from "./Toaster";
 
 const NAV = [
   { href: "/timeline", label: "Timeline", icon: CalendarRange },
@@ -43,6 +44,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {children}
         <InitiativeDrawer />
         <InitiativeEditor />
+        <Toaster />
       </div>
     );
   }
@@ -169,6 +171,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <InitiativeDrawer />
       <InitiativeEditor />
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <Toaster />
     </div>
   );
 }

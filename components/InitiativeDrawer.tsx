@@ -35,8 +35,18 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 }
 
 export function InitiativeDrawer() {
-  const { selectedId, getInitiative, getOwner, getTheme, initiatives, select, openEdit, archiveInitiative } =
-    useRoadmap();
+  const {
+    selectedId,
+    getInitiative,
+    getOwner,
+    getTheme,
+    initiatives,
+    select,
+    openEdit,
+    archiveInitiative,
+    unarchiveInitiative,
+    notify,
+  } = useRoadmap();
   const i = selectedId ? getInitiative(selectedId) : undefined;
 
   const owner = i ? getOwner(i.ownerId) : undefined;
@@ -242,7 +252,16 @@ export function InitiativeDrawer() {
             <Button onClick={() => openEdit(i)}>
               <Pencil size={15} /> Edit
             </Button>
-            <Button variant="ghost" onClick={() => archiveInitiative(i.id)}>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                archiveInitiative(i.id);
+                notify({
+                  message: `“${i.title}” archived`,
+                  action: { label: "Undo", onClick: () => unarchiveInitiative(i.id) },
+                });
+              }}
+            >
               <Archive size={15} /> Archive
             </Button>
             <span className="ml-auto text-xs text-beige-60">
