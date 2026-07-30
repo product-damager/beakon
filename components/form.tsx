@@ -15,19 +15,37 @@ import { useOutsideClose } from "./hooks";
 export function Field({
   label,
   hint,
+  error,
+  required,
   children,
   className,
 }: {
   label: string;
   hint?: string;
+  /** Validation message; shown in red and takes precedence over `hint`. */
+  error?: string;
+  /** Adds a red asterisk to the label. */
+  required?: boolean;
   children: ReactNode;
   className?: string;
 }) {
   return (
     <label className={cn("block", className)}>
-      <span className="mb-1.5 block text-[13px] font-medium text-green-90">{label}</span>
+      <span className="mb-1.5 block text-[13px] font-medium text-green-90">
+        {label}
+        {required && (
+          <span className="text-red-60" aria-hidden>
+            {" "}
+            *
+          </span>
+        )}
+      </span>
       {children}
-      {hint && <span className="mt-1 block text-xs text-beige-60">{hint}</span>}
+      {error ? (
+        <span className="mt-1 block text-xs text-red-70">{error}</span>
+      ) : hint ? (
+        <span className="mt-1 block text-xs text-beige-60">{hint}</span>
+      ) : null}
     </label>
   );
 }

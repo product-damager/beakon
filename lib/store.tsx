@@ -384,7 +384,9 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       // Default to the creator's own team so they don't have to switch off a
       // fixed default; falls back to the first team when it's not set yet.
       team: currentOwner?.team ?? TEAMS[0],
-      themeId: themes[0]?.id ?? "",
+      // Start unthemed rather than silently inheriting the first theme — the
+      // creator makes theme an explicit choice (see W4).
+      themeId: "",
       strategicGoal: "",
       scores: { demand: 250, impact: 1, viability: 0.8, effort: 3 },
       health: "on_track",
@@ -397,7 +399,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       updatedAt: new Date().toISOString(),
       archived: false,
     };
-  }, [owners, themes, currentOwner]);
+  }, [owners, currentOwner]);
 
   const openCreate = useCallback(() => setEditorDraft(newDraft()), [newDraft]);
   const openEdit = useCallback((i: Initiative) => setEditorDraft({ ...i }), []);

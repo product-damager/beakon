@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Plus, Trash2, X } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import {
@@ -25,22 +25,30 @@ import {
 } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Drawer } from "./Drawer";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { Button, Eyebrow, ScoreTierTag } from "./ui";
 import { Field, NativeSelect, SearchableSelect, TextArea, TextInput } from "./form";
 
+/** Prepend https:// to a scheme-less URL so a delivery link never becomes relative. */
+function withScheme(url: string): string {
+  const t = url.trim();
+  if (!t) return "";
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(t) ? t : `https://${t}`;
+}
+
 export function InitiativeEditor() {
-  const { editorDraft, closeEditor } = useRoadmap();
-  return (
-    <Drawer open={Boolean(editorDraft)} onClose={closeEditor} width={560}>
-      {editorDraft && <EditorForm key={editorDraft.id} draft={editorDraft} />}
-    </Drawer>
-  );
+  const { editorDraft } = useRoadmap();
+  if (!editorDraft) return null;
+  // Key by id so switching drafts fully resets local form state.
+  return <EditorForm key={editorDraft.id} draft={editorDraft} />;
 }
 
 function EditorForm({ draft }: { draft: Initiative }) {
   const { themes, owners, initiatives, saveInitiative, addTheme, closeEditor, notify, select } =
     useRoadmap();
   const [d, setD] = useState<Initiative>(draft);
+  const [titleTouched, setTitleTouched] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const isNew = !initiatives.some((x) => x.id === draft.id);
 
   const set = <K extends keyof Initiative>(key: K, value: Initiative[K]) =>
@@ -62,21 +70,32 @@ function EditorForm({ draft }: { draft: Initiative }) {
   const toggleDep = (id: string) =>
     set("dependsOn", d.dependsOn.includes(id) ? d.dependsOn.filter((x) => x !== id) : [...d.dependsOn, id]);
 
-  const canSave = d.title.trim().length > 0 && d.targetStart <= d.targetEnd;
+  const titleMissing = d.title.trim().length === 0;
+  const dateOutOfOrder = d.targetStart > d.targetEnd;
+  const canSave = !titleMissing && !dateOutOfOrder;
+
+  // Guard the close paths (Cancel, ✕, Esc, backdrop) when there are edits.
+  const dirty = useMemo(() => JSON.stringify(d) !== JSON.stringify(draft), [d, draft]);
+  const attemptClose = () => (dirty ? setConfirmOpen(true) : closeEditor());
 
   const save = () => {
     if (!canSave) return;
-    saveInitiative(d);
+    // Drop blank rows and give scheme-less URLs an https:// prefix so links work.
+    const cleanLinks = d.deliveryLinks
+      .filter((l) => l.url.trim() || l.label.trim())
+      .map((l) => ({ ...l, url: withScheme(l.url), label: l.label.trim() }));
+    const toSave: Initiative = { ...d, title: d.title.trim(), deliveryLinks: cleanLinks };
+    saveInitiative(toSave);
     notify({
       message: isNew ? "Initiative created" : "Changes saved",
       tone: "success",
-      action: isNew ? { label: "View", onClick: () => select(d.id) } : undefined,
+      action: isNew ? { label: "View", onClick: () => select(toSave.id) } : undefined,
     });
     closeEditor();
   };
 
   return (
-    <>
+    <Drawer open onClose={attemptClose} width={560}>
       <div className="sticky top-0 z-10 flex items-center justify-between border-b border-beige-20 bg-white px-6 py-4">
         <div>
           <Eyebrow>{isNew ? "New" : "Edit"}</Eyebrow>
@@ -85,7 +104,7 @@ function EditorForm({ draft }: { draft: Initiative }) {
           </h2>
         </div>
         <button
-          onClick={closeEditor}
+          onClick={attemptClose}
           className="rounded-md p-1 text-beige-60 hover:bg-beige-10 hover:text-green-90"
           aria-label="Close"
         >
@@ -94,11 +113,17 @@ function EditorForm({ draft }: { draft: Initiative }) {
       </div>
 
       <div className="flex flex-col gap-4 px-6 py-5">
-        <Field label="Title">
+        <Field
+          label="Title"
+          required
+          error={titleTouched && titleMissing ? "Give the initiative a title." : undefined}
+        >
           <TextInput
             value={d.title}
             autoFocus
             onChange={(e) => set("title", e.target.value)}
+            onBlur={() => setTitleTouched(true)}
+            aria-invalid={titleTouched && titleMissing}
             placeholder="What is this initiative?"
           />
         </Field>
@@ -121,7 +146,14 @@ function EditorForm({ draft }: { draft: Initiative }) {
               ))}
             </NativeSelect>
           </Field>
-          <Field label="Visibility">
+          <Field
+            label="Visibility"
+            hint={
+              d.visibility === "external"
+                ? "Shown on the public /share roadmap — title, summary, timeframe & status only. Notes and scores stay internal."
+                : "Internal initiatives never appear on the public /share roadmap."
+            }
+          >
             <NativeSelect
               value={d.visibility}
               onChange={(e) => set("visibility", e.target.value as Initiative["visibility"])}
@@ -183,8 +215,16 @@ function EditorForm({ draft }: { draft: Initiative }) {
           <Field label="Target start">
             <TextInput type="date" value={d.targetStart} onChange={(e) => set("targetStart", e.target.value)} />
           </Field>
-          <Field label="Target end">
-            <TextInput type="date" value={d.targetEnd} onChange={(e) => set("targetEnd", e.target.value)} />
+          <Field
+            label="Target end"
+            error={dateOutOfOrder ? "End date must be on or after the start date." : undefined}
+          >
+            <TextInput
+              type="date"
+              value={d.targetEnd}
+              onChange={(e) => set("targetEnd", e.target.value)}
+              aria-invalid={dateOutOfOrder}
+            />
           </Field>
         </div>
 
@@ -352,14 +392,28 @@ function EditorForm({ draft }: { draft: Initiative }) {
       </div>
 
       <div className="sticky bottom-0 mt-auto flex items-center justify-end gap-2 border-t border-beige-20 bg-white px-6 py-3">
-        <Button variant="secondary" onClick={closeEditor}>
+        <Button variant="secondary" onClick={attemptClose}>
           Cancel
         </Button>
         <Button onClick={save} disabled={!canSave}>
           {isNew ? "Create initiative" : "Save changes"}
         </Button>
       </div>
-    </>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Discard your changes?"
+        body="This initiative has unsaved changes. If you close now, they'll be lost."
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        tone="destructive"
+        onConfirm={() => {
+          setConfirmOpen(false);
+          closeEditor();
+        }}
+        onCancel={() => setConfirmOpen(false)}
+      />
+    </Drawer>
   );
 }
 

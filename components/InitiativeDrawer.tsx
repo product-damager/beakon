@@ -16,6 +16,15 @@ import { cn } from "@/lib/cn";
 import { Drawer } from "./Drawer";
 import { Avatar, Button, HealthTag, Eyebrow, ScoreTierTag, StatusTag, Tag } from "./ui";
 
+/** Hostname (sans www) as a fallback label for a delivery link with no label. */
+function prettyHost(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
@@ -162,7 +171,7 @@ export function InitiativeDrawer() {
                         <span className="mono-label-sm rounded bg-beige-10 px-1.5 py-0.5 text-beige-60">
                           {DELIVERY_TYPE_LABEL[l.type]}
                         </span>
-                        <span className="truncate">{l.label}</span>
+                        <span className="truncate">{l.label || prettyHost(l.url)}</span>
                         <ArrowUpRight size={14} className="ml-auto text-beige-60" />
                       </a>
                     </li>
