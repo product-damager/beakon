@@ -75,9 +75,8 @@ export function StatusTag({ status }: { status: Status }) {
   const m = STATUS_META[status];
   return (
     <Tag className={m.tag}>
-      {/* Square marker — status reads as a square everywhere (board columns, timeline
-          legend), distinguishing it from the theme circle. Health carries no marker. */}
-      <span className={cn("h-2 w-2 rounded-sm", m.dot)} aria-hidden />
+      {/* Round marker — status is a dot; theme uses the bar; health carries none. */}
+      <span className={cn("h-2 w-2 rounded-full", m.dot)} aria-hidden />
       {m.label}
     </Tag>
   );
@@ -105,10 +104,11 @@ export function ScoreTierTag({ score, className }: { score: number | null; class
   );
 }
 
+/** Theme marker — a vertical rounded bar, so it never reads as the round status dot. */
 export function ThemeDot({ color, className }: { color: ThemeColor; className?: string }) {
   return (
     <span
-      className={cn("h-2.5 w-2.5 shrink-0 rounded-full", THEME_COLOR_META[color].dot, className)}
+      className={cn("h-3 w-1 shrink-0 rounded-[2px]", THEME_COLOR_META[color].dot, className)}
       aria-hidden
     />
   );

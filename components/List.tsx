@@ -139,7 +139,7 @@ export function List() {
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-2">
                       {theme && (
-                        <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", THEME_COLOR_META[theme.color].dot)} />
+                        <span className={cn("h-3 w-1 shrink-0 rounded-[2px]", THEME_COLOR_META[theme.color].dot)} />
                       )}
                       <span className="font-medium text-green-90">{i.title}</span>
                       {i.visibility === "external" && (

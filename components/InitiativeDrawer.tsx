@@ -89,7 +89,7 @@ export function InitiativeDrawer() {
             <div className="mb-3 flex items-start justify-between gap-3">
               <div className="flex items-center gap-2">
                 {theme && (
-                  <span className={cn("h-2.5 w-2.5 rounded-full", THEME_COLOR_META[theme.color].dot)} />
+                  <span className={cn("h-3 w-1 shrink-0 rounded-[2px]", THEME_COLOR_META[theme.color].dot)} />
                 )}
                 <Eyebrow>{theme?.name ?? "No theme"}</Eyebrow>
               </div>

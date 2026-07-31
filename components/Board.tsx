@@ -61,7 +61,7 @@ function Card({
       />
       <button onClick={() => select(initiative.id)} className="block w-full pr-4 text-left">
         <div className="mb-2 flex items-center gap-1.5">
-          {theme && <span className={cn("h-2 w-2 rounded-full", THEME_COLOR_META[theme.color].dot)} />}
+          {theme && <span className={cn("h-3 w-1 shrink-0 rounded-[2px]", THEME_COLOR_META[theme.color].dot)} />}
           <span className="mono-label-sm truncate text-beige-60">{theme?.name}</span>
         </div>
         <div className="text-sm font-medium leading-snug text-green-90 group-hover:text-green-60">
@@ -183,7 +183,7 @@ export function Board() {
                 )}
               >
                 <div className="mb-3 flex items-center gap-2 px-1">
-                  <span className={cn("h-2.5 w-2.5 rounded-sm", STATUS_META[s].dot)} />
+                  <span className={cn("h-2.5 w-2.5 rounded-full", STATUS_META[s].dot)} />
                   <span className="text-sm font-semibold text-green-90">{STATUS_META[s].label}</span>
                   <span className="mono-label-sm text-beige-60">{items.length}</span>
                 </div>

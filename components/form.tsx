@@ -129,7 +129,7 @@ export function SearchableSelect({
         onClick={() => setOpen((o) => !o)}
         className={cn(baseInput, "flex h-9 items-center gap-2 pr-9 text-left")}
       >
-        {selected?.dot && <span className={cn("h-2 w-2 shrink-0 rounded-full", selected.dot)} />}
+        {selected?.dot && <span className={cn("h-3 w-1 shrink-0 rounded-[2px]", selected.dot)} />}
         <span className={cn("truncate", selected ? "text-green-90" : "text-beige-60")}>
           {selected ? selected.label : placeholder}
         </span>
@@ -175,7 +175,7 @@ export function SearchableSelect({
                     on && "bg-beige-10"
                   )}
                 >
-                  {o.dot && <span className={cn("h-2 w-2 shrink-0 rounded-full", o.dot)} />}
+                  {o.dot && <span className={cn("h-3 w-1 shrink-0 rounded-[2px]", o.dot)} />}
                   <span className="truncate text-green-90">{o.label}</span>
                   {on && <Check size={14} strokeWidth={3} className="ml-auto shrink-0 text-green-70" />}
                 </button>

@@ -49,7 +49,7 @@ export function Archived() {
                         {theme && (
                           <span
                             className={cn(
-                              "h-2.5 w-2.5 shrink-0 rounded-full",
+                              "h-3 w-1 shrink-0 rounded-[2px]",
                               THEME_COLOR_META[theme.color].dot
                             )}
                           />
