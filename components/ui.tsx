@@ -75,7 +75,9 @@ export function StatusTag({ status }: { status: Status }) {
   const m = STATUS_META[status];
   return (
     <Tag className={m.tag}>
-      <span className={cn("h-2 w-2 rounded-full", m.dot)} aria-hidden />
+      {/* Square marker — status reads as a square everywhere (board columns, timeline
+          legend), distinguishing it from the theme circle. Health carries no marker. */}
+      <span className={cn("h-2 w-2 rounded-sm", m.dot)} aria-hidden />
       {m.label}
     </Tag>
   );
@@ -83,12 +85,9 @@ export function StatusTag({ status }: { status: Status }) {
 
 export function HealthTag({ health }: { health: Health }) {
   const m = HEALTH_META[health];
-  return (
-    <Tag className={m.tag}>
-      <span className={cn("h-2 w-2 rounded-full", m.dot)} aria-hidden />
-      {m.label}
-    </Tag>
-  );
+  // No marker — the pill background already carries the health colour; a dot
+  // would just repeat it (and collide with the status/theme markers).
+  return <Tag className={m.tag}>{m.label}</Tag>;
 }
 
 /**

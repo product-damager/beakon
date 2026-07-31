@@ -169,7 +169,6 @@ export function List() {
                   </td>
                   <td className="px-3 py-2.5">
                     <span className={cn("mono-label inline-flex items-center gap-1 rounded-md px-2 py-1", HEALTH_META[i.health].tag)}>
-                      <span className={cn("h-2 w-2 rounded-full", HEALTH_META[i.health].dot)} aria-hidden />
                       {HEALTH_META[i.health].label}
                     </span>
                   </td>
