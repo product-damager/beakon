@@ -107,8 +107,8 @@ interface RoadmapState {
   rescheduleInitiative: (id: string, targetStart: string, targetEnd: string) => void;
   /** Create a new theme (persists + adds to state). */
   addTheme: (t: Theme) => void;
-  /** Update the signed-in user's profile (name / surname / team). */
-  saveProfile: (patch: { name: string; surname: string; team: string }) => void;
+  /** Update the signed-in user's profile (name / surname / team / role). */
+  saveProfile: (patch: { name: string; surname: string; team: string; role: string }) => void;
   /** Board drag: set status and place before `beforeId` (null = end of target column). */
   moveInitiative: (id: string, toStatus: Status, beforeId: string | null) => void;
   archiveInitiative: (id: string) => void;
@@ -345,7 +345,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
   }, [owners, session]);
 
   const saveProfile = useCallback(
-    (patch: { name: string; surname: string; team: string }) => {
+    (patch: { name: string; surname: string; team: string; role: string }) => {
       const email = session?.user?.email ?? undefined;
       // Edit the matched owner row if there is one; otherwise create a profile
       // keyed to the signed-in email so anyone in the domain can identify.
@@ -356,6 +356,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
         ...base,
         name: patch.name.trim(),
         surname: patch.surname.trim() || undefined,
+        role: patch.role.trim(),
         team: patch.team || undefined,
         email: base.email ?? email,
       };
