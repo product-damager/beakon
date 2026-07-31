@@ -95,7 +95,7 @@ export function HealthTag({ health }: { health: Health }) {
  * with the tier, not the raw score, so the UI ranks by bucket instead of false
  * precision. `score` is a computed diveScore(); callers pass diveScore(scores).
  */
-export function ScoreTierTag({ score, className }: { score: number; className?: string }) {
+export function ScoreTierTag({ score, className }: { score: number | null; className?: string }) {
   const t = scoreTier(score);
   return (
     <Tag className={cn("whitespace-nowrap", t.tag, className)}>

@@ -389,7 +389,8 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       // creator makes theme an explicit choice (see W4).
       themeId: "",
       strategicGoal: "",
-      scores: { demand: 250, impact: 1, viability: 0.8, effort: 3 },
+      // Start unscored — a made-up default DIVE reads as a real priority nobody set.
+      scores: null,
       health: "on_track",
       targetStart: start,
       targetEnd: start,

@@ -30,10 +30,10 @@ interface InitiativeRow {
   team: string;
   theme_id: string | null;
   strategic_goal: string | null;
-  demand: number | string;
-  impact: number | string;
-  viability: number | string;
-  effort: number | string;
+  demand: number | string | null;
+  impact: number | string | null;
+  viability: number | string | null;
+  effort: number | string | null;
   health: Initiative["health"];
   target_start: string;
   target_end: string;
@@ -67,12 +67,16 @@ function rowToInitiative(row: InitiativeRow, links: DeliveryLink[]): Initiative 
     team: row.team,
     themeId: row.theme_id ?? "",
     strategicGoal: row.strategic_goal ?? "",
-    scores: {
-      demand: Number(row.demand),
-      impact: Number(row.impact),
-      viability: Number(row.viability),
-      effort: Number(row.effort),
-    },
+    // Any NULL score column means the initiative was saved unscored.
+    scores:
+      row.demand == null || row.impact == null || row.viability == null || row.effort == null
+        ? null
+        : {
+            demand: Number(row.demand),
+            impact: Number(row.impact),
+            viability: Number(row.viability),
+            effort: Number(row.effort),
+          },
     health: row.health,
     targetStart: row.target_start,
     targetEnd: row.target_end,
@@ -99,10 +103,10 @@ function initiativeToRow(i: Initiative) {
     team: i.team,
     theme_id: i.themeId || null,
     strategic_goal: i.strategicGoal,
-    demand: i.scores.demand,
-    impact: i.scores.impact,
-    viability: i.scores.viability,
-    effort: i.scores.effort,
+    demand: i.scores?.demand ?? null,
+    impact: i.scores?.impact ?? null,
+    viability: i.scores?.viability ?? null,
+    effort: i.scores?.effort ?? null,
     health: i.health,
     target_start: i.targetStart,
     target_end: i.targetEnd,

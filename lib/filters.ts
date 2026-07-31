@@ -105,7 +105,7 @@ export function sortInitiatives(items: Initiative[], sort: TimelineSort): Initia
   const val = (i: Initiative): string | number => {
     switch (sort.key) {
       case "start": return i.targetStart; // ISO date — lexical order is chronological
-      case "score": return diveScore(i.scores);
+      case "score": return diveScore(i.scores) ?? -Infinity; // unscored sink to the bottom
       case "status": return STATUSES.indexOf(i.status);
       case "title": return i.title.toLowerCase();
     }

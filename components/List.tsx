@@ -91,7 +91,7 @@ export function List() {
         case "theme": return getTheme(i.themeId)?.name.toLowerCase() ?? "";
         case "status": return STATUSES.indexOf(i.status);
         case "target": return i.targetEnd;
-        case "priority": return diveScore(i.scores);
+        case "priority": return diveScore(i.scores) ?? -Infinity;
         case "health": return HEALTH_ORDER[i.health];
         case "updated": return i.updatedAt;
       }
@@ -161,10 +161,12 @@ export function List() {
                   <td className="w-24 px-3 py-2.5 text-right">
                     <span
                       className="inline-flex items-center justify-end gap-1"
-                      title={`${tier.label} · DIVE ${score}`}
+                      title={score === null ? tier.label : `${tier.label} · DIVE ${score}`}
                     >
                       <span aria-hidden>{tier.emoji}</span>
-                      <span className="font-display font-semibold tabular-nums text-green-90">{score}</span>
+                      <span className="font-display font-semibold tabular-nums text-green-90">
+                        {score ?? "—"}
+                      </span>
                     </span>
                   </td>
                   <td className="px-3 py-2.5">

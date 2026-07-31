@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Plus, Trash2, X } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import {
+  DEFAULT_SCORES,
   DELIVERY_TYPE_LABEL,
   DEMAND_OPTIONS,
   diveScore,
@@ -20,6 +21,7 @@ import {
   type DeliveryLinkType,
   type Health,
   type Initiative,
+  type Scores,
   type Theme,
   type ThemeColor,
 } from "@/lib/types";
@@ -54,8 +56,10 @@ function EditorForm({ draft }: { draft: Initiative }) {
   const set = <K extends keyof Initiative>(key: K, value: Initiative[K]) =>
     setD((prev) => ({ ...prev, [key]: value }));
 
-  const setScore = (key: keyof Initiative["scores"], value: number) =>
-    setD((prev) => ({ ...prev, scores: { ...prev.scores, [key]: value } }));
+  const setScore = (key: keyof Scores, value: number) =>
+    setD((prev) => ({ ...prev, scores: { ...(prev.scores ?? DEFAULT_SCORES), [key]: value } }));
+  const addScore = () => setD((prev) => ({ ...prev, scores: DEFAULT_SCORES }));
+  const clearScore = () => setD((prev) => ({ ...prev, scores: null }));
 
   const addLink = () =>
     set("deliveryLinks", [
@@ -73,6 +77,9 @@ function EditorForm({ draft }: { draft: Initiative }) {
   const titleMissing = d.title.trim().length === 0;
   const dateOutOfOrder = d.targetStart > d.targetEnd;
   const canSave = !titleMissing && !dateOutOfOrder;
+  const scores = d.scores; // null = unscored
+
+
 
   // Guard the close paths (Cancel, ✕, Esc, backdrop) when there are edits.
   const dirty = useMemo(() => JSON.stringify(d) !== JSON.stringify(draft), [d, draft]);
@@ -236,65 +243,93 @@ function EditorForm({ draft }: { draft: Initiative }) {
           />
         </Field>
 
-        {/* Scoring — DIVE */}
+        {/* Scoring — DIVE (optional; starts unscored) */}
         <div className="rounded-xl border border-beige-20 bg-beige-5 p-4">
           <div className="mb-3 flex items-center justify-between">
             <Eyebrow>Prioritization · DIVE</Eyebrow>
             <span className="flex items-center gap-2 text-sm text-green-90">
-              <ScoreTierTag score={diveScore(d.scores)} />
-              <span className="font-display text-lg font-semibold">{diveScore(d.scores)}</span>
+              <ScoreTierTag score={diveScore(scores)} />
+              {scores && (
+                <span className="font-display text-lg font-semibold">{diveScore(scores)}</span>
+              )}
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Demand" hint="Accounts reached per month">
-              <NativeSelect
-                value={d.scores.demand}
-                onChange={(e) => setScore("demand", Number(e.target.value))}
+          {scores ? (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Demand" hint="Accounts reached per month">
+                  <NativeSelect
+                    value={scores.demand}
+                    onChange={(e) => setScore("demand", Number(e.target.value))}
+                  >
+                    {DEMAND_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.range}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Field label="Effort" hint="Person-months">
+                  <TextInput
+                    type="number"
+                    min={0.5}
+                    step={0.5}
+                    value={scores.effort}
+                    onChange={(e) => setScore("effort", Math.max(0.5, Number(e.target.value) || 0.5))}
+                  />
+                </Field>
+                <Field label="Impact">
+                  <NativeSelect
+                    value={scores.impact}
+                    onChange={(e) => setScore("impact", Number(e.target.value))}
+                  >
+                    {IMPACT_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label} ({o.value}×)
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Field label="Viability">
+                  <NativeSelect
+                    value={scores.viability}
+                    onChange={(e) => setScore("viability", Number(e.target.value))}
+                  >
+                    {VIABILITY_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label} ({o.pct})
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </Field>
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <p className="text-xs text-beige-60">
+                  DIVE = (Demand × Impact × Viability) ÷ Effort
+                </p>
+                <button
+                  type="button"
+                  onClick={clearScore}
+                  className="shrink-0 text-[13px] font-medium text-beige-60 hover:text-green-90"
+                >
+                  Clear score
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-beige-60">
+                Not scored yet — add DIVE inputs when you’re ready to prioritize.
+              </p>
+              <button
+                type="button"
+                onClick={addScore}
+                className="flex shrink-0 items-center gap-1 text-[13px] font-medium text-green-70 hover:text-green-60"
               >
-                {DEMAND_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.range}
-                  </option>
-                ))}
-              </NativeSelect>
-            </Field>
-            <Field label="Effort" hint="Person-months">
-              <TextInput
-                type="number"
-                min={0.5}
-                step={0.5}
-                value={d.scores.effort}
-                onChange={(e) => setScore("effort", Math.max(0.5, Number(e.target.value) || 0.5))}
-              />
-            </Field>
-            <Field label="Impact">
-              <NativeSelect
-                value={d.scores.impact}
-                onChange={(e) => setScore("impact", Number(e.target.value))}
-              >
-                {IMPACT_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label} ({o.value}×)
-                  </option>
-                ))}
-              </NativeSelect>
-            </Field>
-            <Field label="Viability">
-              <NativeSelect
-                value={d.scores.viability}
-                onChange={(e) => setScore("viability", Number(e.target.value))}
-              >
-                {VIABILITY_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label} ({o.pct})
-                  </option>
-                ))}
-              </NativeSelect>
-            </Field>
-          </div>
-          <p className="mt-3 text-xs text-beige-60">
-            DIVE = (Demand × Impact × Viability) ÷ Effort
-          </p>
+                <Plus size={14} /> Add DIVE score
+              </button>
+            </div>
+          )}
         </div>
 
         <Field label="Problem">

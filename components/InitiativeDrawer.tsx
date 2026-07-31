@@ -143,27 +143,37 @@ export function InitiativeDrawer() {
                 <Eyebrow>Prioritization · DIVE</Eyebrow>
                 <span className="flex items-center gap-2 text-sm text-green-90">
                   <ScoreTierTag score={diveScore(i.scores)} />
-                  <span className="font-display text-lg font-semibold">{diveScore(i.scores)}</span>
+                  {i.scores && (
+                    <span className="font-display text-lg font-semibold">{diveScore(i.scores)}</span>
+                  )}
                 </span>
               </div>
-              <div className="grid grid-cols-4 gap-2 text-center">
-                  {[
-                    { label: "Demand", value: DEMAND_OPTIONS.find((o) => o.value === i.scores.demand)?.label ?? String(i.scores.demand) },
-                    { label: "Impact", value: `${i.scores.impact}×` },
-                    { label: "Viability", value: `${Math.round(i.scores.viability * 100)}%` },
-                    { label: "Effort", value: `${i.scores.effort} pm` },
-                  ].map((m) => (
-                    <div key={m.label} className="rounded-lg bg-white py-2">
-                      <div className="font-display text-lg font-semibold text-green-90">
-                        {m.value}
+              {i.scores ? (
+                <>
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    {[
+                      { label: "Demand", value: DEMAND_OPTIONS.find((o) => o.value === i.scores!.demand)?.label ?? String(i.scores!.demand) },
+                      { label: "Impact", value: `${i.scores.impact}×` },
+                      { label: "Viability", value: `${Math.round(i.scores.viability * 100)}%` },
+                      { label: "Effort", value: `${i.scores.effort} pm` },
+                    ].map((m) => (
+                      <div key={m.label} className="rounded-lg bg-white py-2">
+                        <div className="font-display text-lg font-semibold text-green-90">
+                          {m.value}
+                        </div>
+                        <div className="mono-label-sm text-beige-60">{m.label}</div>
                       </div>
-                      <div className="mono-label-sm text-beige-60">{m.label}</div>
-                    </div>
-                  ))}
-                </div>
-              <p className="mt-3 text-xs text-beige-60">
-                DIVE = (Demand × Impact × Viability) ÷ Effort
-              </p>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-xs text-beige-60">
+                    DIVE = (Demand × Impact × Viability) ÷ Effort
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-beige-60">
+                  Not scored yet — open Edit to add a DIVE score.
+                </p>
+              )}
             </div>
 
             {/* Delivery links */}

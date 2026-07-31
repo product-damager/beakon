@@ -90,6 +90,15 @@ create table if not exists initiatives (
   updated_at timestamptz not null default now()
 );
 
+-- Added after initial deploy: let an initiative be saved "unscored" (DIVE not
+-- yet estimated). A CHECK fails only on FALSE, and NULL IN (...) / NULL > 0 are
+-- both "unknown" → they pass, so the existing constraints need no change; we
+-- only drop NOT NULL. All four are NULL together (see lib/data.ts). Safe to re-run.
+alter table initiatives alter column demand    drop not null;
+alter table initiatives alter column impact    drop not null;
+alter table initiatives alter column viability drop not null;
+alter table initiatives alter column effort    drop not null;
+
 -- ── Delivery links (one initiative → many links) ──
 create table if not exists delivery_links (
   id text primary key,
