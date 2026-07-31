@@ -68,8 +68,10 @@ function Card({
           {initiative.title}
         </div>
       </button>
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <span className="mono-label-sm text-beige-60">{quarterLabelFromISO(initiative.targetStart)}</span>
+      <div className="mt-3 flex flex-col items-start gap-2">
+        <span className="mono-label-sm whitespace-nowrap text-beige-60">
+          {quarterLabelFromISO(initiative.targetStart)}
+        </span>
         <ScoreTierTag score={diveScore(initiative.scores)} />
       </div>
       {/* Quick edit */}
