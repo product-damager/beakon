@@ -3,6 +3,7 @@
 import {
   ArrowUpRight,
   Archive,
+  ArchiveRestore,
   CalendarRange,
   Clock,
   Flag,
@@ -283,18 +284,30 @@ export function InitiativeDrawer() {
             <Button onClick={() => openEdit(i)}>
               <Pencil size={15} /> Edit
             </Button>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                archiveInitiative(i.id);
-                notify({
-                  message: `“${i.title}” archived`,
-                  action: { label: "Undo", onClick: () => unarchiveInitiative(i.id) },
-                });
-              }}
-            >
-              <Archive size={15} /> Archive
-            </Button>
+            {i.archived ? (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  unarchiveInitiative(i.id);
+                  notify({ message: `“${i.title}” restored` });
+                }}
+              >
+                <ArchiveRestore size={15} /> Restore
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  archiveInitiative(i.id);
+                  notify({
+                    message: `“${i.title}” archived`,
+                    action: { label: "Undo", onClick: () => unarchiveInitiative(i.id) },
+                  });
+                }}
+              >
+                <Archive size={15} /> Archive
+              </Button>
+            )}
             <span className="ml-auto text-xs text-beige-60">
               Updated {formatDateEN(i.updatedAt.slice(0, 10))}
             </span>
