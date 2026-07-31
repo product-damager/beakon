@@ -74,7 +74,7 @@ function Card({
       </div>
       {/* Quick edit */}
       <div className="mt-3 flex items-center gap-2 border-t border-beige-10 pt-2.5">
-        {owner && <Avatar name={ownerName(owner)} className="h-6 w-6 text-[10px]" />}
+        {owner && <Avatar name={ownerName(owner)} className="h-6 w-6 text-[10px]" neutral />}
         <select
           value={initiative.ownerId}
           onChange={(e) => saveInitiative({ ...initiative, ownerId: e.target.value })}

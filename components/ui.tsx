@@ -99,7 +99,7 @@ export function HealthTag({ health }: { health: Health }) {
 export function ScoreTierTag({ score, className }: { score: number; className?: string }) {
   const t = scoreTier(score);
   return (
-    <Tag className={cn(t.tag, className)}>
+    <Tag className={cn("whitespace-nowrap", t.tag, className)}>
       <span aria-hidden>{t.emoji}</span>
       {t.label}
     </Tag>
