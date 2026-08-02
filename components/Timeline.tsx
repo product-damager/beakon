@@ -53,7 +53,7 @@ function StatusLegend() {
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
       {STATUSES.map((s) => (
         <span key={s} className="flex items-center gap-1.5 text-xs text-beige-60">
-          <span className={cn("h-2.5 w-2.5 rounded-sm", STATUS_META[s].dot)} />
+          <span className={cn("h-2.5 w-2.5 rounded-full", STATUS_META[s].dot)} />
           {STATUS_META[s].label}
         </span>
       ))}
@@ -384,7 +384,7 @@ export function Timeline() {
                       {g.color && (
                         <span
                           className={cn(
-                            "h-3 w-3 rounded-full ring-1 ring-inset ring-black/20",
+                            "h-3.5 w-1 shrink-0 rounded-[2px]",
                             THEME_COLOR_META[g.color].dot
                           )}
                         />

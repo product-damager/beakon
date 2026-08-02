@@ -89,7 +89,7 @@ export function ExternalRoadmap() {
         <div className="mb-6 flex flex-wrap items-center gap-x-5 gap-y-2">
           {STATUSES.map((s) => (
             <span key={s} className="flex items-center gap-1.5 text-xs text-green-70">
-              <span className={cn("h-2.5 w-2.5 rounded-sm", STATUS_META[s].dot)} />
+              <span className={cn("h-2.5 w-2.5 rounded-full", STATUS_META[s].dot)} />
               {PUBLIC_STATUS[s]}
             </span>
           ))}
@@ -116,7 +116,7 @@ export function ExternalRoadmap() {
           {groups.map((g) => (
             <div key={g.theme.id} className="border-b border-beige-10 last:border-b-0">
               <div className="flex items-center gap-2 bg-beige-5 px-6 py-2">
-                <span className={cn("h-2.5 w-2.5 rounded-full", THEME_COLOR_META[g.theme.color].dot)} />
+                <span className={cn("h-3 w-1 shrink-0 rounded-[2px]", THEME_COLOR_META[g.theme.color].dot)} />
                 <span className="text-[13px] font-semibold text-green-90">{g.theme.name}</span>
               </div>
               {g.items.map((i) => {

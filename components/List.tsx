@@ -9,6 +9,7 @@ import {
   diveScore,
   HEALTH_META,
   ownerName,
+  scoreTier,
   STATUSES,
   THEME_COLOR_META,
   type Health,
@@ -90,7 +91,7 @@ export function List() {
         case "theme": return getTheme(i.themeId)?.name.toLowerCase() ?? "";
         case "status": return STATUSES.indexOf(i.status);
         case "target": return i.targetEnd;
-        case "priority": return diveScore(i.scores);
+        case "priority": return diveScore(i.scores) ?? -Infinity;
         case "health": return HEALTH_ORDER[i.health];
         case "updated": return i.updatedAt;
       }
@@ -123,6 +124,8 @@ export function List() {
             {sorted.map((i) => {
               const owner = getOwner(i.ownerId);
               const theme = getTheme(i.themeId);
+              const score = diveScore(i.scores);
+              const tier = scoreTier(score);
               return (
                 <tr
                   key={i.id}
@@ -136,7 +139,7 @@ export function List() {
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-2">
                       {theme && (
-                        <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", THEME_COLOR_META[theme.color].dot)} />
+                        <span className={cn("h-3 w-1 shrink-0 rounded-[2px]", THEME_COLOR_META[theme.color].dot)} />
                       )}
                       <span className="font-medium text-green-90">{i.title}</span>
                       {i.visibility === "external" && (
@@ -146,7 +149,7 @@ export function List() {
                   </td>
                   <td className="px-3 py-2.5">
                     <span className="flex items-center gap-2 text-green-90">
-                      {owner && <Avatar name={ownerName(owner)} className="h-6 w-6 text-[10px]" />}
+                      {owner && <Avatar name={ownerName(owner)} className="h-6 w-6 text-[10px]" neutral />}
                       <span className="whitespace-nowrap">{ownerName(owner)}</span>
                     </span>
                   </td>
@@ -155,12 +158,19 @@ export function List() {
                   <td className="whitespace-nowrap px-3 py-2.5 text-green-70">
                     {quarterLabelFromISO(i.targetEnd)}
                   </td>
-                  <td className="w-24 px-3 py-2.5 text-right font-display font-semibold text-green-90">
-                    {diveScore(i.scores)}
+                  <td className="w-24 px-3 py-2.5 text-right">
+                    <span
+                      className="inline-flex items-center justify-end gap-1"
+                      title={score === null ? tier.label : `${tier.label} · DIVE ${score}`}
+                    >
+                      <span aria-hidden>{tier.emoji}</span>
+                      <span className="font-display font-semibold tabular-nums text-green-90">
+                        {score ?? "—"}
+                      </span>
+                    </span>
                   </td>
                   <td className="px-3 py-2.5">
                     <span className={cn("mono-label inline-flex items-center gap-1 rounded-md px-2 py-1", HEALTH_META[i.health].tag)}>
-                      <span className={cn("h-2 w-2 rounded-full", HEALTH_META[i.health].dot)} aria-hidden />
                       {HEALTH_META[i.health].label}
                     </span>
                   </td>

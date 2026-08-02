@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AlertTriangle, CalendarRange, Columns3, LogOut, Plus, Rows3, Settings, Share2, X } from "lucide-react";
+import { AlertTriangle, Archive, CalendarRange, Columns3, LogOut, Plus, Rows3, Settings, Share2, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useRoadmap } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
@@ -13,6 +13,7 @@ import { Logo } from "./Logo";
 import { InitiativeDrawer } from "./InitiativeDrawer";
 import { InitiativeEditor } from "./InitiativeEditor";
 import { SettingsDialog } from "./SettingsDialog";
+import { Toaster } from "./Toaster";
 
 const NAV = [
   { href: "/timeline", label: "Timeline", icon: CalendarRange },
@@ -24,6 +25,7 @@ const TITLES: Record<string, string> = {
   "/timeline": "Timeline",
   "/board": "Board",
   "/list": "List",
+  "/archived": "Archived",
 };
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -43,6 +45,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {children}
         <InitiativeDrawer />
         <InitiativeEditor />
+        <Toaster />
       </div>
     );
   }
@@ -83,6 +86,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               );
             })}
           </ul>
+
+          <div className="mono-label-sm px-3 pb-2 pt-6 text-green-40">Manage</div>
+          <Link
+            href="/archived"
+            className={cn(
+              "relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+              pathname === "/archived"
+                ? "bg-green-80 text-white"
+                : "text-green-20 hover:bg-green-80/60 hover:text-white"
+            )}
+          >
+            {pathname === "/archived" && (
+              <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-lime-40" />
+            )}
+            <Archive size={18} strokeWidth={1.75} />
+            Archived
+          </Link>
 
           <div className="mono-label-sm px-3 pb-2 pt-6 text-green-40">Share</div>
           <Link
@@ -169,6 +189,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <InitiativeDrawer />
       <InitiativeEditor />
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <Toaster />
     </div>
   );
 }

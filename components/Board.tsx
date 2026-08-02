@@ -7,7 +7,7 @@ import { applyFilters } from "@/lib/filters";
 import { quarterLabelFromISO } from "@/lib/dates";
 import { diveScore, ownerName, STATUS_META, STATUSES, THEME_COLOR_META, type Initiative, type Status } from "@/lib/types";
 import { cn } from "@/lib/cn";
-import { Avatar, Eyebrow } from "./ui";
+import { Avatar, Eyebrow, ScoreTierTag } from "./ui";
 import { FilterBar } from "./FilterBar";
 
 /**
@@ -61,25 +61,22 @@ function Card({
       />
       <button onClick={() => select(initiative.id)} className="block w-full pr-4 text-left">
         <div className="mb-2 flex items-center gap-1.5">
-          {theme && <span className={cn("h-2 w-2 rounded-full", THEME_COLOR_META[theme.color].dot)} />}
+          {theme && <span className={cn("h-3 w-1 shrink-0 rounded-[2px]", THEME_COLOR_META[theme.color].dot)} />}
           <span className="mono-label-sm truncate text-beige-60">{theme?.name}</span>
         </div>
         <div className="text-sm font-medium leading-snug text-green-90 group-hover:text-green-60">
           {initiative.title}
         </div>
       </button>
-      <div className="mt-3 flex items-center justify-between">
-        <span className="mono-label-sm text-beige-60">{quarterLabelFromISO(initiative.targetStart)}</span>
-        <span className="flex items-center gap-1 text-xs text-beige-60">
-          DIVE
-          <span className="font-display text-sm font-semibold text-green-90">
-            {diveScore(initiative.scores)}
-          </span>
+      <div className="mt-3 flex flex-col items-start gap-2">
+        <span className="mono-label-sm whitespace-nowrap text-beige-60">
+          {quarterLabelFromISO(initiative.targetStart)}
         </span>
+        <ScoreTierTag score={diveScore(initiative.scores)} />
       </div>
       {/* Quick edit */}
       <div className="mt-3 flex items-center gap-2 border-t border-beige-10 pt-2.5">
-        {owner && <Avatar name={ownerName(owner)} className="h-6 w-6 text-[10px]" />}
+        {owner && <Avatar name={ownerName(owner)} className="h-6 w-6 text-[10px]" neutral />}
         <select
           value={initiative.ownerId}
           onChange={(e) => saveInitiative({ ...initiative, ownerId: e.target.value })}
@@ -186,7 +183,7 @@ export function Board() {
                 )}
               >
                 <div className="mb-3 flex items-center gap-2 px-1">
-                  <span className={cn("h-2.5 w-2.5 rounded-sm", STATUS_META[s].dot)} />
+                  <span className={cn("h-2.5 w-2.5 rounded-full", STATUS_META[s].dot)} />
                   <span className="text-sm font-semibold text-green-90">{STATUS_META[s].label}</span>
                   <span className="mono-label-sm text-beige-60">{items.length}</span>
                 </div>

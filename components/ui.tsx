@@ -4,6 +4,7 @@ import { type ButtonHTMLAttributes, type ReactNode } from "react";
 import { cn, initials } from "@/lib/cn";
 import {
   HEALTH_META,
+  scoreTier,
   STATUS_META,
   THEME_COLOR_META,
   type Health,
@@ -74,6 +75,7 @@ export function StatusTag({ status }: { status: Status }) {
   const m = STATUS_META[status];
   return (
     <Tag className={m.tag}>
+      {/* Round marker — status is a dot; theme uses the bar; health carries none. */}
       <span className={cn("h-2 w-2 rounded-full", m.dot)} aria-hidden />
       {m.label}
     </Tag>
@@ -82,18 +84,31 @@ export function StatusTag({ status }: { status: Status }) {
 
 export function HealthTag({ health }: { health: Health }) {
   const m = HEALTH_META[health];
+  // No marker — the pill background already carries the health colour; a dot
+  // would just repeat it (and collide with the status/theme markers).
+  return <Tag className={m.tag}>{m.label}</Tag>;
+}
+
+/**
+ * DIVE tier badge (🐟 Big catch / 🌊 Worth a dive / 💧 Surface nibble). Leads
+ * with the tier, not the raw score, so the UI ranks by bucket instead of false
+ * precision. `score` is a computed diveScore(); callers pass diveScore(scores).
+ */
+export function ScoreTierTag({ score, className }: { score: number | null; className?: string }) {
+  const t = scoreTier(score);
   return (
-    <Tag className={m.tag}>
-      <span className={cn("h-2 w-2 rounded-full", m.dot)} aria-hidden />
-      {m.label}
+    <Tag className={cn("whitespace-nowrap", t.tag, className)}>
+      <span aria-hidden>{t.emoji}</span>
+      {t.label}
     </Tag>
   );
 }
 
+/** Theme marker — a vertical rounded bar, so it never reads as the round status dot. */
 export function ThemeDot({ color, className }: { color: ThemeColor; className?: string }) {
   return (
     <span
-      className={cn("h-2.5 w-2.5 shrink-0 rounded-full", THEME_COLOR_META[color].dot, className)}
+      className={cn("h-3 w-1 shrink-0 rounded-[2px]", THEME_COLOR_META[color].dot, className)}
       aria-hidden
     />
   );

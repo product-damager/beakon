@@ -46,18 +46,20 @@ function ProfileForm({
   owner: Owner | undefined;
   email: string | null;
   onClose: () => void;
-  onSave: (patch: { name: string; surname: string; team: string }) => void;
+  onSave: (patch: { name: string; surname: string; team: string; role: string }) => void;
 }) {
   const [name, setName] = useState(owner?.name ?? "");
   const [surname, setSurname] = useState(owner?.surname ?? "");
+  const [role, setRole] = useState(owner?.role ?? "");
   const [team, setTeam] = useState(owner?.team ?? "");
 
   // Live preview of how the name will render, using the same rule as everywhere else.
   const preview =
     ownerName({ id: "", name, surname, role: "", email: email ?? undefined }) || "—";
+  const previewSub = [team, role].filter(Boolean).join(" · ");
 
   const save = () =>
-    onSave({ name: name.trim(), surname: surname.trim(), team });
+    onSave({ name: name.trim(), surname: surname.trim(), team, role: role.trim() });
 
   return (
     <div className="relative w-full max-w-md animate-slide-up rounded-2xl bg-white shadow-2xl">
@@ -80,6 +82,7 @@ function ProfileForm({
           <Avatar name={preview} />
           <div className="min-w-0">
             <div className="truncate text-sm font-medium text-green-90">{preview}</div>
+            {previewSub && <div className="truncate text-xs text-green-70">{previewSub}</div>}
             {email && <div className="truncate text-xs text-beige-60">{email}</div>}
           </div>
         </div>
@@ -102,16 +105,25 @@ function ProfileForm({
           </Field>
         </div>
 
-        <Field label="Team" hint="Which team you're part of.">
-          <NativeSelect value={team} onChange={(e) => setTeam(e.target.value)}>
-            <option value="">No team</option>
-            {TEAMS.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Team">
+            <NativeSelect value={team} onChange={(e) => setTeam(e.target.value)}>
+              <option value="">No team</option>
+              {TEAMS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+          <Field label="Job title">
+            <TextInput
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              placeholder="e.g. Product Manager"
+            />
+          </Field>
+        </div>
 
         <p className="text-xs text-beige-60">
           Leave both name fields empty to show your email instead. Extra spaces are trimmed.

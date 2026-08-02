@@ -33,7 +33,17 @@ import {
   persistMove,
   persistOwner,
   persistSchedule,
+  persistUnarchive,
 } from "./data";
+
+/** An ephemeral, auto-dismissing notification (success confirmations, Undo). */
+export interface Toast {
+  id: string;
+  message: string;
+  tone?: "default" | "success" | "error";
+  /** Optional action button, e.g. Undo an archive or View a new initiative. */
+  action?: { label: string; onClick: () => void };
+}
 
 /** Seed the in-memory store with stable positions (demo/local mode only). */
 function seededInitiatives(): Initiative[] {
@@ -58,6 +68,11 @@ interface RoadmapState {
   /** Last sync error (a failed persist or load), or null. */
   error: string | null;
   dismissError: () => void;
+
+  /** Ephemeral success/undo notifications. */
+  toasts: Toast[];
+  notify: (t: Omit<Toast, "id">) => void;
+  dismissToast: (id: string) => void;
 
   /** The owner row matching the signed-in user's email, if any. */
   currentOwner: Owner | undefined;
@@ -92,11 +107,13 @@ interface RoadmapState {
   rescheduleInitiative: (id: string, targetStart: string, targetEnd: string) => void;
   /** Create a new theme (persists + adds to state). */
   addTheme: (t: Theme) => void;
-  /** Update the signed-in user's profile (name / surname / team). */
-  saveProfile: (patch: { name: string; surname: string; team: string }) => void;
+  /** Update the signed-in user's profile (name / surname / team / role). */
+  saveProfile: (patch: { name: string; surname: string; team: string; role: string }) => void;
   /** Board drag: set status and place before `beforeId` (null = end of target column). */
   moveInitiative: (id: string, toStatus: Status, beforeId: string | null) => void;
   archiveInitiative: (id: string) => void;
+  /** Restore an archived initiative (the Undo of archiveInitiative). */
+  unarchiveInitiative: (id: string) => void;
   newDraft: () => Initiative;
   openCreate: () => void;
   openEdit: (i: Initiative) => void;
@@ -121,6 +138,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
   const [owners, setOwners] = useState<Owner[]>(() => (isSupabaseConfigured ? [] : OWNERS));
   const [loading, setLoading] = useState<boolean>(isSupabaseConfigured);
   const [error, setError] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<Toast[]>([]);
 
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [groupBy, setGroupBy] = useState<GroupBy>("theme");
@@ -169,6 +187,16 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
     []
   );
   const dismissError = useCallback(() => setError(null), []);
+
+  // Cap the visible stack so a burst of actions can't bury the screen.
+  const notify = useCallback((t: Omit<Toast, "id">) => {
+    const id = `t-${Math.random().toString(36).slice(2, 9)}`;
+    setToasts((prev) => [...prev, { ...t, id }].slice(-3));
+  }, []);
+  const dismissToast = useCallback(
+    (id: string) => setToasts((prev) => prev.filter((x) => x.id !== id)),
+    []
+  );
 
   const reportError = useCallback((e: unknown, action: string) => {
     console.error(`[beakon] ${action} failed`, e);
@@ -293,6 +321,20 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
     [reportError]
   );
 
+  const unarchiveInitiative = useCallback(
+    (id: string) => {
+      setInitiatives((prev) =>
+        prev.map((x) =>
+          x.id === id ? { ...x, archived: false, updatedAt: new Date().toISOString() } : x
+        )
+      );
+      if (isSupabaseConfigured) {
+        queueMicrotask(() => persistUnarchive(id).catch((e) => reportError(e, "restore")));
+      }
+    },
+    [reportError]
+  );
+
   // Match the signed-in user to a seeded owner row by email — lets the app
   // "know who you are" and default new initiatives to you as owner. In local/
   // demo mode (no auth) the first owner stands in as "you".
@@ -303,7 +345,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
   }, [owners, session]);
 
   const saveProfile = useCallback(
-    (patch: { name: string; surname: string; team: string }) => {
+    (patch: { name: string; surname: string; team: string; role: string }) => {
       const email = session?.user?.email ?? undefined;
       // Edit the matched owner row if there is one; otherwise create a profile
       // keyed to the signed-in email so anyone in the domain can identify.
@@ -314,6 +356,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
         ...base,
         name: patch.name.trim(),
         surname: patch.surname.trim() || undefined,
+        role: patch.role.trim(),
         team: patch.team || undefined,
         email: base.email ?? email,
       };
@@ -342,9 +385,12 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       // Default to the creator's own team so they don't have to switch off a
       // fixed default; falls back to the first team when it's not set yet.
       team: currentOwner?.team ?? TEAMS[0],
-      themeId: themes[0]?.id ?? "",
+      // Start unthemed rather than silently inheriting the first theme — the
+      // creator makes theme an explicit choice (see W4).
+      themeId: "",
       strategicGoal: "",
-      scores: { demand: 250, impact: 1, viability: 0.8, effort: 3 },
+      // Start unscored — a made-up default DIVE reads as a real priority nobody set.
+      scores: null,
       health: "on_track",
       targetStart: start,
       targetEnd: start,
@@ -355,7 +401,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       updatedAt: new Date().toISOString(),
       archived: false,
     };
-  }, [owners, themes, currentOwner]);
+  }, [owners, currentOwner]);
 
   const openCreate = useCallback(() => setEditorDraft(newDraft()), [newDraft]);
   const openEdit = useCallback((i: Initiative) => setEditorDraft({ ...i }), []);
@@ -377,6 +423,9 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       loading,
       error,
       dismissError,
+      toasts,
+      notify,
+      dismissToast,
       filters,
       groupBy,
       zoom,
@@ -402,6 +451,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       saveProfile,
       moveInitiative,
       archiveInitiative,
+      unarchiveInitiative,
       newDraft,
       openCreate,
       openEdit,
@@ -418,6 +468,9 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       loading,
       error,
       dismissError,
+      toasts,
+      notify,
+      dismissToast,
       filters,
       groupBy,
       zoom,
@@ -436,6 +489,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       saveProfile,
       moveInitiative,
       archiveInitiative,
+      unarchiveInitiative,
       newDraft,
       openCreate,
       openEdit,

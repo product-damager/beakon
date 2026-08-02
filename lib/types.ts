@@ -99,7 +99,7 @@ export interface Initiative {
   team: string;
   themeId: string;
   strategicGoal: string;
-  scores: Scores;
+  scores: Scores | null; // null = unscored ("Not cast yet") — DIVE deferred
   health: Health;
   targetStart: string; // ISO date
   targetEnd: string; // ISO date
@@ -119,8 +119,16 @@ export interface Initiative {
 
 // ── Derived helpers ──
 
-/** DIVE score = (Demand × Impact × Viability) ÷ Effort. Rounded; 0 when effort is 0. */
-export function diveScore(s: Scores): number {
+/** Starting values when a user opens the scorer on an unscored initiative. */
+export const DEFAULT_SCORES: Scores = { demand: 250, impact: 1, viability: 0.8, effort: 1 };
+
+/**
+ * DIVE score = (Demand × Impact × Viability) ÷ Effort. Rounded; 0 when effort is
+ * 0. Returns null for an unscored initiative (scores === null), which the UI
+ * renders as the "Not cast yet" tier.
+ */
+export function diveScore(s: Scores | null): number | null {
+  if (!s) return null;
   if (!s.effort) return 0;
   return Math.round((s.demand * s.impact * s.viability) / s.effort);
 }
@@ -134,7 +142,8 @@ export interface ScoreTier {
   emoji: string;
   tag: string; // badge classes
 }
-export function scoreTier(score: number): ScoreTier {
+export function scoreTier(score: number | null): ScoreTier {
+  if (score === null) return { label: "Not cast yet", emoji: "🎣", tag: "bg-beige-20 text-beige-60" };
   if (score >= 500) return { label: "Big catch", emoji: "🐟", tag: "bg-green-30 text-green-70" };
   if (score >= 50) return { label: "Worth a dive", emoji: "🌊", tag: "bg-blue-30 text-blue-70" };
   return { label: "Surface nibble", emoji: "💧", tag: "bg-beige-30 text-beige-60" };

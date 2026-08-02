@@ -3,24 +3,51 @@
 import {
   ArrowUpRight,
   Archive,
+  ArchiveRestore,
+  CalendarRange,
   Clock,
+  Flag,
   Link2,
   Lock,
   Pencil,
+  User,
+  Users,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import { formatDateEN, quarterLabelFromISO } from "@/lib/dates";
-import { DELIVERY_TYPE_LABEL, DEMAND_OPTIONS, diveScore, ownerName, scoreTier, THEME_COLOR_META } from "@/lib/types";
+import { DELIVERY_TYPE_LABEL, DEMAND_OPTIONS, diveScore, ownerName, THEME_COLOR_META } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Drawer } from "./Drawer";
-import { Avatar, Button, HealthTag, Eyebrow, StatusTag, Tag } from "./ui";
+import { Avatar, Button, HealthTag, Eyebrow, ScoreTierTag, StatusTag, Tag } from "./ui";
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+/** Hostname (sans www) as a fallback label for a delivery link with no label. */
+function prettyHost(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+/** A single metadata property: quiet icon + mono label with its value below. */
+function Prop({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: LucideIcon;
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div>
-      <Eyebrow className="mb-1">{label}</Eyebrow>
-      <div className="text-sm text-green-90">{children}</div>
+    <div className="flex items-start gap-2.5">
+      <Icon size={15} strokeWidth={1.75} className="mt-0.5 shrink-0 text-beige-60" />
+      <div className="min-w-0">
+        <div className="mono-label-sm text-beige-60">{label}</div>
+        <div className="mt-0.5 text-sm text-green-90">{children}</div>
+      </div>
     </div>
   );
 }
@@ -35,8 +62,18 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 }
 
 export function InitiativeDrawer() {
-  const { selectedId, getInitiative, getOwner, getTheme, initiatives, select, openEdit, archiveInitiative } =
-    useRoadmap();
+  const {
+    selectedId,
+    getInitiative,
+    getOwner,
+    getTheme,
+    initiatives,
+    select,
+    openEdit,
+    archiveInitiative,
+    unarchiveInitiative,
+    notify,
+  } = useRoadmap();
   const i = selectedId ? getInitiative(selectedId) : undefined;
 
   const owner = i ? getOwner(i.ownerId) : undefined;
@@ -44,7 +81,7 @@ export function InitiativeDrawer() {
   const blocks = i ? initiatives.filter((x) => x.dependsOn.includes(i.id) && !x.archived) : [];
 
   return (
-    <Drawer open={Boolean(i)} onClose={() => select(null)} width={480}>
+    <Drawer open={Boolean(i)} onClose={() => select(null)} width={560}>
       {i && (
         <>
           {/* Header */}
@@ -52,7 +89,7 @@ export function InitiativeDrawer() {
             <div className="mb-3 flex items-start justify-between gap-3">
               <div className="flex items-center gap-2">
                 {theme && (
-                  <span className={cn("h-2.5 w-2.5 rounded-full", THEME_COLOR_META[theme.color].dot)} />
+                  <span className={cn("h-3 w-1 shrink-0 rounded-[2px]", THEME_COLOR_META[theme.color].dot)} />
                 )}
                 <Eyebrow>{theme?.name ?? "No theme"}</Eyebrow>
               </div>
@@ -78,22 +115,22 @@ export function InitiativeDrawer() {
 
           {/* Body */}
           <div className="flex flex-col gap-6 px-6 py-5">
-            <div className="grid grid-cols-2 gap-4">
-              <Row label="Owner">
+            <div className="grid grid-cols-2 gap-4 rounded-xl border border-beige-20 bg-beige-5 p-4">
+              <Prop icon={User} label="Owner">
                 <span className="flex items-center gap-2">
-                  {owner && <Avatar name={ownerName(owner)} className="h-6 w-6 text-[10px]" />}
-                  {ownerName(owner) || "Unassigned"}
+                  {owner && <Avatar name={ownerName(owner)} className="h-6 w-6 text-[10px]" neutral />}
+                  <span className="truncate">{ownerName(owner) || "Unassigned"}</span>
                 </span>
-              </Row>
-              <Row label="Team">{i.team}</Row>
-              <Row label="Timeframe">
+              </Prop>
+              <Prop icon={Users} label="Team">{i.team}</Prop>
+              <Prop icon={CalendarRange} label="Timeframe">
                 {formatDateEN(i.targetStart)} → {formatDateEN(i.targetEnd)}
-              </Row>
-              <Row label="Target quarter">
+              </Prop>
+              <Prop icon={Flag} label="Target quarter">
                 {quarterLabelFromISO(i.targetStart)}
                 {quarterLabelFromISO(i.targetStart) !== quarterLabelFromISO(i.targetEnd) &&
                   ` – ${quarterLabelFromISO(i.targetEnd)}`}
-              </Row>
+              </Prop>
             </div>
 
             {i.summary && <Section label="Summary">{i.summary}</Section>}
@@ -101,45 +138,43 @@ export function InitiativeDrawer() {
             {i.expectedOutcome && <Section label="Expected outcome">{i.expectedOutcome}</Section>}
             {i.strategicGoal && <Section label="Strategic goal">{i.strategicGoal}</Section>}
 
-            {/* Scoring — DIVE */}
-            <div>
-              <Eyebrow className="mb-2">Prioritization · DIVE</Eyebrow>
-              <div className="rounded-xl border border-beige-20 bg-beige-5 p-4">
-                <div className="mb-3 flex items-baseline justify-between">
-                  <span className="flex items-center gap-2 text-sm text-green-90">
-                    DIVE score
-                    <span
-                      className={cn(
-                        "mono-label inline-flex items-center gap-1 rounded-md px-2 py-1 leading-none",
-                        scoreTier(diveScore(i.scores)).tag
-                      )}
-                    >
-                      {scoreTier(diveScore(i.scores)).emoji} {scoreTier(diveScore(i.scores)).label}
-                    </span>
-                  </span>
-                  <span className="font-display text-2xl font-semibold text-green-90">
-                    {diveScore(i.scores)}
-                  </span>
-                </div>
-                <div className="grid grid-cols-4 gap-2 text-center">
-                  {[
-                    { label: "Demand", value: DEMAND_OPTIONS.find((o) => o.value === i.scores.demand)?.label ?? String(i.scores.demand) },
-                    { label: "Impact", value: `${i.scores.impact}×` },
-                    { label: "Viability", value: `${Math.round(i.scores.viability * 100)}%` },
-                    { label: "Effort", value: `${i.scores.effort} pm` },
-                  ].map((m) => (
-                    <div key={m.label} className="rounded-lg bg-white py-2">
-                      <div className="font-display text-lg font-semibold text-green-90">
-                        {m.value}
-                      </div>
-                      <div className="mono-label-sm text-beige-60">{m.label}</div>
-                    </div>
-                  ))}
-                </div>
-                <p className="mt-3 text-xs text-beige-60">
-                  DIVE = (Demand × Impact × Viability) ÷ Effort
-                </p>
+            {/* Scoring — DIVE (header mirrors the editor's box) */}
+            <div className="rounded-xl border border-beige-20 bg-beige-5 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <Eyebrow>Prioritization · DIVE</Eyebrow>
+                <span className="flex items-center gap-2 text-sm text-green-90">
+                  <ScoreTierTag score={diveScore(i.scores)} />
+                  {i.scores && (
+                    <span className="font-display text-lg font-semibold">{diveScore(i.scores)}</span>
+                  )}
+                </span>
               </div>
+              {i.scores ? (
+                <>
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    {[
+                      { label: "Demand", value: DEMAND_OPTIONS.find((o) => o.value === i.scores!.demand)?.label ?? String(i.scores!.demand) },
+                      { label: "Impact", value: `${i.scores.impact}×` },
+                      { label: "Viability", value: `${Math.round(i.scores.viability * 100)}%` },
+                      { label: "Effort", value: `${i.scores.effort} pm` },
+                    ].map((m) => (
+                      <div key={m.label} className="rounded-lg bg-white py-2">
+                        <div className="font-display text-lg font-semibold text-green-90">
+                          {m.value}
+                        </div>
+                        <div className="mono-label-sm text-beige-60">{m.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-xs text-beige-60">
+                    DIVE = (Demand × Impact × Viability) ÷ Effort
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-beige-60">
+                  Not scored yet — open Edit to add a DIVE score.
+                </p>
+              )}
             </div>
 
             {/* Delivery links */}
@@ -159,7 +194,7 @@ export function InitiativeDrawer() {
                         <span className="mono-label-sm rounded bg-beige-10 px-1.5 py-0.5 text-beige-60">
                           {DELIVERY_TYPE_LABEL[l.type]}
                         </span>
-                        <span className="truncate">{l.label}</span>
+                        <span className="truncate">{l.label || prettyHost(l.url)}</span>
                         <ArrowUpRight size={14} className="ml-auto text-beige-60" />
                       </a>
                     </li>
@@ -249,9 +284,30 @@ export function InitiativeDrawer() {
             <Button onClick={() => openEdit(i)}>
               <Pencil size={15} /> Edit
             </Button>
-            <Button variant="ghost" onClick={() => archiveInitiative(i.id)}>
-              <Archive size={15} /> Archive
-            </Button>
+            {i.archived ? (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  unarchiveInitiative(i.id);
+                  notify({ message: `“${i.title}” restored` });
+                }}
+              >
+                <ArchiveRestore size={15} /> Restore
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  archiveInitiative(i.id);
+                  notify({
+                    message: `“${i.title}” archived`,
+                    action: { label: "Undo", onClick: () => unarchiveInitiative(i.id) },
+                  });
+                }}
+              >
+                <Archive size={15} /> Archive
+              </Button>
+            )}
             <span className="ml-auto text-xs text-beige-60">
               Updated {formatDateEN(i.updatedAt.slice(0, 10))}
             </span>
