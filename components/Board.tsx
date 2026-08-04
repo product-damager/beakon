@@ -40,7 +40,7 @@ function Card({
   related?: boolean;
   dragging?: boolean;
 }) {
-  const { getOwner, getTheme, select, saveInitiative, owners } = useRoadmap();
+  const { getOwner, getTheme, select, saveInitiative, notify, owners } = useRoadmap();
   const owner = getOwner(initiative.ownerId);
   const theme = getTheme(initiative.themeId);
 
@@ -79,7 +79,14 @@ function Card({
         {owner && <Avatar name={ownerName(owner)} className="h-6 w-6 text-[10px]" neutral />}
         <select
           value={initiative.ownerId}
-          onChange={(e) => saveInitiative({ ...initiative, ownerId: e.target.value })}
+          onChange={(e) => {
+            const ownerId = e.target.value;
+            saveInitiative({ ...initiative, ownerId });
+            notify({
+              message: ownerId ? `Owner set to ${ownerName(getOwner(ownerId))}` : "Owner cleared",
+              tone: "success",
+            });
+          }}
           className="min-w-0 flex-1 truncate rounded-md border border-beige-20 bg-beige-5 px-2 py-1 text-xs text-green-90 focus:outline-none focus:ring-1 focus:ring-green-90"
           aria-label="Owner"
         >
@@ -102,7 +109,7 @@ function Placeholder() {
 }
 
 export function Board() {
-  const { initiatives, filters, themes, owners, moveInitiative } = useRoadmap();
+  const { initiatives, filters, themes, owners, moveInitiative, notify } = useRoadmap();
   const [dragId, setDragId] = useState<string | null>(null);
   const [drop, setDrop] = useState<{ status: Status; beforeId: string | null } | null>(null);
 
@@ -135,7 +142,15 @@ export function Board() {
   const commitDrop = (status: Status) => {
     if (dragId) {
       const beforeId = drop && drop.status === status ? drop.beforeId : null;
+      const moved = initiatives.find((i) => i.id === dragId);
       moveInitiative(dragId, status, beforeId);
+      // Reordering within a column is self-evident; only a status change toasts.
+      if (moved && moved.status !== status) {
+        notify({
+          message: `“${moved.title}” moved to ${STATUS_META[status].label}`,
+          tone: "success",
+        });
+      }
     }
     endDrag();
   };
