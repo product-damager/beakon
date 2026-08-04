@@ -10,18 +10,23 @@ import {
   HEALTH_META,
   ownerName,
   scoreTier,
+  STATUS_META,
   STATUSES,
   THEME_COLOR_META,
   type Health,
   type Initiative,
+  type Status,
 } from "@/lib/types";
 import { cn } from "@/lib/cn";
-import { Avatar, StatusTag } from "./ui";
+import { Avatar, HealthTag, StatusTag } from "./ui";
+import { InlineTagSelect } from "./form";
 import { FilterBar } from "./FilterBar";
 
 type SortKey = "title" | "owner" | "team" | "theme" | "status" | "target" | "priority" | "health" | "updated";
 
 const HEALTH_ORDER: Record<Health, number> = { on_track: 0, at_risk: 1, blocked: 2 };
+/** Health values in severity order, for the inline picker options. */
+const HEALTH_KEYS = Object.keys(HEALTH_META) as Health[];
 
 type SortState = { key: SortKey; dir: 1 | -1 };
 
@@ -74,7 +79,8 @@ function Th({ col, sort, onToggle }: { col: Column; sort: SortState; onToggle: (
 }
 
 export function List() {
-  const { initiatives, filters, themes, owners, getOwner, getTheme, select } = useRoadmap();
+  const { initiatives, filters, themes, owners, getOwner, getTheme, select, saveInitiative, notify } =
+    useRoadmap();
   const [sort, setSort] = useState<SortState>({ key: "priority", dir: -1 });
 
   const filtered = useMemo(
@@ -154,7 +160,18 @@ export function List() {
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-green-70">{i.team}</td>
-                  <td className="px-3 py-2.5"><StatusTag status={i.status} /></td>
+                  <td className="px-3 py-2.5">
+                    <InlineTagSelect
+                      label="Change status"
+                      value={i.status}
+                      options={STATUSES}
+                      render={(s: Status) => <StatusTag status={s} />}
+                      onSelect={(status) => {
+                        saveInitiative({ ...i, status });
+                        notify({ message: `Status set to ${STATUS_META[status].label}`, tone: "success" });
+                      }}
+                    />
+                  </td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-green-70">
                     {quarterLabelFromISO(i.targetEnd)}
                   </td>
@@ -170,9 +187,16 @@ export function List() {
                     </span>
                   </td>
                   <td className="px-3 py-2.5">
-                    <span className={cn("mono-label inline-flex items-center gap-1 rounded-md px-2 py-1", HEALTH_META[i.health].tag)}>
-                      {HEALTH_META[i.health].label}
-                    </span>
+                    <InlineTagSelect
+                      label="Change health"
+                      value={i.health}
+                      options={HEALTH_KEYS}
+                      render={(h: Health) => <HealthTag health={h} />}
+                      onSelect={(health) => {
+                        saveInitiative({ ...i, health });
+                        notify({ message: `Health set to ${HEALTH_META[health].label}`, tone: "success" });
+                      }}
+                    />
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-right text-beige-60">
                     {formatShortEN(i.updatedAt.slice(0, 10))}

@@ -11,7 +11,6 @@ import { ownerName } from "@/lib/types";
 import { Avatar, Button } from "./ui";
 import { Logo } from "./Logo";
 import { InitiativeDrawer } from "./InitiativeDrawer";
-import { InitiativeEditor } from "./InitiativeEditor";
 import { SettingsDialog } from "./SettingsDialog";
 import { Toaster } from "./Toaster";
 
@@ -44,7 +43,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="min-h-screen">
         {children}
         <InitiativeDrawer />
-        <InitiativeEditor />
         <Toaster />
       </div>
     );
@@ -187,7 +185,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       <InitiativeDrawer />
-      <InitiativeEditor />
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <Toaster />
     </div>
