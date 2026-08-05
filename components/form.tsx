@@ -31,7 +31,7 @@ export function Field({
 }) {
   return (
     <label className={cn("block", className)}>
-      <span className="mb-1.5 block text-[13px] font-medium text-green-90">
+      <span className="mb-1.5 block text-sm font-medium text-green-90">
         {label}
         {required && (
           <span className="text-red-60" aria-hidden>
@@ -185,6 +185,75 @@ export function SearchableSelect({
               <div className="px-2.5 py-2 text-sm text-beige-60">No matches</div>
             )}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A tag/pill that opens an inline menu to pick a new value — powers quick
+ * edits in place (drawer header, List rows). `render` draws both the trigger
+ * and each option, so callers pass e.g. a <StatusTag/> or <HealthTag/>.
+ * Clicks are stopped from bubbling so it works inside a clickable row.
+ */
+export function InlineTagSelect<T extends string>({
+  label,
+  value,
+  options,
+  render,
+  onSelect,
+}: {
+  label: string;
+  value: T;
+  options: readonly T[];
+  render: (v: T) => ReactNode;
+  onSelect: (v: T) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useOutsideClose(ref, open, () => setOpen(false));
+
+  return (
+    <div className="relative inline-block" ref={ref}>
+      <button
+        type="button"
+        aria-label={label}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
+        className="inline-flex items-center gap-1 rounded-md transition hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-90 focus-visible:ring-offset-1"
+      >
+        {render(value)}
+        <ChevronDown size={13} className="text-beige-60" />
+      </button>
+      {open && (
+        <div
+          role="listbox"
+          className="absolute left-0 top-full z-50 mt-1 min-w-[15rem] rounded-xl border border-beige-20 bg-white p-1 shadow-lg"
+        >
+          {options.map((o) => (
+            <button
+              key={o}
+              type="button"
+              role="option"
+              aria-selected={o === value}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(false);
+                if (o !== value) onSelect(o);
+              }}
+              className="flex w-full items-center gap-2 whitespace-nowrap rounded-md px-2.5 py-2 text-left hover:bg-beige-10"
+            >
+              {render(o)}
+              {o === value && (
+                <Check size={14} strokeWidth={3} className="ml-auto shrink-0 text-green-70" />
+              )}
+            </button>
+          ))}
         </div>
       )}
     </div>

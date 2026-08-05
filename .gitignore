@@ -9,3 +9,14 @@ npm-debug.log*
 *.tsbuildinfo
 next-env.d.ts
 .claude/settings.local.json
+
+# graphify — local knowledge-graph tooling. All regenerable and/or machine-specific;
+# keep it out of Merlin (and every) commit. Regenerate with `graphify update .`.
+# generated graph, cache, html, reports (~850K, disposable):
+graphify-out/
+# graphify hook-guard hooks with a hardcoded local path:
+.claude/settings.json
+# content is graphify usage rules + local session notes:
+CLAUDE.md
+.codex/
+AGENTS.md

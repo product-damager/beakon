@@ -79,6 +79,7 @@ export function Timeline() {
     getInitiative,
     rescheduleInitiative,
     setPresentation,
+    notify,
   } = useRoadmap();
   const dense = density === "compact";
   // Direct manipulation is disabled in presentation mode so a stray drag can't
@@ -234,6 +235,7 @@ export function Timeline() {
       if (it && (start !== it.targetStart || end !== it.targetEnd)) {
         // Targeted date-only persist — a drag must not rewrite delivery links.
         rescheduleInitiative(d.id, start, end);
+        notify({ message: `“${it.title}” rescheduled`, tone: "success" });
       }
       // Only a body (move) drag emits a follow-up click on the bar button that
       // must be swallowed; resize happens on a grip that has no click handler.
