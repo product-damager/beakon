@@ -18,3 +18,5 @@ graphify-out/
 .claude/settings.json
 # content is graphify usage rules + local session notes:
 CLAUDE.md
+.codex/
+AGENTS.md
