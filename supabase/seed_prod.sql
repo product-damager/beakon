@@ -31,3 +31,36 @@ insert into themes (id, name, description, color) values
   ('t-platform', 'Platform & Scale',        'Performance, reliability, and enterprise readiness.',              'orange')
 on conflict (id) do update
   set name = excluded.name, description = excluded.description, color = excluded.color;
+
+-- ── Business units ──────────────────────────────────────────────────────
+insert into business_units (id, name) values
+  ('bu-setup',   'BU Set up'),
+  ('bu-build',   'BU Build'),
+  ('bu-analyze', 'BU Analyze'),
+  ('bu-disrupt', 'BU Disrupt')
+on conflict (id) do update set name = excluded.name;
+
+-- ── Teams ────────────────────────────────────────────────────────────────
+insert into teams (id, name, business_unit_id) values
+  ('team-start-admin',          'Start & Admin',          'bu-setup'),
+  ('team-core-techno',          'Core Techno',            'bu-setup'),
+  ('team-integrations',         'Integrations',           'bu-setup'),
+  ('team-app-system',           'App System',             'bu-build'),
+  ('team-visual-builders',      'Visual Builders',        'bu-build'),
+  ('team-tech-perso-builders',  'Tech & Perso Builders',  'bu-build'),
+  ('team-data-governance',      'Data & governance',      'bu-analyze'),
+  ('team-cross-insights',       'Cross Insights',         'bu-analyze'),
+  ('team-ai-analytics',         'AI Analytics',           'bu-analyze'),
+  ('team-pbx',                  'PBX',                    'bu-disrupt'),
+  ('team-ai-tools',              'AI Tools',                'bu-disrupt')
+on conflict (id) do update
+  set name = excluded.name, business_unit_id = excluded.business_unit_id;
+
+-- ── Strategic objectives (2026) ─────────────────────────────────────────
+insert into strategic_objectives (id, name, description, year, sponsor_id) values
+  ('so-core',     'Core: Strengthening our foundations',        '', 2026, null),
+  ('so-ai',       'AI: Scaling PBX adoption',                   '', 2026, null),
+  ('so-data',     'Data: Powering trusted Insights & Outcomes', '', 2026, null),
+  ('so-internal', 'Internal',                                   '', 2026, null)
+on conflict (id) do update
+  set name = excluded.name, description = excluded.description, year = excluded.year;

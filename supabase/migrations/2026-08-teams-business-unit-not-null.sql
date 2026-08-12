@@ -1,0 +1,31 @@
+-- One-off, reviewed tightening migration — NOT part of schema.sql.
+--
+-- Why this isn't in schema.sql: schema.sql runs against a populated prod
+-- database on every deploy, so every statement in it must be safe to
+-- re-run against existing rows. Tightening a column to `not null` can FAIL
+-- if any existing row has a null value there — unlike loosening a
+-- constraint (e.g. `drop not null`), which can never fail against existing
+-- data and is safe to fold inline. Per supabase/README.md's "Golden rule
+-- for editing schema.sql": tightening a constraint against existing data
+-- is a breaking migration and must be a separate, reviewed one-off
+-- statement, tested on preview first.
+--
+-- Context: confirmed safe to apply as of Sprint Grackle Week 2 — all
+-- seeded team rows (in both beakon-preview and beakon-prod, populated by
+-- Week 1's T8) already have a non-null business_unit_id. See
+-- docs/plans/grackle-week-2-read-only-okr-ui.md §5 (Risks).
+--
+-- Manual two-step rollout (do NOT run this via an automated/idempotent
+-- pipeline):
+--   1. Apply to `beakon-preview` first, via the Supabase dashboard SQL
+--      editor. Verify the app still loads and no error occurred.
+--   2. Back up `beakon-prod` (Dashboard → Database → Backups, or a manual
+--      export) before applying there. Then apply to `beakon-prod` the same
+--      way, via the dashboard SQL editor — not as part of a `schema.sql`
+--      re-run.
+--
+-- After this lands (both environments), lib/data.ts's TeamRow.business_unit_id
+-- type (non-nullable) and rowToTeam() (no `?? ""` fallback) — already
+-- shipped as T19 — will match the DB-level guarantee described here.
+
+alter table teams alter column business_unit_id set not null;

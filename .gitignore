@@ -9,3 +9,25 @@ npm-debug.log*
 *.tsbuildinfo
 next-env.d.ts
 .claude/settings.local.json
+OKR-BEAKON-PRODUCT-PLAN.md
+SPRINT-*.md
+QA-REPORT-*.md
+
+# graphify — local knowledge-graph tooling. All regenerable and/or machine-specific;
+# keep it out of Merlin (and every) commit. Regenerate with `graphify update .`.
+# generated graph, cache, html, reports (~850K, disposable):
+graphify-out/
+# graphify hook-guard hooks with a hardcoded local path:
+.claude/settings.json
+# content is graphify usage rules + local session notes:
+CLAUDE.md
+.codex/
+AGENTS.md
+
+# AI engineering org (Dev Lead / Backend / Frontend / QA agents + slash
+# commands) and its knowledge base (architecture/product/conventions/
+# runbooks/ADRs). This is a way of working, not app functionality — same
+# local-only treatment as the graphify block above.
+.claude/agents/
+.claude/commands/
+docs/

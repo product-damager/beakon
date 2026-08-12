@@ -270,3 +270,62 @@ export const DELIVERY_TYPE_LABEL: Record<DeliveryLinkType, string> = {
   notion: "Notion",
   other: "Other",
 };
+
+// ── OKR domain types (Sprint Grackle, Phase 1) ──
+
+export interface BusinessUnit {
+  id: string;
+  name: string;
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  businessUnitId: string;
+}
+
+export interface StrategicObjective {
+  id: string;
+  name: string;
+  description: string;
+  year: number;
+  sponsorId?: string;
+}
+
+export type OkrGovernanceStatus =
+  | "draft"
+  | "to_validate"
+  | "being_reviewed"
+  | "to_refine"
+  | "validated"
+  | "rejected";
+
+export type OkrClass = "committed" | "conditional" | "optional";
+
+/** An OKR belongs to either a team or a business unit directly (never both, never neither). */
+export interface Okr {
+  id: string;
+  title: string;
+  strategicObjectiveId: string;
+  teamId?: string;
+  businessUnitId?: string;
+  year: number;
+  quarter: number;
+  deliverableDetail: string;
+  governanceStatus: OkrGovernanceStatus;
+  okrClass: OkrClass | null;
+  targetDate?: string; // ISO date
+  achievement: number | null; // null = not assessed yet
+  health: Health;
+  notes: string;
+  carriedFromId?: string;
+  archived: boolean;
+  position?: number;
+  updatedAt: string; // ISO datetime
+}
+
+export interface OkrOwner {
+  okrId: string;
+  ownerId: string;
+  role: string;
+}

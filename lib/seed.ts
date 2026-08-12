@@ -1,4 +1,13 @@
-import type { Initiative, Owner, Theme } from "./types";
+import type {
+  BusinessUnit,
+  Initiative,
+  Okr,
+  OkrOwner,
+  Owner,
+  StrategicObjective,
+  Team,
+  Theme,
+} from "./types";
 
 export const OWNERS: Owner[] = [
   { id: "u-magali", name: "Magali", surname: "Roux", role: "Head of Product", email: "mroux@example.com", team: "App System" },
@@ -498,4 +507,141 @@ export const INITIATIVES: Initiative[] = [
     updatedAt: "2026-06-16T09:00:00Z",
     archived: false,
   },
+];
+
+// ── OKRs (Sprint Grackle, Phase 1) — mirrors supabase/seed.sql exactly ──
+
+export const BUSINESS_UNITS: BusinessUnit[] = [
+  { id: "bu-setup", name: "BU Set up" },
+  { id: "bu-build", name: "BU Build" },
+  { id: "bu-analyze", name: "BU Analyze" },
+  { id: "bu-disrupt", name: "BU Disrupt" },
+];
+
+// Named TEAMS_TABLE to avoid clashing with the existing TEAMS string union above.
+export const TEAMS_TABLE: Team[] = [
+  { id: "team-start-admin", name: "Start & Admin", businessUnitId: "bu-setup" },
+  { id: "team-core-techno", name: "Core Techno", businessUnitId: "bu-setup" },
+  { id: "team-integrations", name: "Integrations", businessUnitId: "bu-setup" },
+  { id: "team-app-system", name: "App System", businessUnitId: "bu-build" },
+  { id: "team-visual-builders", name: "Visual Builders", businessUnitId: "bu-build" },
+  { id: "team-tech-perso-builders", name: "Tech & Perso Builders", businessUnitId: "bu-build" },
+  { id: "team-data-governance", name: "Data & governance", businessUnitId: "bu-analyze" },
+  { id: "team-cross-insights", name: "Cross Insights", businessUnitId: "bu-analyze" },
+  { id: "team-ai-analytics", name: "AI Analytics", businessUnitId: "bu-analyze" },
+  { id: "team-pbx", name: "PBX", businessUnitId: "bu-disrupt" },
+  { id: "team-ai-tools", name: "AI Tools", businessUnitId: "bu-disrupt" },
+];
+
+export const STRATEGIC_OBJECTIVES: StrategicObjective[] = [
+  { id: "so-core", name: "Core: Strengthening our foundations", description: "", year: 2026 },
+  { id: "so-ai", name: "AI: Scaling PBX adoption", description: "", year: 2026 },
+  { id: "so-data", name: "Data: Powering trusted Insights & Outcomes", description: "", year: 2026 },
+  { id: "so-internal", name: "Internal", description: "", year: 2026 },
+];
+
+export const OKRS: Okr[] = [
+  {
+    id: "okr-app-onboarding",
+    title: "Cut time-to-first-test in half",
+    strategicObjectiveId: "so-core",
+    teamId: "team-app-system",
+    year: 2026,
+    quarter: 1,
+    deliverableDetail: "Ship onboarding revamp instrumentation and quarterly reporting.",
+    governanceStatus: "validated",
+    okrClass: "committed",
+    targetDate: "2026-03-31",
+    achievement: 0.6,
+    health: "on_track",
+    notes: "",
+    archived: false,
+    position: 1000,
+    updatedAt: "2026-07-20T09:00:00Z",
+  },
+  {
+    id: "okr-app-flags-approvals",
+    title: "Ship flag change approvals to GA",
+    strategicObjectiveId: "so-core",
+    teamId: "team-app-system",
+    year: 2026,
+    quarter: 2,
+    deliverableDetail: "Approval workflow, audit trail, and rollout to all enterprise accounts.",
+    governanceStatus: "being_reviewed",
+    okrClass: "committed",
+    targetDate: "2026-06-30",
+    achievement: null,
+    health: "at_risk",
+    notes: "Waiting on legal sign-off for the audit trail retention policy.",
+    archived: false,
+    position: 2000,
+    updatedAt: "2026-07-22T10:15:00Z",
+  },
+  {
+    id: "okr-pbx-adoption-q1",
+    title: "Grow PBX-targeted campaigns 3x",
+    strategicObjectiveId: "so-ai",
+    teamId: "team-pbx",
+    year: 2026,
+    quarter: 1,
+    deliverableDetail: "Land predictive targeting v2 with three design partners.",
+    governanceStatus: "draft",
+    okrClass: "conditional",
+    targetDate: "2026-03-31",
+    achievement: 0.3,
+    health: "on_track",
+    notes: "",
+    archived: false,
+    position: 3000,
+    updatedAt: "2026-07-18T08:30:00Z",
+  },
+  {
+    id: "okr-pbx-adoption-q2",
+    title: "Scale PBX adoption to 50% of enterprise accounts",
+    strategicObjectiveId: "so-ai",
+    teamId: "team-pbx",
+    year: 2026,
+    quarter: 2,
+    deliverableDetail: "Roll out predictive targeting v2 to all enterprise tiers.",
+    governanceStatus: "to_validate",
+    okrClass: "committed",
+    targetDate: "2026-06-30",
+    achievement: 0.8,
+    health: "on_track",
+    notes: "",
+    archived: false,
+    position: 4000,
+    updatedAt: "2026-07-25T11:00:00Z",
+  },
+  {
+    id: "okr-disrupt-governance-q1",
+    title: "Stand up OKR governance process",
+    strategicObjectiveId: "so-internal",
+    businessUnitId: "bu-disrupt",
+    year: 2026,
+    quarter: 1,
+    deliverableDetail: "Define governance workflow and review cadence for BU Disrupt squads.",
+    governanceStatus: "rejected",
+    okrClass: "optional",
+    targetDate: "2026-03-31",
+    achievement: 0.5,
+    health: "blocked",
+    notes: "Deprioritized in favor of the PBX roadmap this quarter.",
+    archived: false,
+    position: 5000,
+    updatedAt: "2026-07-15T14:00:00Z",
+  },
+];
+
+export const OKR_OWNERS: OkrOwner[] = [
+  { okrId: "okr-app-onboarding", ownerId: "u-magali", role: "owner" },
+  { okrId: "okr-app-flags-approvals", ownerId: "u-magali", role: "owner" },
+  { okrId: "okr-pbx-adoption-q1", ownerId: "u-tom", role: "owner" },
+  { okrId: "okr-pbx-adoption-q2", ownerId: "u-tom", role: "owner" },
+  { okrId: "okr-disrupt-governance-q1", ownerId: "u-tom", role: "contributor" },
+];
+
+export const OKR_INITIATIVES: { okrId: string; initiativeId: string }[] = [
+  { okrId: "okr-pbx-adoption-q1", initiativeId: "i-pbx" },
+  { okrId: "okr-pbx-adoption-q2", initiativeId: "i-pbx" },
 ];

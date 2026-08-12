@@ -6,10 +6,15 @@
 import { supabase } from "./supabase";
 import { normalizeThemeColor } from "./types";
 import type {
+  BusinessUnit,
   DeliveryLink,
   Initiative,
+  Okr,
+  OkrOwner,
   Owner,
+  StrategicObjective,
   Status,
+  Team,
   Theme,
 } from "./types";
 
@@ -314,4 +319,194 @@ export async function fetchExternalRoadmap(): Promise<PublicRoadmap> {
   );
   const themes = (themeRes.data ?? []).map(rowToTheme);
   return { items, themes };
+}
+
+// ── OKRs (Sprint Grackle) — Phase 1: schema & data-access only, no UI yet ──
+
+interface BusinessUnitRow {
+  id: string;
+  name: string;
+}
+
+interface TeamRow {
+  id: string;
+  name: string;
+  business_unit_id: string;
+}
+
+interface StrategicObjectiveRow {
+  id: string;
+  name: string;
+  description: string | null;
+  year: number;
+  sponsor_id: string | null;
+}
+
+interface OkrRow {
+  id: string;
+  title: string;
+  strategic_objective_id: string;
+  team_id: string | null;
+  business_unit_id: string | null;
+  year: number;
+  quarter: number;
+  deliverable_detail: string | null;
+  governance_status: Okr["governanceStatus"];
+  okr_class: Okr["okrClass"];
+  target_date: string | null;
+  achievement: number | string | null;
+  health: Okr["health"];
+  notes: string | null;
+  carried_from_id: string | null;
+  archived: boolean;
+  position: number | string;
+  updated_at: string;
+}
+
+interface OkrOwnerRow {
+  okr_id: string;
+  owner_id: string;
+  role: string;
+}
+
+interface OkrInitiativeRow {
+  okr_id: string;
+  initiative_id: string;
+}
+
+function rowToBusinessUnit(row: BusinessUnitRow): BusinessUnit {
+  return { id: row.id, name: row.name };
+}
+
+function rowToTeam(row: TeamRow): Team {
+  return { id: row.id, name: row.name, businessUnitId: row.business_unit_id };
+}
+
+function rowToStrategicObjective(row: StrategicObjectiveRow): StrategicObjective {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description ?? "",
+    year: Number(row.year),
+    sponsorId: row.sponsor_id ?? undefined,
+  };
+}
+
+/** Any NULL score column means the OKR hasn't been assessed yet — null stays null, never 0. */
+function rowToOkr(row: OkrRow): Okr {
+  return {
+    id: row.id,
+    title: row.title,
+    strategicObjectiveId: row.strategic_objective_id,
+    teamId: row.team_id ?? undefined,
+    businessUnitId: row.business_unit_id ?? undefined,
+    year: Number(row.year),
+    quarter: Number(row.quarter),
+    deliverableDetail: row.deliverable_detail ?? "",
+    governanceStatus: row.governance_status,
+    okrClass: row.okr_class,
+    targetDate: row.target_date ?? undefined,
+    achievement: row.achievement == null ? null : Number(row.achievement),
+    health: row.health,
+    notes: row.notes ?? "",
+    carriedFromId: row.carried_from_id ?? undefined,
+    archived: row.archived,
+    position: Number(row.position),
+    updatedAt: row.updated_at,
+  };
+}
+
+/** DB row for insert/update. `updated_at` is omitted — a trigger maintains it. */
+function okrToRow(o: Okr) {
+  return {
+    id: o.id,
+    title: o.title,
+    strategic_objective_id: o.strategicObjectiveId,
+    team_id: o.teamId || null,
+    business_unit_id: o.businessUnitId || null,
+    year: o.year,
+    quarter: o.quarter,
+    deliverable_detail: o.deliverableDetail,
+    governance_status: o.governanceStatus,
+    okr_class: o.okrClass,
+    target_date: o.targetDate || null,
+    achievement: o.achievement,
+    health: o.health,
+    notes: o.notes,
+    carried_from_id: o.carriedFromId || null,
+    archived: o.archived,
+    position: o.position ?? 0,
+  };
+}
+
+function rowToOkrOwner(row: OkrOwnerRow): OkrOwner {
+  return { okrId: row.okr_id, ownerId: row.owner_id, role: row.role };
+}
+
+function okrOwnerToRow(o: OkrOwner) {
+  return { okr_id: o.okrId, owner_id: o.ownerId, role: o.role };
+}
+
+export interface OkrWorkspace {
+  businessUnits: BusinessUnit[];
+  teams: Team[];
+  strategicObjectives: StrategicObjective[];
+  okrs: Okr[];
+  okrOwners: OkrOwner[];
+  okrInitiatives: { okrId: string; initiativeId: string }[];
+}
+
+/**
+ * Load the OKR workspace (business units, teams, strategic objectives, OKRs,
+ * ownership, initiative links). Kept separate from fetchWorkspace() — that one
+ * loads on every app open today and is initiative-only; this is lazily called.
+ */
+export async function fetchOkrWorkspace(): Promise<OkrWorkspace> {
+  const sb = client();
+  const [buRes, teamRes, soRes, okrRes, ownerRes, initRes] = await Promise.all([
+    sb.from("business_units").select("*"),
+    sb.from("teams").select("*"),
+    sb.from("strategic_objectives").select("*"),
+    sb.from("okrs").select("*").order("position", { ascending: true }),
+    sb.from("okr_owners").select("*"),
+    sb.from("okr_initiatives").select("*"),
+  ]);
+  for (const r of [buRes, teamRes, soRes, okrRes, ownerRes, initRes]) {
+    if (r.error) throw r.error;
+  }
+
+  const businessUnits = ((buRes.data ?? []) as BusinessUnitRow[]).map(rowToBusinessUnit);
+  const teams = ((teamRes.data ?? []) as TeamRow[]).map(rowToTeam);
+  const strategicObjectives = ((soRes.data ?? []) as StrategicObjectiveRow[]).map(rowToStrategicObjective);
+  const okrs = ((okrRes.data ?? []) as OkrRow[]).map(rowToOkr);
+  const okrOwners = ((ownerRes.data ?? []) as OkrOwnerRow[]).map(rowToOkrOwner);
+  const okrInitiatives = ((initRes.data ?? []) as OkrInitiativeRow[]).map((r) => ({
+    okrId: r.okr_id,
+    initiativeId: r.initiative_id,
+  }));
+
+  return { businessUnits, teams, strategicObjectives, okrs, okrOwners, okrInitiatives };
+}
+
+/** Upsert an OKR and fully replace its owners and initiative links. */
+export async function persistOkr(o: Okr, owners: OkrOwner[], initiativeIds: string[]): Promise<void> {
+  const sb = client();
+
+  const { error: upsertErr } = await sb.from("okrs").upsert(okrToRow(o));
+  if (upsertErr) throw upsertErr;
+
+  const { error: delOwnersErr } = await sb.from("okr_owners").delete().eq("okr_id", o.id);
+  if (delOwnersErr) throw delOwnersErr;
+  if (owners.length > 0) {
+    const { error: insOwnersErr } = await sb.from("okr_owners").insert(owners.map(okrOwnerToRow));
+    if (insOwnersErr) throw insOwnersErr;
+  }
+
+  const { error: delInitErr } = await sb.from("okr_initiatives").delete().eq("okr_id", o.id);
+  if (delInitErr) throw delInitErr;
+  if (initiativeIds.length > 0) {
+    const rows = initiativeIds.map((initiativeId) => ({ okr_id: o.id, initiative_id: initiativeId }));
+    const { error: insInitErr } = await sb.from("okr_initiatives").insert(rows);
+    if (insInitErr) throw insInitErr;
+  }
 }

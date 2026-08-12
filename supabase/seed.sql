@@ -5,7 +5,7 @@
 -- Owner emails are demo values — set one to your own sign-in email if you want
 -- the profile/identity features to match you when testing against preview.
 
-truncate delivery_links, initiatives, themes, owners restart identity cascade;
+truncate delivery_links, okr_checkins, okr_flags, okr_owners, okr_initiatives, okrs, teams, business_units, strategic_objectives, initiatives, themes, owners restart identity cascade;
 
 insert into owners (id, name, surname, role, email, team) values
   ('u-magali',  'Magali',  'Roux',      'Head of Product',      'mroux@example.com',      'App System'),
@@ -24,6 +24,34 @@ insert into themes (id, name, description, color) values
   ('t-trust', 'Data & Trust', 'Statistical rigor, privacy, and results people can rely on.', 'pink'),
   ('t-platform', 'Platform & Scale', 'Performance, reliability, and enterprise readiness.', 'orange'),
   ('t-dx', 'Developer Experience', 'SDKs, docs, and APIs that make integration effortless.', 'beige');
+
+-- ── Business units ──────────────────────────────────────────────────────
+insert into business_units (id, name) values
+  ('bu-setup',   'BU Set up'),
+  ('bu-build',   'BU Build'),
+  ('bu-analyze', 'BU Analyze'),
+  ('bu-disrupt', 'BU Disrupt');
+
+-- ── Teams ────────────────────────────────────────────────────────────────
+insert into teams (id, name, business_unit_id) values
+  ('team-start-admin',          'Start & Admin',          'bu-setup'),
+  ('team-core-techno',          'Core Techno',            'bu-setup'),
+  ('team-integrations',         'Integrations',           'bu-setup'),
+  ('team-app-system',           'App System',             'bu-build'),
+  ('team-visual-builders',      'Visual Builders',        'bu-build'),
+  ('team-tech-perso-builders',  'Tech & Perso Builders',  'bu-build'),
+  ('team-data-governance',      'Data & governance',      'bu-analyze'),
+  ('team-cross-insights',       'Cross Insights',         'bu-analyze'),
+  ('team-ai-analytics',         'AI Analytics',           'bu-analyze'),
+  ('team-pbx',                  'PBX',                    'bu-disrupt'),
+  ('team-ai-tools',              'AI Tools',                'bu-disrupt');
+
+-- ── Strategic objectives (2026) ─────────────────────────────────────────
+insert into strategic_objectives (id, name, description, year, sponsor_id) values
+  ('so-core',     'Core: Strengthening our foundations',        '', 2026, null),
+  ('so-ai',       'AI: Scaling PBX adoption',                   '', 2026, null),
+  ('so-data',     'Data: Powering trusted Insights & Outcomes', '', 2026, null),
+  ('so-internal', 'Internal',                                   '', 2026, null);
 
 insert into initiatives
   (id, title, summary, problem, expected_outcome, status, owner_id, team, theme_id, strategic_goal,
@@ -213,3 +241,47 @@ insert into delivery_links (id, initiative_id, label, url, type, position) value
   ('d14', 'i-api-v3', 'API spec', 'https://www.notion.so/example/api-v3', 'notion', 2),
   ('d15', 'i-ai-insights', 'AI-77', 'https://example.atlassian.net/browse/AI-77', 'redmine', 1),
   ('d16', 'i-sdk-docs', 'DX-12', 'https://example.atlassian.net/browse/DX-12', 'redmine', 1);
+
+-- ── Demo OKRs (Phase 1: BU Build + BU Disrupt, Q1 + Q2 2026) ─────────────
+insert into okrs
+  (id, title, strategic_objective_id, team_id, business_unit_id, year, quarter,
+   deliverable_detail, governance_status, okr_class, target_date, achievement,
+   health, notes, position)
+values
+  ('okr-app-onboarding', 'Cut time-to-first-test in half',
+   'so-core', 'team-app-system', null, 2026, 1,
+   'Ship onboarding revamp instrumentation and quarterly reporting.',
+   'validated', 'committed', '2026-03-31', 0.6, 'on_track', '', 1000),
+
+  ('okr-app-flags-approvals', 'Ship flag change approvals to GA',
+   'so-core', 'team-app-system', null, 2026, 2,
+   'Approval workflow, audit trail, and rollout to all enterprise accounts.',
+   'being_reviewed', 'committed', '2026-06-30', null, 'at_risk',
+   'Waiting on legal sign-off for the audit trail retention policy.', 2000),
+
+  ('okr-pbx-adoption-q1', 'Grow PBX-targeted campaigns 3x',
+   'so-ai', 'team-pbx', null, 2026, 1,
+   'Land predictive targeting v2 with three design partners.',
+   'draft', 'conditional', '2026-03-31', 0.3, 'on_track', '', 3000),
+
+  ('okr-pbx-adoption-q2', 'Scale PBX adoption to 50% of enterprise accounts',
+   'so-ai', 'team-pbx', null, 2026, 2,
+   'Roll out predictive targeting v2 to all enterprise tiers.',
+   'to_validate', 'committed', '2026-06-30', 0.8, 'on_track', '', 4000),
+
+  ('okr-disrupt-governance-q1', 'Stand up OKR governance process',
+   'so-internal', null, 'bu-disrupt', 2026, 1,
+   'Define governance workflow and review cadence for BU Disrupt squads.',
+   'rejected', 'optional', '2026-03-31', 0.5, 'blocked',
+   'Deprioritized in favor of the PBX roadmap this quarter.', 5000);
+
+insert into okr_owners (okr_id, owner_id, role) values
+  ('okr-app-onboarding', 'u-magali', 'owner'),
+  ('okr-app-flags-approvals', 'u-magali', 'owner'),
+  ('okr-pbx-adoption-q1', 'u-tom', 'owner'),
+  ('okr-pbx-adoption-q2', 'u-tom', 'owner'),
+  ('okr-disrupt-governance-q1', 'u-tom', 'contributor');
+
+insert into okr_initiatives (okr_id, initiative_id) values
+  ('okr-pbx-adoption-q1', 'i-pbx'),
+  ('okr-pbx-adoption-q2', 'i-pbx');

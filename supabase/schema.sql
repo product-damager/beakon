@@ -22,6 +22,15 @@ do $$ begin
   create type delivery_link_type as enum ('redmine', 'figma', 'spec', 'notion', 'other');
 exception when duplicate_object then null; end $$;
 
+do $$ begin
+  create type okr_governance_status as enum
+    ('draft', 'to_validate', 'being_reviewed', 'to_refine', 'validated', 'rejected');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type okr_class as enum ('committed', 'conditional', 'optional');
+exception when duplicate_object then null; end $$;
+
 -- ── Reference tables ──
 create table if not exists themes (
   id text primary key,
@@ -206,3 +215,160 @@ drop trigger if exists enforce_company_domain on auth.users;
 create trigger enforce_company_domain
   before insert on auth.users
   for each row execute function enforce_company_domain();
+
+-- ══════════════════════════════════════════════════════════════════════
+-- OKRs (Sprint Grackle — Phase 1: schema & RLS only, no read/write UI yet)
+-- ══════════════════════════════════════════════════════════════════════
+
+-- ── Business units, teams, strategic objectives ──
+create table if not exists business_units (
+  id text primary key,
+  name text not null
+);
+
+create table if not exists teams (
+  id text primary key,
+  name text not null,
+  business_unit_id text references business_units (id)
+);
+
+create table if not exists strategic_objectives (
+  id text primary key,
+  name text not null,
+  description text not null default '',
+  year smallint not null,
+  sponsor_id text references owners (id)
+);
+
+-- ── OKRs ──
+create table if not exists okrs (
+  id text primary key,
+  title text not null,
+  strategic_objective_id text not null references strategic_objectives (id),
+  team_id text references teams (id),
+  business_unit_id text references business_units (id),
+  year smallint not null,
+  quarter smallint not null check (quarter between 1 and 4),
+  deliverable_detail text not null default '',
+  governance_status okr_governance_status not null default 'draft',
+  okr_class okr_class,
+  target_date date,
+  achievement numeric check (achievement >= 0 and achievement <= 1),
+  health initiative_health not null default 'on_track',
+  notes text not null default '',
+  carried_from_id text references okrs (id),
+  archived boolean not null default false,
+  position double precision not null default 0,
+  updated_at timestamptz not null default now(),
+  check (team_id is not null or business_unit_id is not null)
+);
+create index if not exists okrs_quarter_idx on okrs (year, quarter, team_id);
+
+drop trigger if exists okrs_touch_updated_at on okrs;
+create trigger okrs_touch_updated_at
+  before update on okrs
+  for each row execute function touch_updated_at();
+
+-- ── Ownership + initiative links ──
+create table if not exists okr_owners (
+  okr_id text not null references okrs (id) on delete cascade,
+  owner_id text not null references owners (id),
+  role text not null default 'contributor',
+  primary key (okr_id, owner_id)
+);
+
+create table if not exists okr_initiatives (
+  okr_id text not null references okrs (id) on delete cascade,
+  initiative_id text not null references initiatives (id) on delete cascade,
+  primary key (okr_id, initiative_id)
+);
+
+-- ── delivery_links: allow linking to an OKR instead of an initiative ──
+-- Not yet used by lib/data.ts (DeliveryLink needs a discriminated-union
+-- tweak first — Week 3 write-UI task). Existing rows are unaffected:
+-- initiative_id is already set on all of them, okr_id is null, so the
+-- one-parent constraint holds.
+alter table delivery_links add column if not exists okr_id
+  text references okrs (id) on delete cascade;
+alter table delivery_links alter column initiative_id drop not null;
+do $$ begin
+  alter table delivery_links add constraint delivery_links_one_parent
+    check ((initiative_id is not null) <> (okr_id is not null));
+exception when duplicate_object then null; end $$;
+
+-- ── Check-ins + flags (schema only — no data-access/UI this sprint, Phase 2) ──
+create table if not exists okr_checkins (
+  id text primary key,
+  okr_id text not null references okrs (id) on delete cascade,
+  checked_in_at date not null default current_date,
+  achievement numeric check (achievement >= 0 and achievement <= 1),
+  health initiative_health,
+  confidence text check (confidence in ('high', 'medium', 'low')),
+  narrative text not null default '',
+  author_id text references owners (id),
+  created_at timestamptz not null default now()
+);
+create index if not exists okr_checkins_okr_idx on okr_checkins (okr_id, checked_in_at desc);
+
+create table if not exists okr_flags (
+  id text primary key,
+  okr_id text not null references okrs (id) on delete cascade,
+  kind text not null check (kind in ('dependency', 'risk', 'support')),
+  severity text not null default 'minor' check (severity in ('none', 'minor', 'critical')),
+  description text not null default '',
+  owning_team_id text references teams (id),
+  needed_by date,
+  resolved boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+-- ── Row Level Security — same open pattern as every existing table
+-- (decision #5 — no role gate yet) ──
+alter table business_units       enable row level security;
+alter table teams                enable row level security;
+alter table strategic_objectives enable row level security;
+alter table okrs                 enable row level security;
+alter table okr_owners           enable row level security;
+alter table okr_initiatives      enable row level security;
+alter table okr_checkins         enable row level security;
+alter table okr_flags            enable row level security;
+
+do $$ begin
+  create policy "authenticated full access" on business_units
+    for all to authenticated using (true) with check (true);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "authenticated full access" on teams
+    for all to authenticated using (true) with check (true);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "authenticated full access" on strategic_objectives
+    for all to authenticated using (true) with check (true);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "authenticated full access" on okrs
+    for all to authenticated using (true) with check (true);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "authenticated full access" on okr_owners
+    for all to authenticated using (true) with check (true);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "authenticated full access" on okr_initiatives
+    for all to authenticated using (true) with check (true);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "authenticated full access" on okr_checkins
+    for all to authenticated using (true) with check (true);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "authenticated full access" on okr_flags
+    for all to authenticated using (true) with check (true);
+exception when duplicate_object then null; end $$;
