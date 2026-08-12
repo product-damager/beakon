@@ -116,7 +116,6 @@ interface RoadmapState {
   unarchiveInitiative: (id: string) => void;
   newDraft: () => Initiative;
   openCreate: () => void;
-  openEdit: (i: Initiative) => void;
   closeEditor: () => void;
 
   getOwner: (id: string) => Owner | undefined;
@@ -403,8 +402,15 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
     };
   }, [owners, currentOwner]);
 
-  const openCreate = useCallback(() => setEditorDraft(newDraft()), [newDraft]);
-  const openEdit = useCallback((i: Initiative) => setEditorDraft({ ...i }), []);
+  const select = useCallback((id: string | null) => {
+    setSelectedId(id);
+    // Opening an existing initiative dismisses any in-progress "New" draft.
+    setEditorDraft(null);
+  }, []);
+  const openCreate = useCallback(() => {
+    setSelectedId(null);
+    setEditorDraft(newDraft());
+  }, [newDraft]);
   const closeEditor = useCallback(() => setEditorDraft(null), []);
 
   const getOwner = useCallback((id: string) => owners.find((o) => o.id === id), [owners]);
@@ -444,7 +450,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       setDensity,
       setTimelineSort,
       setPresentation,
-      select: setSelectedId,
+      select,
       saveInitiative,
       rescheduleInitiative,
       addTheme,
@@ -454,7 +460,6 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       unarchiveInitiative,
       newDraft,
       openCreate,
-      openEdit,
       closeEditor,
       getOwner,
       getTheme,
@@ -492,8 +497,8 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       unarchiveInitiative,
       newDraft,
       openCreate,
-      openEdit,
       closeEditor,
+      select,
       getOwner,
       getTheme,
       getInitiative,
