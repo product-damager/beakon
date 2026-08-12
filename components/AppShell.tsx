@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AlertTriangle, Archive, CalendarRange, Columns3, LogOut, Plus, Rows3, Settings, Share2, X } from "lucide-react";
+import { AlertTriangle, Archive, CalendarRange, Columns3, LogOut, Plus, Rows3, Settings, Share2, Target, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useRoadmap } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
@@ -18,6 +18,7 @@ const NAV = [
   { href: "/timeline", label: "Timeline", icon: CalendarRange },
   { href: "/board", label: "Board", icon: Columns3 },
   { href: "/list", label: "List", icon: Rows3 },
+  { href: "/okrs", label: "OKRs", icon: Target },
 ];
 
 const TITLES: Record<string, string> = {
@@ -25,6 +26,7 @@ const TITLES: Record<string, string> = {
   "/board": "Board",
   "/list": "List",
   "/archived": "Archived",
+  "/okrs": "OKRs",
 };
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -150,10 +152,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <h1 className="font-display text-xl font-semibold text-green-90">
             {TITLES[pathname] ?? "Roadmap"}
           </h1>
-          <Button size="sm" onClick={openCreate}>
-            <Plus size={16} strokeWidth={2} />
-            New initiative
-          </Button>
+          {pathname !== "/okrs" && (
+            <Button size="sm" onClick={openCreate}>
+              <Plus size={16} strokeWidth={2} />
+              New initiative
+            </Button>
+          )}
         </header>
 
         {error && (
