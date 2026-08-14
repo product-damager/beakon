@@ -19,6 +19,8 @@ export interface OkrFilters {
   businessUnitId: string | null;
   strategicObjectiveId: string | null;
   governanceStatus: OkrGovernanceStatus | null;
+  /** Show archived OKRs alongside active ones — off by default (QA Finding #2). */
+  showArchived: boolean;
 }
 
 export const EMPTY_OKR_FILTERS: OkrFilters = {
@@ -27,16 +29,22 @@ export const EMPTY_OKR_FILTERS: OkrFilters = {
   businessUnitId: null,
   strategicObjectiveId: null,
   governanceStatus: null,
+  showArchived: false,
 };
 
+/** Count of active *narrowing* filters — showArchived broadens results, so it's
+ * intentionally excluded (a "Clear all" badge shouldn't count it as a filter). */
 export function okrFilterCount(f: OkrFilters): number {
-  return Object.values(f).filter((v) => v !== null).length;
+  const { showArchived, ...narrowing } = f;
+  void showArchived;
+  return Object.values(narrowing).filter((v) => v !== null).length;
 }
 
 /** Apply the current OkrFilters to a list of OKRs. BU filter matches either a
  * direct business-unit OKR or a team OKR whose team belongs to that BU. */
 export function applyOkrFilters(okrs: Okr[], filters: OkrFilters, teams: Team[]): Okr[] {
   return okrs.filter((o) => {
+    if (!filters.showArchived && o.archived) return false;
     if (filters.quarter !== null && o.quarter !== filters.quarter) return false;
     if (filters.governanceStatus !== null && o.governanceStatus !== filters.governanceStatus) return false;
     if (filters.strategicObjectiveId !== null && o.strategicObjectiveId !== filters.strategicObjectiveId)
@@ -51,7 +59,8 @@ export function applyOkrFilters(okrs: Okr[], filters: OkrFilters, teams: Team[])
   });
 }
 
-const GOVERNANCE_STATUSES: OkrGovernanceStatus[] = [
+/** Shared with OkrDrawer's governance-status select — one canonical order. */
+export const OKR_GOVERNANCE_STATUSES: OkrGovernanceStatus[] = [
   "draft",
   "to_validate",
   "being_reviewed",
@@ -142,12 +151,22 @@ export function OkrFilterBar({
         className="w-48"
       >
         <option value="">All governance statuses</option>
-        {GOVERNANCE_STATUSES.map((s) => (
+        {OKR_GOVERNANCE_STATUSES.map((s) => (
           <option key={s} value={s}>
             {OKR_GOVERNANCE_META[s].label}
           </option>
         ))}
       </NativeSelect>
+
+      <label className="mono-label-sm ml-1 flex items-center gap-1.5 text-beige-60">
+        <input
+          type="checkbox"
+          checked={filters.showArchived}
+          onChange={(e) => onChange({ showArchived: e.target.checked })}
+          className="h-3.5 w-3.5 rounded border-beige-30 text-green-90 focus:ring-2 focus:ring-green-90"
+        />
+        Show archived
+      </label>
 
       {activeCount > 0 && (
         <Button variant="ghost" size="sm" onClick={() => onChange(EMPTY_OKR_FILTERS)}>

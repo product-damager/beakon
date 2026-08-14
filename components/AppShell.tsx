@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { AlertTriangle, Archive, CalendarRange, Columns3, LogOut, Plus, Rows3, Settings, Share2, Target, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useRoadmap } from "@/lib/store";
@@ -31,6 +31,7 @@ const TITLES: Record<string, string> = {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { currentOwner, openCreate, presentation, error, dismissError, loading } = useRoadmap();
   const { authRequired, email, signOut } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -152,7 +153,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <h1 className="font-display text-xl font-semibold text-green-90">
             {TITLES[pathname] ?? "Roadmap"}
           </h1>
-          {pathname !== "/okrs" && (
+          {pathname === "/okrs" ? (
+            <Button size="sm" onClick={() => router.push("/okrs?new=1")}>
+              <Plus size={16} strokeWidth={2} />
+              New OKR
+            </Button>
+          ) : (
             <Button size="sm" onClick={openCreate}>
               <Plus size={16} strokeWidth={2} />
               New initiative

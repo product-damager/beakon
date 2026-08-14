@@ -329,3 +329,8 @@ export interface OkrOwner {
   ownerId: string;
   role: string;
 }
+
+export interface OkrInitiativeLink {
+  okrId: string;
+  initiativeId: string;
+}

@@ -1,34 +1,45 @@
 "use client";
 
+import { useState } from "react";
 import {
-  ArrowUpRight,
+  Archive,
+  ArchiveRestore,
   Building2,
   CalendarRange,
   Flag,
-  Target,
   Users,
   X,
   type LucideIcon,
 } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
-import { ownerName } from "@/lib/types";
+import { HEALTH_META } from "@/lib/types";
 import type {
   BusinessUnit,
+  Health,
   Okr,
+  OkrClass,
+  OkrInitiativeLink,
   OkrOwner,
   StrategicObjective,
   Team,
 } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Drawer } from "./Drawer";
-import { Avatar, Eyebrow, HealthTag, StatusTag, Tag } from "./ui";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { Button, Eyebrow, HealthTag, Tag } from "./ui";
+import { Field, InlineTagSelect, NativeSelect, SearchableSelect, TextArea, TextInput } from "./form";
+import { DependencyPicker } from "./initiative-fields";
+import { AchievementInput, OkrOwnersEditor, TeamOrBuPicker } from "./okr-fields";
 import { OKR_GOVERNANCE_META, formatAchievement } from "./OkrList";
+import { OKR_GOVERNANCE_STATUSES } from "./OkrFilterBar";
 
 const OKR_CLASS_LABEL: Record<NonNullable<Okr["okrClass"]>, string> = {
   committed: "Committed",
   conditional: "Conditional",
   optional: "Optional",
 };
+const OKR_CLASS_OPTIONS: OkrClass[] = ["committed", "conditional", "optional"];
+const HEALTH_KEYS = Object.keys(HEALTH_META) as Health[];
 
 function Prop({
   icon: Icon,
@@ -42,7 +53,7 @@ function Prop({
   return (
     <div className="flex items-start gap-2.5">
       <Icon size={15} strokeWidth={1.75} className="mt-0.5 shrink-0 text-beige-60" />
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <div className="mono-label-sm text-beige-60">{label}</div>
         <div className="mt-0.5 text-sm text-green-90">{children}</div>
       </div>
@@ -50,169 +61,414 @@ function Prop({
   );
 }
 
-function Section({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <Eyebrow className="mb-1.5">{label}</Eyebrow>
-      <p className="whitespace-pre-line text-sm leading-relaxed text-green-90">{children}</p>
-    </div>
-  );
-}
-
+/**
+ * One drawer for viewing and editing an OKR. Existing OKRs edit in place and
+ * autosave per field (discrete controls commit immediately, free text on
+ * blur); "New OKR" opens the same drawer on a local draft with an explicit
+ * Create — mirrors InitiativeDrawer's convention exactly.
+ */
 export function OkrDrawer({
   okr,
+  creatingDraft,
   onClose,
   teams,
   businessUnits,
   strategicObjectives,
   okrOwners,
   okrInitiatives,
+  saveOkr,
+  archiveOkr,
+  unarchiveOkr,
 }: {
+  /** The currently-selected existing OKR, if any. */
   okr: Okr | undefined;
+  /** A local "new OKR" draft owned by the page; non-null opens create mode. */
+  creatingDraft: Okr | null;
   onClose: () => void;
   teams: Team[];
   businessUnits: BusinessUnit[];
   strategicObjectives: StrategicObjective[];
   okrOwners: OkrOwner[];
-  okrInitiatives: { okrId: string; initiativeId: string }[];
+  okrInitiatives: OkrInitiativeLink[];
+  saveOkr: (okr: Okr, owners: OkrOwner[], initiativeIds: string[]) => void;
+  archiveOkr: (id: string) => void;
+  unarchiveOkr: (id: string) => void;
 }) {
-  // Owners and initiatives are already loaded globally via useRoadmap() —
-  // reuse them rather than refetching for this read-only join.
-  const { owners, initiatives, select } = useRoadmap();
+  const creating = creatingDraft !== null;
+  const source = creating ? creatingDraft : okr;
+  if (!source) return null;
+  // Key by id so switching OKRs (or create → view) fully resets local state.
+  return (
+    <DrawerBody
+      key={source.id}
+      source={source}
+      creating={creating}
+      onClose={onClose}
+      teams={teams}
+      businessUnits={businessUnits}
+      strategicObjectives={strategicObjectives}
+      okrOwners={okrOwners}
+      okrInitiatives={okrInitiatives}
+      saveOkr={saveOkr}
+      archiveOkr={archiveOkr}
+      unarchiveOkr={unarchiveOkr}
+    />
+  );
+}
 
-  const team = okr?.teamId ? teams.find((t) => t.id === okr.teamId) : undefined;
-  const businessUnit = okr?.businessUnitId
-    ? businessUnits.find((b) => b.id === okr.businessUnitId)
-    : team
-      ? businessUnits.find((b) => b.id === team.businessUnitId)
-      : undefined;
-  const objective = okr ? strategicObjectives.find((s) => s.id === okr.strategicObjectiveId) : undefined;
+function DrawerBody({
+  source,
+  creating,
+  onClose,
+  teams,
+  businessUnits,
+  strategicObjectives,
+  okrOwners,
+  okrInitiatives,
+  saveOkr,
+  archiveOkr,
+  unarchiveOkr,
+}: {
+  source: Okr;
+  creating: boolean;
+  onClose: () => void;
+  teams: Team[];
+  businessUnits: BusinessUnit[];
+  strategicObjectives: StrategicObjective[];
+  okrOwners: OkrOwner[];
+  okrInitiatives: OkrInitiativeLink[];
+  saveOkr: (okr: Okr, owners: OkrOwner[], initiativeIds: string[]) => void;
+  archiveOkr: (id: string) => void;
+  unarchiveOkr: (id: string) => void;
+}) {
+  // Owners/initiatives lists themselves are global (already loaded via
+  // useRoadmap()) — reused here for owner options and the linking picker.
+  const { owners, initiatives, notify } = useRoadmap();
 
-  const linkedOwners = okr ? okrOwners.filter((o) => o.okrId === okr.id) : [];
-  const linkedInitiativeIds = okr
-    ? okrInitiatives.filter((l) => l.okrId === okr.id).map((l) => l.initiativeId)
-    : [];
-  const linkedInitiatives = linkedInitiativeIds
-    .map((id) => initiatives.find((i) => i.id === id))
-    .filter((i): i is NonNullable<typeof i> => Boolean(i));
+  const [d, setD] = useState<Okr>(source);
+  const [ownersDraft, setOwnersDraft] = useState<OkrOwner[]>(() =>
+    okrOwners.filter((o) => o.okrId === source.id)
+  );
+  const [initiativeIdsDraft, setInitiativeIdsDraft] = useState<string[]>(() =>
+    okrInitiatives.filter((l) => l.okrId === source.id).map((l) => l.initiativeId)
+  );
+  const [titleTouched, setTitleTouched] = useState(false);
+  const [objectiveTouched, setObjectiveTouched] = useState(false);
+  const [teamBuTouched, setTeamBuTouched] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
 
-  const governance = okr ? OKR_GOVERNANCE_META[okr.governanceStatus] : undefined;
+  // Local edit + autosave. Discrete controls commit immediately via patch(); free
+  // text commits on blur via saveNow(). In create mode nothing persists until Create.
+  const set = <K extends keyof Okr>(key: K, value: Okr[K]) => setD((prev) => ({ ...prev, [key]: value }));
+  const patch = (p: Partial<Okr>) => {
+    const next = { ...d, ...p };
+    setD(next);
+    if (!creating) saveOkr(next, ownersDraft, initiativeIdsDraft);
+  };
+  const saveNow = () => {
+    if (!creating) saveOkr(d, ownersDraft, initiativeIdsDraft);
+  };
+  const patchOwners = (next: OkrOwner[]) => {
+    setOwnersDraft(next);
+    if (!creating) saveOkr(d, next, initiativeIdsDraft);
+  };
+  const patchInitiativeIds = (next: string[]) => {
+    setInitiativeIdsDraft(next);
+    if (!creating) saveOkr(d, ownersDraft, next);
+  };
+
+  const titleMissing = d.title.trim().length === 0;
+  const objectiveMissing = d.strategicObjectiveId.trim().length === 0;
+  // UI-enforced XOR (not just a DB-constraint backstop, per Chickadee plan §5)
+  // — the combined picker only ever sets exactly one, but this still guards
+  // the initial "nothing chosen yet" create-mode state and any future bug.
+  const teamBuInvalid = Boolean(d.teamId) === Boolean(d.businessUnitId);
+  const canSave = !titleMissing && !objectiveMissing && !teamBuInvalid;
+
+  const ownerOptionsForPicker = owners;
+  const initiativeCandidates = initiatives.filter((i) => !i.archived);
+
+  const dirty =
+    creating &&
+    (JSON.stringify(d) !== JSON.stringify(source) ||
+      ownersDraft.length > 0 ||
+      initiativeIdsDraft.length > 0);
+  const attemptClose = () => {
+    if (dirty) setConfirmOpen(true);
+    else onClose();
+  };
+
+  const create = () => {
+    if (!canSave) {
+      setTitleTouched(true);
+      setObjectiveTouched(true);
+      setTeamBuTouched(true);
+      return;
+    }
+    const toSave: Okr = { ...d, title: d.title.trim() };
+    saveOkr(toSave, ownersDraft, initiativeIdsDraft);
+    notify({ message: "OKR created", tone: "success" });
+    onClose();
+  };
+
+  const governance = OKR_GOVERNANCE_META[d.governanceStatus];
 
   return (
-    <Drawer open={Boolean(okr)} onClose={onClose} width={520}>
-      {okr && (
-        <>
-          {/* Header */}
-          <div className="sticky top-0 z-10 border-b border-beige-20 bg-white px-6 pb-4 pt-5">
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <Eyebrow>{objective?.name ?? "No strategic objective"}</Eyebrow>
-              <button
-                onClick={onClose}
-                className="rounded-md p-1 text-beige-60 hover:bg-beige-10 hover:text-green-90"
-                aria-label="Close"
+    <Drawer open onClose={attemptClose} width={520}>
+      {/* Header */}
+      <div className="sticky top-0 z-10 border-b border-beige-20 bg-white px-6 pb-4 pt-5">
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <Eyebrow>{creating ? "New OKR" : "Edit OKR"}</Eyebrow>
+          <button
+            onClick={attemptClose}
+            className="rounded-md p-1 text-beige-60 hover:bg-beige-10 hover:text-green-90"
+            aria-label="Close"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <input
+          value={d.title}
+          onChange={(e) => set("title", e.target.value)}
+          onBlur={() => {
+            setTitleTouched(true);
+            patch({ title: d.title.trim() });
+          }}
+          placeholder="What is this OKR?"
+          aria-label="Title"
+          autoFocus={creating}
+          className="w-full bg-transparent font-display text-xl font-semibold leading-snug text-green-90 placeholder:text-beige-40 focus:outline-none"
+        />
+        {titleTouched && titleMissing && <p className="mt-1 text-xs text-red-70">Give the OKR a title.</p>}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Tag className={governance.tag}>{governance.label}</Tag>
+          {d.okrClass && <Tag className="bg-beige-30 text-beige-60">{OKR_CLASS_LABEL[d.okrClass]}</Tag>}
+          <HealthTag health={d.health} />
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex flex-col gap-6 px-6 py-5">
+        <div className="grid grid-cols-2 gap-4 rounded-xl border border-beige-20 bg-beige-5 p-4">
+          <div className="col-span-2">
+            <Prop icon={Users} label="Team / business unit">
+              <TeamOrBuPicker
+                teams={teams}
+                businessUnits={businessUnits}
+                teamId={d.teamId}
+                businessUnitId={d.businessUnitId}
+                onChange={({ teamId, businessUnitId }) => {
+                  setTeamBuTouched(true);
+                  patch({ teamId, businessUnitId });
+                }}
+              />
+              {teamBuTouched && teamBuInvalid && (
+                <p className="mt-1 text-xs text-red-70">Choose exactly one team or business unit.</p>
+              )}
+            </Prop>
+          </div>
+          <Prop icon={Building2} label="Strategic objective">
+            <SearchableSelect
+              ariaLabel="Strategic objective"
+              value={d.strategicObjectiveId}
+              onChange={(v) => {
+                setObjectiveTouched(true);
+                patch({ strategicObjectiveId: v });
+              }}
+              placeholder="Choose an objective"
+              options={strategicObjectives.map((s) => ({ value: s.id, label: s.name }))}
+            />
+            {objectiveTouched && objectiveMissing && (
+              <p className="mt-1 text-xs text-red-70">Choose a strategic objective.</p>
+            )}
+          </Prop>
+          <Prop icon={CalendarRange} label="Year / quarter">
+            <div className="flex items-center gap-2">
+              <TextInput
+                type="number"
+                value={d.year}
+                onChange={(e) => set("year", Number(e.target.value) || d.year)}
+                onBlur={saveNow}
+                aria-label="Year"
+                className="w-20"
+              />
+              <NativeSelect
+                aria-label="Quarter"
+                value={d.quarter}
+                onChange={(e) => patch({ quarter: Number(e.target.value) })}
+                className="w-20"
               >
-                <X size={18} />
-              </button>
+                {[1, 2, 3, 4].map((q) => (
+                  <option key={q} value={q}>
+                    Q{q}
+                  </option>
+                ))}
+              </NativeSelect>
             </div>
-            <h2 className="font-display text-xl font-semibold leading-snug text-green-90">
-              {okr.title}
-            </h2>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {governance && <Tag className={governance.tag}>{governance.label}</Tag>}
-              {okr.okrClass && (
-                <Tag className="bg-beige-30 text-beige-60">{OKR_CLASS_LABEL[okr.okrClass]}</Tag>
+          </Prop>
+          <Prop icon={Flag} label="Target date">
+            <TextInput
+              type="date"
+              value={d.targetDate ?? ""}
+              onChange={(e) => patch({ targetDate: e.target.value || undefined })}
+              aria-label="Target date"
+            />
+          </Prop>
+        </div>
+
+        <Field label="Governance status">
+          <NativeSelect
+            value={d.governanceStatus}
+            onChange={(e) => patch({ governanceStatus: e.target.value as Okr["governanceStatus"] })}
+          >
+            {OKR_GOVERNANCE_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {OKR_GOVERNANCE_META[s].label}
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
+
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="OKR class" hint="Optional">
+            <NativeSelect
+              value={d.okrClass ?? ""}
+              onChange={(e) => patch({ okrClass: (e.target.value || null) as OkrClass | null })}
+            >
+              <option value="">Not classified</option>
+              {OKR_CLASS_OPTIONS.map((c) => (
+                <option key={c} value={c}>
+                  {OKR_CLASS_LABEL[c]}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+          <Field label="Health">
+            <InlineTagSelect
+              label="Change health"
+              value={d.health}
+              options={HEALTH_KEYS}
+              render={(h: Health) => <HealthTag health={h} />}
+              onSelect={(health) => patch({ health })}
+            />
+          </Field>
+        </div>
+
+        <Field label="Deliverable detail">
+          <TextArea
+            value={d.deliverableDetail}
+            onChange={(e) => set("deliverableDetail", e.target.value)}
+            onBlur={saveNow}
+          />
+        </Field>
+
+        {/* Achievement — keeps null ("not assessed yet") distinct from 0. */}
+        <div className="rounded-xl border border-beige-20 bg-beige-5 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <Eyebrow>Achievement</Eyebrow>
+            <span
+              className={cn(
+                "font-display text-lg font-semibold",
+                d.achievement === null ? "text-beige-60" : "text-green-90"
               )}
-              <HealthTag health={okr.health} />
-            </div>
+            >
+              {formatAchievement(d.achievement)}
+            </span>
           </div>
+          <AchievementInput value={d.achievement} onCommit={(achievement) => patch({ achievement })} />
+        </div>
 
-          {/* Body */}
-          <div className="flex flex-col gap-6 px-6 py-5">
-            <div className="grid grid-cols-2 gap-4 rounded-xl border border-beige-20 bg-beige-5 p-4">
-              <Prop icon={Users} label="Team">
-                {team?.name ?? "—"}
-              </Prop>
-              <Prop icon={Building2} label="Business unit">
-                {businessUnit?.name ?? "—"}
-              </Prop>
-              <Prop icon={CalendarRange} label="Year / quarter">
-                Q{okr.quarter} {okr.year}
-              </Prop>
-              <Prop icon={Flag} label="Target date">
-                {okr.targetDate ?? "—"}
-              </Prop>
-            </div>
+        <Field label="Notes">
+          <TextArea value={d.notes} onChange={(e) => set("notes", e.target.value)} onBlur={saveNow} />
+        </Field>
 
-            {okr.deliverableDetail && <Section label="Deliverable detail">{okr.deliverableDetail}</Section>}
+        <OkrOwnersEditor
+          okrId={d.id}
+          owners={ownersDraft}
+          ownerOptions={ownerOptionsForPicker}
+          onChange={patchOwners}
+        />
 
-            {/* Achievement */}
-            <div className="rounded-xl border border-beige-20 bg-beige-5 p-4">
-              <div className="mb-1 flex items-center justify-between">
-                <Eyebrow>Achievement</Eyebrow>
-                <span
-                  className={cn(
-                    "font-display text-lg font-semibold",
-                    okr.achievement === null ? "text-beige-60" : "text-green-90"
-                  )}
-                >
-                  {formatAchievement(okr.achievement)}
-                </span>
-              </div>
-              {okr.achievement === null && (
-                <p className="text-sm text-beige-60">Not assessed yet.</p>
-              )}
-            </div>
+        <div>
+          <Eyebrow className="mb-2">Linked initiatives</Eyebrow>
+          <DependencyPicker
+            candidates={initiativeCandidates}
+            selected={initiativeIdsDraft}
+            onChange={patchInitiativeIds}
+            resolveTitle={(id) => initiatives.find((i) => i.id === id)?.title ?? id}
+            addLabel="Add initiative"
+            emptyLabel="No linked initiatives yet."
+            allSelectedLabel="Every initiative is already linked."
+            removeAriaLabel={(title) => `Unlink initiative: ${title}`}
+          />
+        </div>
+      </div>
 
-            {okr.notes && <Section label="Notes">{okr.notes}</Section>}
+      {/* Footer */}
+      <div className="sticky bottom-0 mt-auto flex items-center gap-2 border-t border-beige-20 bg-white px-6 py-3">
+        {creating ? (
+          <>
+            <Button variant="secondary" onClick={attemptClose}>
+              Cancel
+            </Button>
+            <Button onClick={create} disabled={!canSave}>
+              Create OKR
+            </Button>
+          </>
+        ) : (
+          <>
+            {d.archived ? (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  unarchiveOkr(d.id);
+                  notify({ message: `“${d.title}” restored` });
+                }}
+              >
+                <ArchiveRestore size={15} /> Restore
+              </Button>
+            ) : (
+              <Button variant="ghost" onClick={() => setArchiveConfirmOpen(true)}>
+                <Archive size={15} /> Archive
+              </Button>
+            )}
+          </>
+        )}
+      </div>
 
-            {/* Owners */}
-            <div>
-              <Eyebrow className="mb-2">Owners</Eyebrow>
-              {linkedOwners.length ? (
-                <ul className="space-y-1.5">
-                  {linkedOwners.map((lo) => {
-                    const owner = owners.find((o) => o.id === lo.ownerId);
-                    const name = ownerName(owner) || lo.ownerId;
-                    return (
-                      <li key={`${lo.okrId}-${lo.ownerId}`} className="flex items-center gap-2">
-                        <Avatar name={name} className="h-6 w-6 text-[10px]" neutral />
-                        <span className="text-sm text-green-90">{name}</span>
-                        <Tag className="ml-auto bg-beige-10 text-beige-60">{lo.role}</Tag>
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : (
-                <p className="text-sm text-beige-60">No owners assigned yet.</p>
-              )}
-            </div>
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Discard this OKR?"
+        body="You haven't created this OKR yet. If you close now, it won't be saved."
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        tone="destructive"
+        onConfirm={() => {
+          setConfirmOpen(false);
+          onClose();
+        }}
+        onCancel={() => setConfirmOpen(false)}
+      />
 
-            {/* Linked initiatives */}
-            <div>
-              <Eyebrow className="mb-2">Linked initiatives</Eyebrow>
-              {linkedInitiatives.length ? (
-                <ul className="space-y-1.5">
-                  {linkedInitiatives.map((i) => (
-                    <li key={i.id}>
-                      <button
-                        onClick={() => { onClose(); select(i.id); }}
-                        className="flex w-full items-center gap-2 rounded-lg border border-beige-20 bg-white px-3 py-2 text-left text-sm text-green-90 hover:border-green-40 hover:bg-beige-5"
-                      >
-                        <Target size={15} className="shrink-0 text-beige-60" />
-                        <span className="truncate">{i.title}</span>
-                        <StatusTag status={i.status} />
-                        <ArrowUpRight size={14} className="ml-auto shrink-0 text-beige-60" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-beige-60">No linked initiatives yet.</p>
-              )}
-            </div>
-          </div>
-        </>
-      )}
+      <ConfirmDialog
+        open={archiveConfirmOpen}
+        title="Archive this OKR?"
+        body="Archived OKRs are hidden from the default list — you can restore them anytime from Show archived."
+        confirmLabel="Archive"
+        cancelLabel="Cancel"
+        tone="destructive"
+        onConfirm={() => {
+          setArchiveConfirmOpen(false);
+          archiveOkr(d.id);
+          notify({
+            message: `“${d.title}” archived`,
+            action: { label: "Undo", onClick: () => unarchiveOkr(d.id) },
+          });
+          onClose();
+        }}
+        onCancel={() => setArchiveConfirmOpen(false)}
+      />
     </Drawer>
   );
 }

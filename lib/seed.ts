@@ -631,6 +631,24 @@ export const OKRS: Okr[] = [
     position: 5000,
     updatedAt: "2026-07-15T14:00:00Z",
   },
+  {
+    id: "okr-visual-editor-perf-2025-q4",
+    title: "Ship visual editor performance rework (2.5)",
+    strategicObjectiveId: "so-core",
+    teamId: "team-visual-builders",
+    year: 2025,
+    quarter: 4,
+    deliverableDetail: "Reduce editor load and save latency ahead of the visual editor 3.0 rebuild.",
+    governanceStatus: "rejected",
+    okrClass: "optional",
+    targetDate: "2025-12-31",
+    achievement: 0.4,
+    health: "blocked",
+    notes: "Superseded by Visual editor 3.0; remaining perf work folded into that initiative and this OKR closed out.",
+    archived: true,
+    position: 6000,
+    updatedAt: "2025-12-18T10:00:00Z",
+  },
 ];
 
 export const OKR_OWNERS: OkrOwner[] = [
@@ -639,6 +657,7 @@ export const OKR_OWNERS: OkrOwner[] = [
   { okrId: "okr-pbx-adoption-q1", ownerId: "u-tom", role: "owner" },
   { okrId: "okr-pbx-adoption-q2", ownerId: "u-tom", role: "owner" },
   { okrId: "okr-disrupt-governance-q1", ownerId: "u-tom", role: "contributor" },
+  { okrId: "okr-visual-editor-perf-2025-q4", ownerId: "u-sofia", role: "owner" },
 ];
 
 export const OKR_INITIATIVES: { okrId: string; initiativeId: string }[] = [

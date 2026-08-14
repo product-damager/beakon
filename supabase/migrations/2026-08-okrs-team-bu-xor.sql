@@ -1,0 +1,65 @@
+-- One-off, reviewed tightening migration — NOT part of schema.sql.
+--
+-- Why this isn't in schema.sql: schema.sql runs against a populated prod
+-- database on every deploy, so every statement in it must be safe to
+-- re-run against existing rows. Tightening an existing check constraint
+-- (making it stricter than what it currently allows) can FAIL if any
+-- existing row violates the new, narrower condition — unlike adding a new,
+-- looser constraint, which is safe to fold inline. Per supabase/README.md's
+-- "Golden rule for editing schema.sql": tightening a constraint against
+-- existing data is a breaking migration and must be a separate, reviewed
+-- one-off statement, tested on preview first. This follows the exact same
+-- precedent as `2026-08-teams-business-unit-not-null.sql`.
+--
+-- What's changing: `okrs` currently has
+--   check (team_id is not null or business_unit_id is not null)
+-- (an inclusive OR — technically permits a row with *both* team_id and
+-- business_unit_id set, even though the product model says an OKR belongs
+-- to exactly one). This tightens it to an exclusive OR (XOR), matching the
+-- style of the existing `delivery_links_one_parent` constraint already in
+-- schema.sql:
+--   check ((team_id is not null) <> (business_unit_id is not null))
+--
+-- Constraint name: the current check is an unnamed table-level constraint
+-- from the original `create table okrs (...)` statement in schema.sql, so
+-- Postgres auto-generated its name as `okrs_check` (there is exactly one
+-- unnamed table-level check on this table — the `quarter` and
+-- `achievement` checks are column-level and get their own
+-- `okrs_quarter_check` / `okrs_achievement_check` names). Confirm this
+-- against the live database before running — e.g.
+--   select conname, pg_get_constraintdef(oid)
+--   from pg_constraint
+--   where conrelid = 'okrs'::regclass and contype = 'c';
+-- — and adjust the `drop constraint` line below if the actual name differs
+-- from what schema.sql's current text implies.
+--
+-- Context: confirmed safe to apply — every OKR in `lib/seed.ts`'s `OKRS`
+-- array already has exactly one of `teamId`/`businessUnitId` set (verified
+-- by reading the seed data directly), so beakon-preview's seeded rows
+-- already satisfy XOR. beakon-prod's `okrs` table is empty today — no
+-- write UI has ever existed to create a row there, and `seed_prod.sql`
+-- never inserts `okrs` rows — so there is no prod data risk either. Written
+-- as a real migration anyway (not folded into schema.sql), per the
+-- established precedent, since "it's empty" doesn't change the house
+-- convention for tightening changes.
+--
+-- Manual two-step rollout (do NOT run this via an automated/idempotent
+-- pipeline):
+--   1. Apply to `beakon-preview` first, via the Supabase dashboard SQL
+--      editor. Verify the app still loads (OKR read/write UI, once it
+--      ships) and no error occurred.
+--   2. Back up `beakon-prod` (Dashboard → Database → Backups, or a manual
+--      export) before applying there — even though the table is confirmed
+--      empty, per convention. Then apply to `beakon-prod` the same way, via
+--      the dashboard SQL editor — not as part of a `schema.sql` re-run.
+--
+-- After this lands (both environments), any write path that upserts an
+-- `okrs` row (`persistOkr()` in lib/data.ts, and the write UI that calls
+-- it) must guarantee exactly one of team_id/business_unit_id is set before
+-- the write — the UI's combined team/BU picker should enforce this itself
+-- as the primary defense; this constraint is the backstop, not the first
+-- line of validation.
+
+alter table okrs drop constraint okrs_check;
+alter table okrs add constraint okrs_check
+  check ((team_id is not null) <> (business_unit_id is not null));

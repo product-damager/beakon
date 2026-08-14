@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   BUSINESS_UNITS,
   OKR_INITIATIVES,
@@ -11,13 +11,15 @@ import {
 } from "./seed";
 import { isSupabaseConfigured } from "./supabase";
 import { useAuth } from "./auth";
-import { fetchOkrWorkspace } from "./data";
-import type { BusinessUnit, Okr, OkrOwner, StrategicObjective, Team } from "./types";
-
-interface OkrInitiativeLink {
-  okrId: string;
-  initiativeId: string;
-}
+import { fetchOkrWorkspace, persistOkr } from "./data";
+import type {
+  BusinessUnit,
+  Okr,
+  OkrInitiativeLink,
+  OkrOwner,
+  StrategicObjective,
+  Team,
+} from "./types";
 
 interface OkrWorkspaceState {
   businessUnits: BusinessUnit[];
@@ -28,8 +30,14 @@ interface OkrWorkspaceState {
   okrInitiatives: OkrInitiativeLink[];
   /** True while the initial Supabase load is in flight. */
   loading: boolean;
-  /** Last load error, or null. */
+  /** Last load (or mutation) error, or null. */
   error: string | null;
+  /** Upsert an OKR and fully replace its owners/initiative links, optimistically. */
+  saveOkr: (okr: Okr, owners: OkrOwner[], initiativeIds: string[]) => void;
+  /** Soft-delete: archive an OKR (owners/links carried through unchanged). */
+  archiveOkr: (id: string) => void;
+  /** Restore an archived OKR (the Undo of archiveOkr). */
+  unarchiveOkr: (id: string) => void;
 }
 
 /**
@@ -85,6 +93,64 @@ export function useOkrWorkspace(): OkrWorkspaceState {
     };
   }, [userId]);
 
+  const reportError = useCallback((e: unknown, action: string) => {
+    console.error(`[beakon] ${action} failed`, e);
+    setError(e instanceof Error ? e.message : `Could not ${action}. Your change may not be saved.`);
+  }, []);
+
+  // Mirrors RoadmapProvider's saveInitiative/archiveInitiative shape: update
+  // local state immediately, persist in the background when Supabase-backed.
+  const saveOkr = useCallback(
+    (okr: Okr, owners: OkrOwner[], initiativeIds: string[]) => {
+      const stamped: Okr = { ...okr, updatedAt: new Date().toISOString() };
+
+      setOkrs((prev) => {
+        const exists = prev.some((x) => x.id === okr.id);
+        return exists ? prev.map((x) => (x.id === okr.id ? stamped : x)) : [stamped, ...prev];
+      });
+      setOkrOwners((prev) => [
+        ...prev.filter((o) => o.okrId !== okr.id),
+        ...owners.map((o) => ({ ...o, okrId: okr.id })),
+      ]);
+      setOkrInitiatives((prev) => [
+        ...prev.filter((l) => l.okrId !== okr.id),
+        ...initiativeIds.map((initiativeId) => ({ okrId: okr.id, initiativeId })),
+      ]);
+
+      if (isSupabaseConfigured) {
+        queueMicrotask(() =>
+          persistOkr(stamped, owners, initiativeIds).catch((e) => reportError(e, "save"))
+        );
+      }
+    },
+    [reportError]
+  );
+
+  // Archiving reuses persistOkr() (no dedicated OKR archive endpoint — see
+  // Chickadee plan §2) — owners/links must be passed through unchanged since
+  // persistOkr() fully replaces them, so this reads the current arrays from
+  // closure rather than mutating state from within another state's updater.
+  const setArchived = useCallback(
+    (id: string, archived: boolean) => {
+      const target = okrs.find((x) => x.id === id);
+      if (!target) return;
+      const stamped: Okr = { ...target, archived, updatedAt: new Date().toISOString() };
+      setOkrs((prev) => prev.map((x) => (x.id === id ? stamped : x)));
+      if (isSupabaseConfigured) {
+        const owners = okrOwners.filter((o) => o.okrId === id);
+        const initiativeIds = okrInitiatives.filter((l) => l.okrId === id).map((l) => l.initiativeId);
+        queueMicrotask(() =>
+          persistOkr(stamped, owners, initiativeIds).catch((e) =>
+            reportError(e, archived ? "archive" : "restore")
+          )
+        );
+      }
+    },
+    [okrs, okrOwners, okrInitiatives, reportError]
+  );
+  const archiveOkr = useCallback((id: string) => setArchived(id, true), [setArchived]);
+  const unarchiveOkr = useCallback((id: string) => setArchived(id, false), [setArchived]);
+
   return {
     businessUnits,
     teams,
@@ -94,5 +160,8 @@ export function useOkrWorkspace(): OkrWorkspaceState {
     okrInitiatives,
     loading,
     error,
+    saveOkr,
+    archiveOkr,
+    unarchiveOkr,
   };
 }

@@ -10,6 +10,7 @@ import type {
   DeliveryLink,
   Initiative,
   Okr,
+  OkrInitiativeLink,
   OkrOwner,
   Owner,
   StrategicObjective,
@@ -453,7 +454,7 @@ export interface OkrWorkspace {
   strategicObjectives: StrategicObjective[];
   okrs: Okr[];
   okrOwners: OkrOwner[];
-  okrInitiatives: { okrId: string; initiativeId: string }[];
+  okrInitiatives: OkrInitiativeLink[];
 }
 
 /**
