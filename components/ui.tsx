@@ -58,11 +58,27 @@ export function Button({
 }
 
 // ── Tags / badges — Noto Sans Mono, 12px uppercase ──
-export function Tag({ className, children }: { className?: string; children: ReactNode }) {
+/**
+ * `shape` defaults to "round" (today's `rounded-md` corners, unchanged
+ * everywhere it isn't explicitly overridden). "square" is a sharper-cornered
+ * variant reserved for the OKR domain (governance/health badges), to read as
+ * visually distinct from initiative status/health, which stay round
+ * everywhere (List/Board/Timeline) — see Chickadee Week 2 plan §2 finding 4.
+ */
+export function Tag({
+  className,
+  children,
+  shape = "round",
+}: {
+  className?: string;
+  children: ReactNode;
+  shape?: "round" | "square";
+}) {
   return (
     <span
       className={cn(
-        "mono-label inline-flex items-center gap-1 rounded-md px-2 py-1 leading-none",
+        "mono-label inline-flex items-center gap-1 px-2 py-1 leading-none",
+        shape === "square" ? "rounded-sm" : "rounded-md",
         className
       )}
     >
@@ -82,11 +98,15 @@ export function StatusTag({ status }: { status: Status }) {
   );
 }
 
-export function HealthTag({ health }: { health: Health }) {
+export function HealthTag({ health, shape }: { health: Health; shape?: "round" | "square" }) {
   const m = HEALTH_META[health];
   // No marker — the pill background already carries the health colour; a dot
   // would just repeat it (and collide with the status/theme markers).
-  return <Tag className={m.tag}>{m.label}</Tag>;
+  return (
+    <Tag className={m.tag} shape={shape}>
+      {m.label}
+    </Tag>
+  );
 }
 
 /**

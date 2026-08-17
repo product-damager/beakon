@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, X } from "lucide-react";
 import { useOkrWorkspace } from "@/lib/useOkrWorkspace";
 import { EMPTY_OKR_FILTERS, OkrFilterBar, applyOkrFilters, type OkrFilters } from "@/components/OkrFilterBar";
 import { OkrList } from "@/components/OkrList";
@@ -59,6 +59,7 @@ function OkrsPageInner() {
     saveOkr,
     archiveOkr,
     unarchiveOkr,
+    dismissError,
   } = useOkrWorkspace();
 
   const router = useRouter();
@@ -106,7 +107,16 @@ function OkrsPageInner() {
     );
   }
 
-  if (error) {
+  // No data ever loaded (initial fetch itself failed) — nothing sensible to
+  // render underneath, so this is the only case that takes over the full page.
+  // Invariant this relies on: every mutation path in useOkrWorkspace.ts
+  // (saveOkr, setArchived) applies its optimistic setOkrs update *before* the
+  // async persist call that can set `error` — so okrs.length === 0 is a safe
+  // proxy for "the initial load failed," never "a mutation failed on an
+  // otherwise-empty workspace." If a future mutation path is added that can
+  // fail before/without an optimistic setOkrs update, this check needs to be
+  // revisited or it will incorrectly take over the full page.
+  if (error && okrs.length === 0) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="flex max-w-sm flex-col items-center gap-2 text-center text-sm text-beige-60">
@@ -120,6 +130,19 @@ function OkrsPageInner() {
 
   return (
     <div className="flex h-full flex-col">
+      {error && (
+        <div className="flex items-center gap-2 border-b border-red-30 bg-red-30/50 px-6 py-2 text-[13px] text-red-70">
+          <AlertTriangle size={15} className="shrink-0" />
+          <span className="flex-1 truncate">{error}</span>
+          <button
+            onClick={dismissError}
+            className="shrink-0 rounded p-0.5 hover:bg-red-30"
+            aria-label="Dismiss"
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
       {okrs.length === 0 ? (
         <div className="flex h-full items-center justify-center">
           <p className="text-sm text-beige-60">No OKRs yet.</p>
@@ -138,6 +161,9 @@ function OkrsPageInner() {
             teams={teams}
             businessUnits={businessUnits}
             strategicObjectives={strategicObjectives}
+            okrOwners={okrOwners}
+            okrInitiatives={okrInitiatives}
+            saveOkr={saveOkr}
             onSelect={(id) => {
               setCreatingDraft(null);
               setSelectedOkrId(id);

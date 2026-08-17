@@ -5,7 +5,7 @@ import { ChevronDown, Plus, Search, Trash2 } from "lucide-react";
 import type { BusinessUnit, Okr, OkrOwner, Owner, Team } from "@/lib/types";
 import { ownerName } from "@/lib/types";
 import { cn } from "@/lib/cn";
-import { Eyebrow } from "./ui";
+import { Button, Eyebrow } from "./ui";
 import { NativeSelect, TextInput } from "./form";
 import { useOutsideClose } from "./hooks";
 
@@ -13,11 +13,13 @@ const baseInput =
   "w-full rounded-lg border border-beige-30 bg-white px-3 text-sm text-green-90 placeholder:text-beige-60 focus:outline-none focus:ring-2 focus:ring-green-90";
 
 /**
- * Controlled owners editor: list of owner + free-text role rows, add/remove.
- * Follows DeliveryLinksEditor's exact shape (list-with-add-button, per-row
- * controls, remove button). Role is intentionally free text, not a fixed
- * enum — see okr-tracking-spec.md's "flexible role tagging, not fixed
- * PM/Tech-Lead columns".
+ * Controlled owners editor: list of owner rows, add/remove. Follows
+ * DeliveryLinksEditor's shape (list-with-add-button, per-row controls,
+ * remove button). Each row also carries an `OkrOwner.role`, defaulted to
+ * `"contributor"` and written through unchanged on save — the free-text role
+ * input was dropped from this UI (Chickadee Week 2 plan §2 finding 6); the
+ * schema column and its default stay as-is for a future, scoped role-tagging
+ * feature.
  */
 export function OkrOwnersEditor({
   okrId,
@@ -76,14 +78,6 @@ export function OkrOwnersEditor({
                   </option>
                 ))}
               </NativeSelect>
-            </div>
-            <div className="w-36 shrink-0">
-              <TextInput
-                aria-label="Role"
-                value={o.role}
-                onChange={(e) => update(idx, { role: e.target.value })}
-                placeholder="e.g. owner, tech lead"
-              />
             </div>
             <button
               type="button"
@@ -149,6 +143,30 @@ export function TeamOrBuPicker({
     close();
   };
 
+  const renderTeamOption = (t: Team) => (
+    <button
+      key={t.id}
+      type="button"
+      role="option"
+      aria-selected={t.id === teamId}
+      onClick={() => pickTeam(t.id)}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-beige-10",
+        t.id === teamId ? "bg-beige-10 text-green-90" : "text-green-90"
+      )}
+    >
+      <span className="truncate">{t.name}</span>
+    </button>
+  );
+
+  // Sub-group the "Teams" section by parent business unit, one sub-header
+  // per BU, with an "Other teams" fallback bucket for any team whose
+  // businessUnitId doesn't resolve to a known BU.
+  const teamsByBu = businessUnits
+    .map((bu) => ({ bu, teams: shownTeams.filter((t) => t.businessUnitId === bu.id) }))
+    .filter((g) => g.teams.length > 0);
+  const otherTeams = shownTeams.filter((t) => !businessUnits.some((b) => b.id === t.businessUnitId));
+
   return (
     <div className="relative" ref={ref}>
       <button
@@ -182,21 +200,18 @@ export function TeamOrBuPicker({
             {shownTeams.length > 0 && (
               <>
                 <div className="mono-label-sm px-2.5 py-1.5 text-beige-60">Teams</div>
-                {shownTeams.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    role="option"
-                    aria-selected={t.id === teamId}
-                    onClick={() => pickTeam(t.id)}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-beige-10",
-                      t.id === teamId ? "bg-beige-10 text-green-90" : "text-green-90"
-                    )}
-                  >
-                    <span className="truncate">{t.name}</span>
-                  </button>
+                {teamsByBu.map(({ bu, teams: buTeams }) => (
+                  <div key={bu.id}>
+                    <div className="mono-label-sm px-4 py-1 text-beige-40">{bu.name}</div>
+                    {buTeams.map(renderTeamOption)}
+                  </div>
                 ))}
+                {otherTeams.length > 0 && (
+                  <div>
+                    <div className="mono-label-sm px-4 py-1 text-beige-40">Other teams</div>
+                    {otherTeams.map(renderTeamOption)}
+                  </div>
+                )}
               </>
             )}
             {shownBus.length > 0 && (
@@ -267,7 +282,7 @@ export function AchievementInput({
   };
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center justify-between gap-3">
       <div className="relative w-24">
         <TextInput
           type="number"
@@ -286,16 +301,17 @@ export function AchievementInput({
         </span>
       </div>
       {value !== null && (
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
           onClick={() => {
             setText("");
             onCommit(null);
           }}
-          className="text-[13px] font-medium text-beige-60 hover:text-green-90"
         >
           Mark as not assessed
-        </button>
+        </Button>
       )}
     </div>
   );

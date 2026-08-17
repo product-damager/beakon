@@ -38,6 +38,8 @@ interface OkrWorkspaceState {
   archiveOkr: (id: string) => void;
   /** Restore an archived OKR (the Undo of archiveOkr). */
   unarchiveOkr: (id: string) => void;
+  /** Clear the current error (e.g. dismiss a failed-save banner). */
+  dismissError: () => void;
 }
 
 /**
@@ -151,6 +153,8 @@ export function useOkrWorkspace(): OkrWorkspaceState {
   const archiveOkr = useCallback((id: string) => setArchived(id, true), [setArchived]);
   const unarchiveOkr = useCallback((id: string) => setArchived(id, false), [setArchived]);
 
+  const dismissError = useCallback(() => setError(null), []);
+
   return {
     businessUnits,
     teams,
@@ -163,5 +167,6 @@ export function useOkrWorkspace(): OkrWorkspaceState {
     saveOkr,
     archiveOkr,
     unarchiveOkr,
+    dismissError,
   };
 }

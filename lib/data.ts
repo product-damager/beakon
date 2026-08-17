@@ -489,25 +489,41 @@ export async function fetchOkrWorkspace(): Promise<OkrWorkspace> {
   return { businessUnits, teams, strategicObjectives, okrs, okrOwners, okrInitiatives };
 }
 
-/** Upsert an OKR and fully replace its owners and initiative links. */
+/**
+ * Upsert an OKR and fully replace its owners and initiative links.
+ *
+ * Delegates to the `persist_okr` Postgres RPC (supabase/schema.sql,
+ * supabase/migrations/2026-08-persist-okr-rpc.sql) instead of four
+ * separate upsert/delete/insert calls: Supabase's JS client can't span
+ * multiple `.from()` calls in one client-side transaction, so a failure
+ * partway through the old sequence (e.g. a duplicate (okr_id, owner_id)
+ * insert) could leave the OKR with zero owners/links in the DB. The RPC's
+ * plpgsql body is one transaction — any error rolls back everything.
+ */
 export async function persistOkr(o: Okr, owners: OkrOwner[], initiativeIds: string[]): Promise<void> {
   const sb = client();
+  const row = okrToRow(o);
 
-  const { error: upsertErr } = await sb.from("okrs").upsert(okrToRow(o));
-  if (upsertErr) throw upsertErr;
-
-  const { error: delOwnersErr } = await sb.from("okr_owners").delete().eq("okr_id", o.id);
-  if (delOwnersErr) throw delOwnersErr;
-  if (owners.length > 0) {
-    const { error: insOwnersErr } = await sb.from("okr_owners").insert(owners.map(okrOwnerToRow));
-    if (insOwnersErr) throw insOwnersErr;
-  }
-
-  const { error: delInitErr } = await sb.from("okr_initiatives").delete().eq("okr_id", o.id);
-  if (delInitErr) throw delInitErr;
-  if (initiativeIds.length > 0) {
-    const rows = initiativeIds.map((initiativeId) => ({ okr_id: o.id, initiative_id: initiativeId }));
-    const { error: insInitErr } = await sb.from("okr_initiatives").insert(rows);
-    if (insInitErr) throw insInitErr;
-  }
+  const { error } = await sb.rpc("persist_okr", {
+    p_id: row.id,
+    p_title: row.title,
+    p_strategic_objective_id: row.strategic_objective_id,
+    p_team_id: row.team_id,
+    p_business_unit_id: row.business_unit_id,
+    p_year: row.year,
+    p_quarter: row.quarter,
+    p_deliverable_detail: row.deliverable_detail,
+    p_governance_status: row.governance_status,
+    p_okr_class: row.okr_class,
+    p_target_date: row.target_date,
+    p_achievement: row.achievement,
+    p_health: row.health,
+    p_notes: row.notes,
+    p_carried_from_id: row.carried_from_id,
+    p_archived: row.archived,
+    p_position: row.position,
+    p_owners: owners.map(okrOwnerToRow),
+    p_initiative_ids: initiativeIds,
+  });
+  if (error) throw error;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Archive,
   ArchiveRestore,
@@ -26,7 +26,7 @@ import type {
 import { cn } from "@/lib/cn";
 import { Drawer } from "./Drawer";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { Button, Eyebrow, HealthTag, Tag } from "./ui";
+import { Button, Eyebrow, HealthTag, StatusTag, Tag } from "./ui";
 import { Field, InlineTagSelect, NativeSelect, SearchableSelect, TextArea, TextInput } from "./form";
 import { DependencyPicker } from "./initiative-fields";
 import { AchievementInput, OkrOwnersEditor, TeamOrBuPicker } from "./okr-fields";
@@ -160,23 +160,59 @@ function DrawerBody({
 
   // Local edit + autosave. Discrete controls commit immediately via patch(); free
   // text commits on blur via saveNow(). In create mode nothing persists until Create.
-  const set = <K extends keyof Okr>(key: K, value: Okr[K]) => setD((prev) => ({ ...prev, [key]: value }));
-  const patch = (p: Partial<Okr>) => {
-    const next = { ...d, ...p };
+  // `lastSavedRef` tracks the last snapshot actually written via saveOkr(), so
+  // a blur/commit that didn't change anything (e.g. click into title, click
+  // back out) skips the persistence call instead of stamping a fresh
+  // updatedAt for no reason.
+  const lastSavedRef = useRef({ okr: source, owners: ownersDraft, initiativeIds: initiativeIdsDraft });
+  // Mirrors of `d`/`ownersDraft`/`initiativeIdsDraft`, updated synchronously on
+  // every write (both from `set()` and from `commit()`). React does not
+  // guarantee that a `setState` updater callback runs synchronously, so
+  // `commit()` cannot rely on one to read "the current value" before it
+  // calls `saveIfChanged` — refs are the only synchronously-correct source
+  // of truth here.
+  const dRef = useRef(d);
+  const ownersDraftRef = useRef(ownersDraft);
+  const initiativeIdsDraftRef = useRef(initiativeIdsDraft);
+  const set = <K extends keyof Okr>(key: K, value: Okr[K]) => {
+    const next = { ...dRef.current, [key]: value };
+    dRef.current = next;
     setD(next);
-    if (!creating) saveOkr(next, ownersDraft, initiativeIdsDraft);
   };
-  const saveNow = () => {
-    if (!creating) saveOkr(d, ownersDraft, initiativeIdsDraft);
+  const saveIfChanged = (okr: Okr, owners: OkrOwner[], initiativeIds: string[]) => {
+    const next = { okr, owners, initiativeIds };
+    if (JSON.stringify(next) === JSON.stringify(lastSavedRef.current)) return;
+    lastSavedRef.current = next;
+    saveOkr(okr, owners, initiativeIds);
   };
-  const patchOwners = (next: OkrOwner[]) => {
-    setOwnersDraft(next);
-    if (!creating) saveOkr(d, next, initiativeIdsDraft);
+  // Single commit path for every save trigger. Each argument defaults to the
+  // corresponding ref (always synchronously current) rather than either the
+  // closured `d`/`ownersDraft`/`initiativeIdsDraft` variables (which could be
+  // stale relative to a just-applied sibling call in the same tick) or a
+  // `setState` updater's side effect (which React doesn't guarantee runs
+  // synchronously). `okrPartial` merges onto the fresh ref value (mirroring
+  // the old `patch`'s "merge onto latest" behavior) rather than replacing it
+  // outright.
+  const commit = (okrPartial?: Partial<Okr>, ownersNext?: OkrOwner[], initiativeIdsNext?: string[]) => {
+    const okrValue = okrPartial ? { ...dRef.current, ...okrPartial } : dRef.current;
+    const ownersValue = ownersNext ?? ownersDraftRef.current;
+    const initiativeIdsValue = initiativeIdsNext ?? initiativeIdsDraftRef.current;
+
+    dRef.current = okrValue;
+    ownersDraftRef.current = ownersValue;
+    initiativeIdsDraftRef.current = initiativeIdsValue;
+
+    setD(okrValue);
+    setOwnersDraft(ownersValue);
+    setInitiativeIdsDraft(initiativeIdsValue);
+
+    if (creating) return; // create mode: local draft only, no persistence yet
+    saveIfChanged(okrValue, ownersValue, initiativeIdsValue);
   };
-  const patchInitiativeIds = (next: string[]) => {
-    setInitiativeIdsDraft(next);
-    if (!creating) saveOkr(d, ownersDraft, next);
-  };
+  const patch = (p: Partial<Okr>) => commit(p);
+  const saveNow = () => commit();
+  const patchOwners = (next: OkrOwner[]) => commit(undefined, next);
+  const patchInitiativeIds = (next: string[]) => commit(undefined, undefined, next);
 
   const titleMissing = d.title.trim().length === 0;
   const objectiveMissing = d.strategicObjectiveId.trim().length === 0;
@@ -238,13 +274,14 @@ function DrawerBody({
           placeholder="What is this OKR?"
           aria-label="Title"
           autoFocus={creating}
-          className="w-full bg-transparent font-display text-xl font-semibold leading-snug text-green-90 placeholder:text-beige-40 focus:outline-none"
+          className="-mx-2 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 py-0.5 font-display text-xl font-semibold leading-snug text-green-90 placeholder:text-beige-40 hover:border-beige-30 hover:bg-beige-5 focus:border-green-90 focus:bg-white focus:outline-none focus:ring-2 focus:ring-green-90/30"
         />
         {titleTouched && titleMissing && <p className="mt-1 text-xs text-red-70">Give the OKR a title.</p>}
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Tag className={governance.tag}>{governance.label}</Tag>
-          {d.okrClass && <Tag className="bg-beige-30 text-beige-60">{OKR_CLASS_LABEL[d.okrClass]}</Tag>}
-          <HealthTag health={d.health} />
+          <Tag shape="square" className={governance.tag}>
+            {governance.label}
+          </Tag>
+          <HealthTag health={d.health} shape="square" />
         </div>
       </div>
 
@@ -268,53 +305,59 @@ function DrawerBody({
               )}
             </Prop>
           </div>
-          <Prop icon={Building2} label="Strategic objective">
-            <SearchableSelect
-              ariaLabel="Strategic objective"
-              value={d.strategicObjectiveId}
-              onChange={(v) => {
-                setObjectiveTouched(true);
-                patch({ strategicObjectiveId: v });
-              }}
-              placeholder="Choose an objective"
-              options={strategicObjectives.map((s) => ({ value: s.id, label: s.name }))}
-            />
-            {objectiveTouched && objectiveMissing && (
-              <p className="mt-1 text-xs text-red-70">Choose a strategic objective.</p>
-            )}
-          </Prop>
-          <Prop icon={CalendarRange} label="Year / quarter">
-            <div className="flex items-center gap-2">
-              <TextInput
-                type="number"
-                value={d.year}
-                onChange={(e) => set("year", Number(e.target.value) || d.year)}
-                onBlur={saveNow}
-                aria-label="Year"
-                className="w-20"
+          <div className="col-span-2">
+            <Prop icon={Building2} label="Strategic objective">
+              <SearchableSelect
+                ariaLabel="Strategic objective"
+                value={d.strategicObjectiveId}
+                onChange={(v) => {
+                  setObjectiveTouched(true);
+                  patch({ strategicObjectiveId: v });
+                }}
+                placeholder="Choose an objective"
+                options={strategicObjectives.map((s) => ({ value: s.id, label: s.name }))}
               />
-              <NativeSelect
-                aria-label="Quarter"
-                value={d.quarter}
-                onChange={(e) => patch({ quarter: Number(e.target.value) })}
-                className="w-20"
-              >
-                {[1, 2, 3, 4].map((q) => (
-                  <option key={q} value={q}>
-                    Q{q}
-                  </option>
-                ))}
-              </NativeSelect>
-            </div>
-          </Prop>
-          <Prop icon={Flag} label="Target date">
-            <TextInput
-              type="date"
-              value={d.targetDate ?? ""}
-              onChange={(e) => patch({ targetDate: e.target.value || undefined })}
-              aria-label="Target date"
-            />
-          </Prop>
+              {objectiveTouched && objectiveMissing && (
+                <p className="mt-1 text-xs text-red-70">Choose a strategic objective.</p>
+              )}
+            </Prop>
+          </div>
+          <div className="col-span-2">
+            <Prop icon={Flag} label="Target date">
+              <TextInput
+                type="date"
+                value={d.targetDate ?? ""}
+                onChange={(e) => patch({ targetDate: e.target.value || undefined })}
+                aria-label="Target date"
+              />
+            </Prop>
+          </div>
+          <div className="col-span-2">
+            <Prop icon={CalendarRange} label="Year / quarter">
+              <div className="grid grid-cols-2 gap-2">
+                <TextInput
+                  type="number"
+                  value={d.year}
+                  onChange={(e) => set("year", Number(e.target.value) || d.year)}
+                  onBlur={saveNow}
+                  aria-label="Year"
+                  className="w-full"
+                />
+                <NativeSelect
+                  aria-label="Quarter"
+                  value={d.quarter}
+                  onChange={(e) => patch({ quarter: Number(e.target.value) })}
+                  className="w-full"
+                >
+                  {[1, 2, 3, 4].map((q) => (
+                    <option key={q} value={q}>
+                      Q{q}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </div>
+            </Prop>
+          </div>
         </div>
 
         <Field label="Governance status">
@@ -330,30 +373,15 @@ function DrawerBody({
           </NativeSelect>
         </Field>
 
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="OKR class" hint="Optional">
-            <NativeSelect
-              value={d.okrClass ?? ""}
-              onChange={(e) => patch({ okrClass: (e.target.value || null) as OkrClass | null })}
-            >
-              <option value="">Not classified</option>
-              {OKR_CLASS_OPTIONS.map((c) => (
-                <option key={c} value={c}>
-                  {OKR_CLASS_LABEL[c]}
-                </option>
-              ))}
-            </NativeSelect>
-          </Field>
-          <Field label="Health">
-            <InlineTagSelect
-              label="Change health"
-              value={d.health}
-              options={HEALTH_KEYS}
-              render={(h: Health) => <HealthTag health={h} />}
-              onSelect={(health) => patch({ health })}
-            />
-          </Field>
-        </div>
+        <Field label="Health">
+          <InlineTagSelect
+            label="Change health"
+            value={d.health}
+            options={HEALTH_KEYS}
+            render={(h: Health) => <HealthTag health={h} shape="square" />}
+            onSelect={(health) => patch({ health })}
+          />
+        </Field>
 
         <Field label="Deliverable detail">
           <TextArea
@@ -383,6 +411,28 @@ function DrawerBody({
           <TextArea value={d.notes} onChange={(e) => set("notes", e.target.value)} onBlur={saveNow} />
         </Field>
 
+        {/* De-emphasized: a post-governance delivery-commitment tier, optional
+         * and read by nothing downstream — styled visually secondary and
+         * placed low in the form, not alongside required fields like Health. */}
+        <div>
+          <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-beige-60">
+            OKR class
+            <span className="font-normal text-beige-40">Optional</span>
+          </label>
+          <NativeSelect
+            value={d.okrClass ?? ""}
+            onChange={(e) => patch({ okrClass: (e.target.value || null) as OkrClass | null })}
+            className="max-w-[220px] h-8 text-[13px] text-beige-60"
+          >
+            <option value="">Not classified</option>
+            {OKR_CLASS_OPTIONS.map((c) => (
+              <option key={c} value={c}>
+                {OKR_CLASS_LABEL[c]}
+              </option>
+            ))}
+          </NativeSelect>
+        </div>
+
         <OkrOwnersEditor
           okrId={d.id}
           owners={ownersDraft}
@@ -401,6 +451,40 @@ function DrawerBody({
             emptyLabel="No linked initiatives yet."
             allSelectedLabel="Every initiative is already linked."
             removeAriaLabel={(title) => `Unlink initiative: ${title}`}
+            renderSelected={(selected, remove) =>
+              selected.length > 0 ? (
+                <div className="overflow-hidden rounded-lg border border-beige-20">
+                  <table className="w-full text-sm">
+                    <tbody>
+                      {selected.map((id) => {
+                        const linked = initiatives.find((i) => i.id === id);
+                        return (
+                          <tr key={id} className="border-b border-beige-10 last:border-b-0">
+                            <td className="px-3 py-2 text-green-90">{linked?.title ?? id}</td>
+                            <td className="w-px whitespace-nowrap px-3 py-2">
+                              {/* Round shape, unaffected by T14's OKR-scoped square badges — StatusTag doesn't take a shape prop; initiative status stays round everywhere. */}
+                              {linked && <StatusTag status={linked.status} />}
+                            </td>
+                            <td className="w-px px-2 py-2">
+                              <button
+                                type="button"
+                                onClick={() => remove(id)}
+                                className="shrink-0 rounded p-1 text-beige-60 hover:bg-beige-10 hover:text-red-60"
+                                aria-label={`Unlink initiative: ${linked?.title ?? id}`}
+                              >
+                                <X size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-sm text-beige-60">No linked initiatives yet.</p>
+              )
+            }
           />
         </div>
       </div>

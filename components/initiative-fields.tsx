@@ -280,6 +280,7 @@ export function DependencyPicker({
   allSelectedLabel = "Every other initiative is already a dependency.",
   removeAriaLabel,
   searchPlaceholder = "Search initiatives…",
+  renderSelected,
 }: {
   candidates: Initiative[];
   selected: string[];
@@ -292,6 +293,10 @@ export function DependencyPicker({
   allSelectedLabel?: string;
   removeAriaLabel?: (title: string) => string;
   searchPlaceholder?: string;
+  /** Overrides the default chip rendering of `selected` (e.g. a table row
+   * instead of a chip) — the add/remove dropdown below it is unaffected.
+   * `remove` is the same per-id removal handler the default chips use. */
+  renderSelected?: (selected: string[], remove: (id: string) => void) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -316,7 +321,9 @@ export function DependencyPicker({
 
   return (
     <div className="space-y-2">
-      {selected.length > 0 ? (
+      {renderSelected ? (
+        renderSelected(selected, remove)
+      ) : selected.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">
           {selected.map((id) => (
             <span
