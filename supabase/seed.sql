@@ -275,12 +275,28 @@ values
    'rejected', 'optional', '2026-03-31', 0.5, 'blocked',
    'Deprioritized in favor of the PBX roadmap this quarter.', 5000);
 
+-- Archived OKR (superseded), so QA/PM can exercise archived-OKR filtering
+-- with a real example. Explicit archived/updated_at columns kept in a
+-- separate insert so the rows above stay untouched.
+insert into okrs
+  (id, title, strategic_objective_id, team_id, business_unit_id, year, quarter,
+   deliverable_detail, governance_status, okr_class, target_date, achievement,
+   health, notes, position, archived, updated_at)
+values
+  ('okr-visual-editor-perf-2025-q4', 'Ship visual editor performance rework (2.5)',
+   'so-core', 'team-visual-builders', null, 2025, 4,
+   'Reduce editor load and save latency ahead of the visual editor 3.0 rebuild.',
+   'rejected', 'optional', '2025-12-31', 0.4, 'blocked',
+   'Superseded by Visual editor 3.0; remaining perf work folded into that initiative and this OKR closed out.',
+   6000, true, '2025-12-18T10:00:00Z');
+
 insert into okr_owners (okr_id, owner_id, role) values
   ('okr-app-onboarding', 'u-magali', 'owner'),
   ('okr-app-flags-approvals', 'u-magali', 'owner'),
   ('okr-pbx-adoption-q1', 'u-tom', 'owner'),
   ('okr-pbx-adoption-q2', 'u-tom', 'owner'),
-  ('okr-disrupt-governance-q1', 'u-tom', 'contributor');
+  ('okr-disrupt-governance-q1', 'u-tom', 'contributor'),
+  ('okr-visual-editor-perf-2025-q4', 'u-sofia', 'owner');
 
 insert into okr_initiatives (okr_id, initiative_id) values
   ('okr-pbx-adoption-q1', 'i-pbx'),

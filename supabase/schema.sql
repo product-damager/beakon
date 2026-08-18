@@ -372,3 +372,108 @@ do $$ begin
   create policy "authenticated full access" on okr_flags
     for all to authenticated using (true) with check (true);
 exception when duplicate_object then null; end $$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- persist_okr(): transactional upsert + owner/initiative-link replace
+-- ══════════════════════════════════════════════════════════════════════
+-- Added Sprint Chickadee Week 2 (also in
+-- supabase/migrations/2026-08-persist-okr-rpc.sql — see that file for the
+-- full rationale, security-invoker decision, error-shape decision, and
+-- manual test plan). lib/data.ts's persistOkr() used to run upsert(okr) ->
+-- delete okr_owners -> insert owners -> delete okr_initiatives -> insert
+-- links as four separate, non-transactional Supabase calls; a failure
+-- partway through (e.g. a duplicate (okr_id, owner_id) primary-key
+-- violation) left the deletes committed with no replacement rows. Wrapping
+-- all of it in one plpgsql function body makes it one transaction: any
+-- exception rolls back everything that ran before it. `security invoker`
+-- (the default, stated explicitly here) keeps this RLS-compatible with the
+-- "authenticated full access" policies above — no privilege escalation.
+create or replace function persist_okr(
+  p_id text,
+  p_title text,
+  p_strategic_objective_id text,
+  p_team_id text,
+  p_business_unit_id text,
+  p_year smallint,
+  p_quarter smallint,
+  p_deliverable_detail text,
+  p_governance_status okr_governance_status,
+  p_okr_class okr_class,
+  p_target_date date,
+  p_achievement numeric,
+  p_health initiative_health,
+  p_notes text,
+  p_carried_from_id text,
+  p_archived boolean,
+  p_position double precision,
+  p_owners jsonb,          -- array of {"owner_id": text, "role": text}
+  p_initiative_ids text[]
+) returns void
+language plpgsql
+security invoker
+as $$
+begin
+  insert into okrs (
+    id, title, strategic_objective_id, team_id, business_unit_id, year, quarter,
+    deliverable_detail, governance_status, okr_class, target_date, achievement,
+    health, notes, carried_from_id, archived, position
+  )
+  values (
+    p_id, p_title, p_strategic_objective_id, p_team_id, p_business_unit_id, p_year, p_quarter,
+    p_deliverable_detail, p_governance_status, p_okr_class, p_target_date, p_achievement,
+    p_health, p_notes, p_carried_from_id, p_archived, p_position
+  )
+  on conflict (id) do update set
+    title                   = excluded.title,
+    strategic_objective_id  = excluded.strategic_objective_id,
+    team_id                 = excluded.team_id,
+    business_unit_id        = excluded.business_unit_id,
+    year                    = excluded.year,
+    quarter                 = excluded.quarter,
+    deliverable_detail      = excluded.deliverable_detail,
+    governance_status       = excluded.governance_status,
+    okr_class               = excluded.okr_class,
+    target_date             = excluded.target_date,
+    achievement             = excluded.achievement,
+    health                  = excluded.health,
+    notes                   = excluded.notes,
+    carried_from_id         = excluded.carried_from_id,
+    archived                = excluded.archived,
+    position                = excluded.position;
+
+  delete from okr_owners where okr_id = p_id;
+  if p_owners is not null and jsonb_array_length(p_owners) > 0 then
+    begin
+      insert into okr_owners (okr_id, owner_id, role)
+      select p_id, elem->>'owner_id', coalesce(elem->>'role', 'contributor')
+      from jsonb_array_elements(p_owners) as elem;
+    exception when unique_violation then
+      raise exception 'persist_okr: duplicate owner in OKR % — each owner can only be listed once', p_id
+        using errcode = 'unique_violation';
+    end;
+  end if;
+
+  delete from okr_initiatives where okr_id = p_id;
+  if p_initiative_ids is not null and array_length(p_initiative_ids, 1) > 0 then
+    begin
+      insert into okr_initiatives (okr_id, initiative_id)
+      select p_id, initiative_id from unnest(p_initiative_ids) as initiative_id;
+    exception when unique_violation then
+      raise exception 'persist_okr: duplicate initiative link in OKR % — each initiative can only be linked once', p_id
+        using errcode = 'unique_violation';
+    end;
+  end if;
+end;
+$$;
+
+revoke execute on function persist_okr(
+  text, text, text, text, text, smallint, smallint, text, okr_governance_status,
+  okr_class, date, numeric, initiative_health, text, text, boolean, double precision,
+  jsonb, text[]
+) from public;
+
+grant execute on function persist_okr(
+  text, text, text, text, text, smallint, smallint, text, okr_governance_status,
+  okr_class, date, numeric, initiative_health, text, text, boolean, double precision,
+  jsonb, text[]
+) to authenticated;

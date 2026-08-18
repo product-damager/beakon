@@ -261,9 +261,13 @@ export function DeliveryLinksEditor({
 }
 
 /**
- * Multi-select dependency picker: current dependencies as removable chips plus a
- * searchable add-dropdown. Candidates that would close a dependency cycle stay
- * listed but disabled with an inline reason — a warn-and-guard, not a silent drop.
+ * Multi-select chip picker: current selections as removable chips plus a
+ * searchable add-dropdown. Originally dependency-specific; generalized with
+ * optional copy/behavior overrides so it also powers the OKR↔initiative
+ * linking picker (Sprint Chickadee), which has no cycle concept — `wouldCycle`
+ * defaults to "never" rather than duplicating ~90 lines for a thin sibling.
+ * Candidates that would close a dependency cycle stay listed but disabled
+ * with an inline reason — a warn-and-guard, not a silent drop.
  */
 export function DependencyPicker({
   candidates,
@@ -271,12 +275,28 @@ export function DependencyPicker({
   onChange,
   wouldCycle,
   resolveTitle,
+  addLabel = "Add dependency",
+  emptyLabel = "No dependencies yet.",
+  allSelectedLabel = "Every other initiative is already a dependency.",
+  removeAriaLabel,
+  searchPlaceholder = "Search initiatives…",
+  renderSelected,
 }: {
   candidates: Initiative[];
   selected: string[];
   onChange: (ids: string[]) => void;
-  wouldCycle: (id: string) => boolean;
+  /** Defaults to "never cycles" — only dependency links have a cycle concept. */
+  wouldCycle?: (id: string) => boolean;
   resolveTitle: (id: string) => string;
+  addLabel?: string;
+  emptyLabel?: string;
+  allSelectedLabel?: string;
+  removeAriaLabel?: (title: string) => string;
+  searchPlaceholder?: string;
+  /** Overrides the default chip rendering of `selected` (e.g. a table row
+   * instead of a chip) — the add/remove dropdown below it is unaffected.
+   * `remove` is the same per-id removal handler the default chips use. */
+  renderSelected?: (selected: string[], remove: (id: string) => void) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -286,6 +306,8 @@ export function DependencyPicker({
     setQuery("");
   };
   useOutsideClose(ref, open, close);
+  const checkCycle = wouldCycle ?? (() => false);
+  const removeLabel = removeAriaLabel ?? ((title: string) => `Remove dependency: ${title}`);
 
   const selectedSet = new Set(selected);
   const add = (id: string) => onChange([...selected, id]);
@@ -295,11 +317,13 @@ export function DependencyPicker({
   const addable = candidates
     .filter((c) => !selectedSet.has(c.id))
     .filter((c) => (q ? c.title.toLowerCase().includes(q) : true));
-  const firstPickable = addable.find((c) => !wouldCycle(c.id));
+  const firstPickable = addable.find((c) => !checkCycle(c.id));
 
   return (
     <div className="space-y-2">
-      {selected.length > 0 ? (
+      {renderSelected ? (
+        renderSelected(selected, remove)
+      ) : selected.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">
           {selected.map((id) => (
             <span
@@ -311,7 +335,7 @@ export function DependencyPicker({
                 type="button"
                 onClick={() => remove(id)}
                 className="shrink-0 rounded p-0.5 text-beige-60 hover:bg-beige-20 hover:text-green-90"
-                aria-label={`Remove dependency: ${resolveTitle(id)}`}
+                aria-label={removeLabel(resolveTitle(id))}
               >
                 <X size={13} />
               </button>
@@ -319,7 +343,7 @@ export function DependencyPicker({
           ))}
         </div>
       ) : (
-        <p className="text-sm text-beige-60">No dependencies yet.</p>
+        <p className="text-sm text-beige-60">{emptyLabel}</p>
       )}
 
       <div className="relative" ref={ref}>
@@ -330,7 +354,7 @@ export function DependencyPicker({
           aria-expanded={open}
           className="flex items-center gap-1 text-[13px] font-medium text-green-70 hover:text-green-60"
         >
-          <Plus size={14} /> Add dependency
+          <Plus size={14} /> {addLabel}
         </button>
 
         {open && (
@@ -350,29 +374,29 @@ export function DependencyPicker({
                     add(firstPickable.id);
                   }
                 }}
-                placeholder="Search initiatives…"
+                placeholder={searchPlaceholder}
                 className="h-8 w-full rounded-lg border border-beige-30 bg-white pl-8 pr-3 text-sm text-green-90 placeholder:text-beige-60 focus:outline-none focus:ring-2 focus:ring-green-90"
               />
             </div>
             <div className="calm-scroll max-h-56 space-y-0.5 overflow-auto" role="listbox">
               {addable.map((c) => {
-                const cyclic = wouldCycle(c.id);
+                const isCyclic = checkCycle(c.id);
                 return (
                   <button
                     key={c.id}
                     type="button"
                     role="option"
                     aria-selected={false}
-                    disabled={cyclic}
+                    disabled={isCyclic}
                     onClick={() => add(c.id)}
-                    title={cyclic ? "Would create a dependency cycle" : undefined}
+                    title={isCyclic ? "Would create a dependency cycle" : undefined}
                     className={cn(
                       "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm",
-                      cyclic ? "cursor-not-allowed text-beige-60" : "text-green-90 hover:bg-beige-10"
+                      isCyclic ? "cursor-not-allowed text-beige-60" : "text-green-90 hover:bg-beige-10"
                     )}
                   >
                     <span className="truncate">{c.title}</span>
-                    {cyclic && (
+                    {isCyclic && (
                       <span className="mono-label-sm ml-auto shrink-0 text-beige-60">would create a cycle</span>
                     )}
                   </button>
@@ -380,9 +404,7 @@ export function DependencyPicker({
               })}
               {addable.length === 0 && (
                 <div className="px-2.5 py-2 text-sm text-beige-60">
-                  {candidates.every((c) => selectedSet.has(c.id))
-                    ? "Every other initiative is already a dependency."
-                    : "No matches"}
+                  {candidates.every((c) => selectedSet.has(c.id)) ? allSelectedLabel : "No matches"}
                 </div>
               )}
             </div>

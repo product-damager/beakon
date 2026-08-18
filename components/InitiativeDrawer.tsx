@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Activity,
   Archive,
@@ -87,15 +87,25 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
 
   // Local edit + autosave. Discrete controls commit immediately via patch(); free
   // text commits on blur via saveNow(). In create mode nothing persists until Create.
+  // `lastSavedRef` tracks the last snapshot actually written via saveInitiative(),
+  // so a blur/commit that didn't change anything (e.g. click into title, click
+  // back out) skips the persistence call instead of stamping a fresh updatedAt
+  // for no reason.
+  const lastSavedRef = useRef(source);
   const set = <K extends keyof Initiative>(key: K, value: Initiative[K]) =>
     setD((prev) => ({ ...prev, [key]: value }));
+  const saveIfChanged = (next: Initiative) => {
+    if (JSON.stringify(next) === JSON.stringify(lastSavedRef.current)) return;
+    lastSavedRef.current = next;
+    saveInitiative(next);
+  };
   const patch = (p: Partial<Initiative>) => {
     const next = { ...d, ...p };
     setD(next);
-    if (!creating) saveInitiative(next);
+    if (!creating) saveIfChanged(next);
   };
   const saveNow = () => {
-    if (!creating) saveInitiative(d);
+    if (!creating) saveIfChanged(d);
   };
 
   const theme = getTheme(d.themeId);
@@ -190,7 +200,7 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
           placeholder="What is this initiative?"
           aria-label="Title"
           autoFocus={creating}
-          className="w-full bg-transparent font-display text-xl font-semibold leading-snug text-green-90 placeholder:text-beige-40 focus:outline-none"
+          className="-mx-2 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 py-0.5 font-display text-xl font-semibold leading-snug text-green-90 placeholder:text-beige-40 hover:border-beige-30 hover:bg-beige-5 focus:border-green-90 focus:bg-white focus:outline-none focus:ring-2 focus:ring-green-90/30"
         />
         {creating && titleTouched && titleMissing && (
           <p className="mt-1 text-xs text-red-70">Give the initiative a title.</p>

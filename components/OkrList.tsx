@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { useRoadmap } from "@/lib/store";
 import { formatShortEN } from "@/lib/dates";
 import {
   HEALTH_META,
@@ -9,16 +10,21 @@ import {
   type Health,
   type Okr,
   type OkrGovernanceStatus,
+  type OkrInitiativeLink,
+  type OkrOwner,
   type StrategicObjective,
   type Team,
 } from "@/lib/types";
 import { cn } from "@/lib/cn";
-import { Tag } from "./ui";
+import { HealthTag, Tag } from "./ui";
+import { InlineTagSelect } from "./form";
 
-type SortKey = "team" | "objective" | "quarter" | "governance" | "achievement" | "health" | "updated";
+type SortKey = "title" | "team" | "objective" | "quarter" | "governance" | "health" | "achievement" | "updated";
 type SortState = { key: SortKey; dir: 1 | -1 };
 
 const HEALTH_ORDER: Record<Health, number> = { on_track: 0, at_risk: 1, blocked: 2 };
+/** Health values in severity order, for the inline picker options. */
+const HEALTH_KEYS = Object.keys(HEALTH_META) as Health[];
 
 /**
  * Governance workflow state — its own meaning-bearing palette (distinct from
@@ -32,6 +38,8 @@ export const OKR_GOVERNANCE_META: Record<OkrGovernanceStatus, { label: string; t
   validated: { label: "Validated", tag: "bg-green-30 text-green-70", order: 4 },
   rejected: { label: "Rejected", tag: "bg-red-30 text-red-70", order: 5 },
 };
+/** Governance values in workflow order, for the inline picker options. */
+const GOVERNANCE_KEYS = Object.keys(OKR_GOVERNANCE_META) as OkrGovernanceStatus[];
 
 /** Achievement is null when the OKR hasn't been assessed yet — mirrors the
  * DIVE "Not cast yet" convention (see lib/types.ts's scoreTier()). */
@@ -47,21 +55,24 @@ interface Column {
 }
 
 const COLUMNS: Column[] = [
+  { k: "title", label: "Title" },
   { k: "team", label: "Team" },
   { k: "objective", label: "Strategic objective" },
   { k: "quarter", label: "Quarter" },
   { k: "governance", label: "Governance" },
-  { k: "achievement", label: "Achievement", align: "right" },
   { k: "health", label: "Health" },
+  { k: "achievement", label: "Achievement", align: "right" },
   { k: "updated", label: "Updated", align: "right" },
 ];
 
 function Th({ col, sort, onToggle }: { col: Column; sort: SortState; onToggle: (k: SortKey) => void }) {
   const { k, label, align = "left", className } = col;
+  const active = sort.key === k;
+  const chevron = active && (sort.dir === 1 ? <ChevronUp size={13} /> : <ChevronDown size={13} />);
   return (
     <th
       className={cn(
-        "bg-beige-5 px-3 py-0",
+        "bg-beige-20 px-3 py-0",
         align === "right" && "text-right",
         align === "center" && "text-center",
         className
@@ -75,10 +86,13 @@ function Th({ col, sort, onToggle }: { col: Column; sort: SortState; onToggle: (
           align === "center" && "mx-auto"
         )}
       >
+        {/* For right-aligned columns, the reserved chevron slot goes first so
+         * the label's own right edge — not the (often empty) chevron slot —
+         * lands flush against the column's true right edge, matching the
+         * right-aligned value below it instead of reading as shifted left. */}
+        {align === "right" && <span className="flex w-3.5 shrink-0 justify-center text-green-60">{chevron}</span>}
         {label}
-        <span className="flex w-3.5 shrink-0 justify-center text-green-60">
-          {sort.key === k && (sort.dir === 1 ? <ChevronUp size={13} /> : <ChevronDown size={13} />)}
-        </span>
+        {align !== "right" && <span className="flex w-3.5 shrink-0 justify-center text-green-60">{chevron}</span>}
       </button>
     </th>
   );
@@ -89,14 +103,21 @@ export function OkrList({
   teams,
   businessUnits,
   strategicObjectives,
+  okrOwners,
+  okrInitiatives,
+  saveOkr,
   onSelect,
 }: {
   okrs: Okr[];
   teams: Team[];
   businessUnits: BusinessUnit[];
   strategicObjectives: StrategicObjective[];
+  okrOwners: OkrOwner[];
+  okrInitiatives: OkrInitiativeLink[];
+  saveOkr: (okr: Okr, owners: OkrOwner[], initiativeIds: string[]) => void;
   onSelect: (id: string) => void;
 }) {
+  const { notify } = useRoadmap();
   const [sort, setSort] = useState<SortState>({ key: "updated", dir: -1 });
 
   const getTeam = (id: string | undefined) => teams.find((t) => t.id === id);
@@ -112,9 +133,19 @@ export function OkrList({
     return bu ? bu.name : "—";
   };
 
+  // Inline governance/health edits go through saveOkr(), which replaces an
+  // OKR's owners/initiative links wholesale — pass the current ones through
+  // unchanged so an inline edit here never silently drops them (mirrors how
+  // OkrDrawer's patch() always re-sends ownersDraft/initiativeIdsDraft).
+  const ownersFor = (id: string) => okrOwners.filter((o) => o.okrId === id);
+  const initiativeIdsFor = (id: string) =>
+    okrInitiatives.filter((l) => l.okrId === id).map((l) => l.initiativeId);
+
   const sorted = useMemo(() => {
     const val = (o: Okr): string | number => {
       switch (sort.key) {
+        case "title":
+          return o.title.toLowerCase();
         case "team":
           return ownerLabel(o).toLowerCase();
         case "objective":
@@ -145,64 +176,93 @@ export function OkrList({
     setSort((s) => (s.key === key ? { key, dir: (s.dir * -1) as 1 | -1 } : { key, dir: 1 }));
 
   return (
-    <div className="calm-scroll min-h-0 flex-1 overflow-auto">
-      <table className="w-full border-collapse text-sm">
-        <thead className="sticky top-0 z-10">
-          <tr className="border-b border-beige-20">
-            {COLUMNS.map((col) => (
-              <Th key={col.k} col={col} sort={sort} onToggle={toggle} />
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((o) => {
-            const objective = getObjective(o.strategicObjectiveId);
-            const governance = OKR_GOVERNANCE_META[o.governanceStatus];
-            return (
-              <tr
-                key={o.id}
-                onClick={() => {
-                  if (window.getSelection()?.toString()) return;
-                  onSelect(o.id);
-                }}
-                className="cursor-pointer border-b border-beige-10 hover:bg-beige-5"
-              >
-                <td className="px-3 py-2.5">
-                  <span className="font-medium text-green-90">{ownerLabel(o)}</span>
-                </td>
-                <td className="px-3 py-2.5 text-green-70">{objective?.name ?? "—"}</td>
-                <td className="whitespace-nowrap px-3 py-2.5 text-green-70">
-                  Q{o.quarter} {o.year}
-                </td>
-                <td className="px-3 py-2.5">
-                  <Tag className={governance.tag}>{governance.label}</Tag>
-                </td>
-                <td className="px-3 py-2.5 text-right">
-                  <span
-                    className={cn(
-                      "font-display font-semibold tabular-nums",
-                      o.achievement === null ? "text-beige-60" : "text-green-90"
-                    )}
-                  >
-                    {formatAchievement(o.achievement)}
-                  </span>
-                </td>
-                <td className="px-3 py-2.5">
-                  <span className={cn("mono-label inline-flex items-center gap-1 rounded-md px-2 py-1", HEALTH_META[o.health].tag)}>
-                    {HEALTH_META[o.health].label}
-                  </span>
-                </td>
-                <td className="whitespace-nowrap px-3 py-2.5 text-right text-beige-60">
-                  {formatShortEN(o.updatedAt.slice(0, 10))}
-                </td>
+    <div className="min-h-0 flex-1 overflow-hidden p-6">
+      <div className="flex h-full flex-col overflow-hidden rounded-xl border border-beige-20 bg-white">
+        <div className="calm-scroll min-h-0 flex-1 overflow-auto">
+          <table className="w-full border-collapse text-sm">
+            <thead className="sticky top-0 z-10">
+              <tr className="border-b border-beige-20">
+                {COLUMNS.map((col) => (
+                  <Th key={col.k} col={col} sort={sort} onToggle={toggle} />
+                ))}
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      {sorted.length === 0 && (
-        <div className="p-10 text-center text-sm text-beige-60">No OKRs match the current filters.</div>
-      )}
+            </thead>
+            <tbody>
+              {sorted.map((o) => {
+                const objective = getObjective(o.strategicObjectiveId);
+                return (
+                  <tr
+                    key={o.id}
+                    onClick={() => {
+                      if (window.getSelection()?.toString()) return;
+                      onSelect(o.id);
+                    }}
+                    className="cursor-pointer border-b border-beige-10 hover:bg-beige-10"
+                  >
+                    <td className="px-3 py-2.5">
+                      <span className="font-medium text-green-90">{o.title || "Untitled OKR"}</span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className="text-green-70">{ownerLabel(o)}</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-green-70">{objective?.name ?? "—"}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-green-70">
+                      Q{o.quarter} {o.year}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <InlineTagSelect
+                        label="Change governance"
+                        value={o.governanceStatus}
+                        options={GOVERNANCE_KEYS}
+                        render={(g: OkrGovernanceStatus) => (
+                          <Tag shape="square" className={OKR_GOVERNANCE_META[g].tag}>
+                            {OKR_GOVERNANCE_META[g].label}
+                          </Tag>
+                        )}
+                        onSelect={(governanceStatus) => {
+                          saveOkr({ ...o, governanceStatus }, ownersFor(o.id), initiativeIdsFor(o.id));
+                          notify({
+                            message: `Governance set to ${OKR_GOVERNANCE_META[governanceStatus].label}`,
+                            tone: "success",
+                          });
+                        }}
+                      />
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <InlineTagSelect
+                        label="Change health"
+                        value={o.health}
+                        options={HEALTH_KEYS}
+                        render={(h: Health) => <HealthTag health={h} shape="square" />}
+                        onSelect={(health) => {
+                          saveOkr({ ...o, health }, ownersFor(o.id), initiativeIdsFor(o.id));
+                          notify({ message: `Health set to ${HEALTH_META[health].label}`, tone: "success" });
+                        }}
+                      />
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <span
+                        className={cn(
+                          "font-display font-semibold tabular-nums",
+                          o.achievement === null ? "text-beige-60" : "text-green-90"
+                        )}
+                      >
+                        {formatAchievement(o.achievement)}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right text-beige-60">
+                      {formatShortEN(o.updatedAt.slice(0, 10))}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {sorted.length === 0 && (
+            <div className="p-10 text-center text-sm text-beige-60">No OKRs match the current filters.</div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
