@@ -22,7 +22,7 @@ import {
 import { cn } from "@/lib/cn";
 import { Button, Eyebrow, ScoreTierTag } from "./ui";
 import { Field, NativeSelect, TextInput } from "./form";
-import { useOutsideClose } from "./hooks";
+import { useOutsideClose, usePopoverPlacement } from "./hooks";
 import { baseInput, TeamGroupList } from "./okr-fields";
 
 /** Prepend https:// to a scheme-less URL so a delivery link never becomes relative. */
@@ -81,6 +81,7 @@ export function TeamPicker({
     setQuery("");
   };
   useOutsideClose(ref, open, close);
+  const placement = usePopoverPlacement(ref, open);
 
   const selectedTeam = teamId ? teams.find((t) => t.id === teamId) : undefined;
   const q = query.trim().toLowerCase();
@@ -108,7 +109,12 @@ export function TeamPicker({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-full rounded-xl border border-beige-20 bg-white p-2 shadow-lg">
+        <div
+          className={cn(
+            "absolute left-0 z-50 w-full rounded-xl border border-beige-20 bg-white p-2 shadow-lg",
+            placement === "top" ? "bottom-full mb-1" : "top-full mt-1"
+          )}
+        >
           <div className="relative mb-2">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-beige-60" />
             <input

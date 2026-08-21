@@ -546,3 +546,193 @@ grant execute on function persist_okr(
   okr_class, date, numeric, initiative_health, text, text, boolean, double precision,
   jsonb, text[]
 ) to authenticated;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- Roadmaps (Sprint Heron Week 2) — unified List/Board/Timeline saved view.
+-- See docs/decisions/008-roadmap-entity-visibility-model-and-okr-separation.md
+-- and docs/plans/heron-week-2-unified-roadmap-view.md §2a. This is the app's
+-- first per-user-owned, RLS-scoped object: sharing is owner-controlled
+-- (private / shared-view-only / shared-editable), and exactly one
+-- system-owned, non-deletable "General Roadmap" always exists (seeded below
+-- in seed.sql/seed_prod.sql, id = 'roadmap-general').
+-- ══════════════════════════════════════════════════════════════════════
+
+-- `current_owner_id()` — matches the signed-in JWT's email against `owners`,
+-- the same email-match lib/store.tsx's client-side `currentOwner` already
+-- does, now available server-side for RLS/RPC use. This is the app's first
+-- per-user-scoped RLS — this helper is the seam any future per-user feature
+-- should reuse, not a one-off written just for Roadmaps.
+create or replace function current_owner_id() returns text
+language sql
+security invoker
+stable
+as $$
+  select id from owners where email = (auth.jwt() ->> 'email') limit 1;
+$$;
+
+revoke execute on function current_owner_id() from public;
+grant execute on function current_owner_id() to authenticated;
+
+create table if not exists roadmaps (
+  id text primary key,
+  owner_id text references owners (id),        -- null only for the system row
+  name text not null,
+  view_mode text not null default 'list' check (view_mode in ('list', 'board', 'timeline')),
+  filters jsonb not null default '{}'::jsonb,
+  group_by text not null default 'theme' check (group_by in ('theme', 'team', 'owner')),
+  zoom text not null default 'month' check (zoom in ('month', 'quarter', 'half')),
+  zoom_scale numeric not null default 1,
+  density text not null default 'comfortable' check (density in ('comfortable', 'compact')),
+  timeline_sort jsonb,                          -- { key, dir } or null
+  visibility text not null default 'private' check (visibility in ('private', 'shared')),
+  editable boolean not null default false,       -- meaningful only when visibility = 'shared'
+  is_system boolean not null default false,
+  position double precision not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint roadmaps_system_owner_check
+    check ((is_system and owner_id is null) or (not is_system and owner_id is not null))
+);
+
+drop trigger if exists roadmaps_touch_updated_at on roadmaps;
+create trigger roadmaps_touch_updated_at
+  before update on roadmaps
+  for each row execute function touch_updated_at();
+
+alter table roadmaps enable row level security;
+
+-- SELECT/DELETE/INSERT only — deliberately no UPDATE policy. All updates to
+-- filters/groupBy/viewMode/etc. route through persist_roadmap() below,
+-- which runs `security invoker` (still RLS-subject for the reads it does
+-- internally) but keeps the real owner/editable/system authorization logic
+-- in the function body rather than a using/with check boolean (ADR 008
+-- decision 1) — the same reasoning persist_okr() already established for
+-- "authorization too conditional for plain RLS."
+do $$ begin
+  create policy "select own shared or system roadmaps" on roadmaps
+    for select to authenticated
+    using (owner_id = current_owner_id() or visibility = 'shared' or is_system = true);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "delete own non-system roadmaps" on roadmaps
+    for delete to authenticated
+    using (owner_id = current_owner_id() and is_system = false);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "insert own roadmaps" on roadmaps
+    for insert to authenticated
+    with check (owner_id = current_owner_id());
+exception when duplicate_object then null; end $$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- persist_roadmap(): the only path that updates an existing Roadmap's
+-- display fields. See supabase/migrations/2026-08-persist-roadmap-rpc.sql
+-- for the full rationale, matching persist_okr()'s documentation
+-- convention, and the manual test plan.
+-- ══════════════════════════════════════════════════════════════════════
+create or replace function persist_roadmap(
+  p_id text,
+  p_owner_id text,
+  p_name text,
+  p_view_mode text,
+  p_filters jsonb,
+  p_group_by text,
+  p_zoom text,
+  p_zoom_scale numeric,
+  p_density text,
+  p_timeline_sort jsonb,
+  p_visibility text,
+  p_editable boolean,
+  p_position double precision
+) returns void
+language plpgsql
+security invoker
+as $$
+declare
+  v_existing roadmaps%rowtype;
+  v_caller text := current_owner_id();
+begin
+  select * into v_existing from roadmaps where id = p_id;
+
+  if not found then
+    -- Creating a brand-new Roadmap (no existing row with this id yet).
+    -- Nobody creates `is_system` rows through the app — the one System row
+    -- is seed-only — so every insert here is a normal user-owned Roadmap,
+    -- and the caller must be its own owner (mirrors the "insert own
+    -- roadmaps" RLS policy a direct table insert would also enforce).
+    if v_caller is null or p_owner_id is distinct from v_caller then
+      raise exception 'persist_roadmap: cannot create a Roadmap owned by someone other than the caller';
+    end if;
+
+    insert into roadmaps (
+      id, owner_id, name, view_mode, filters, group_by, zoom, zoom_scale,
+      density, timeline_sort, visibility, editable, is_system, position
+    ) values (
+      p_id, p_owner_id, p_name, p_view_mode, p_filters, p_group_by, p_zoom, p_zoom_scale,
+      p_density, p_timeline_sort, p_visibility, p_editable, false, p_position
+    );
+    return;
+  end if;
+
+  if v_existing.is_system then
+    -- ADR 008 decision 2: nobody — not even an "owner," since the System
+    -- row has none — updates the System row's display fields through this
+    -- function. Its view_mode/filters/etc. stay at their seeded defaults;
+    -- per-user view-mode switching on it is client-only state.
+    raise exception 'persist_roadmap: the System Roadmap cannot be updated';
+  end if;
+
+  if v_existing.owner_id = v_caller then
+    -- Full write, including reassigning owner_id/visibility/editable/name —
+    -- ownership transfer isn't getting a UI this week, but the RPC doesn't
+    -- structurally block it (plan §2a / ADR 008).
+    update roadmaps set
+      owner_id      = p_owner_id,
+      name          = p_name,
+      view_mode     = p_view_mode,
+      filters       = p_filters,
+      group_by      = p_group_by,
+      zoom          = p_zoom,
+      zoom_scale    = p_zoom_scale,
+      density       = p_density,
+      timeline_sort = p_timeline_sort,
+      visibility    = p_visibility,
+      editable      = p_editable,
+      position      = p_position
+    where id = p_id;
+    return;
+  end if;
+
+  if v_existing.visibility = 'shared' and v_existing.editable then
+    -- Deliberate silent-ignore, not an error: an editor's client can only
+    -- ever change the view-shaping fields below. owner_id/name/visibility/
+    -- editable/position stay pinned to whatever is already in the DB row
+    -- regardless of what the caller passed for them — sharing settings are
+    -- always owner-only, never delegable to an editor (ADR 008 decision 1).
+    -- A shared-editable client resubmitting its last-known name/visibility
+    -- unchanged is the common case this is built for, not a hostile one.
+    update roadmaps set
+      view_mode     = p_view_mode,
+      filters       = p_filters,
+      group_by      = p_group_by,
+      zoom          = p_zoom,
+      zoom_scale    = p_zoom_scale,
+      density       = p_density,
+      timeline_sort = p_timeline_sort
+    where id = p_id;
+    return;
+  end if;
+
+  raise exception 'persist_roadmap: caller is not authorized to update Roadmap %', p_id;
+end;
+$$;
+
+revoke execute on function persist_roadmap(
+  text, text, text, text, jsonb, text, text, numeric, text, jsonb, text, boolean, double precision
+) from public;
+
+grant execute on function persist_roadmap(
+  text, text, text, text, jsonb, text, text, numeric, text, jsonb, text, boolean, double precision
+) to authenticated;

@@ -13,10 +13,12 @@ import type {
   OkrInitiativeLink,
   OkrOwner,
   Owner,
+  Roadmap,
   StrategicObjective,
   Status,
   Team,
   Theme,
+  TimelineSort,
 } from "./types";
 
 function client() {
@@ -166,6 +168,65 @@ function ownerToRow(o: Owner) {
   };
 }
 
+interface RoadmapRow {
+  id: string;
+  owner_id: string | null;
+  name: string;
+  view_mode: Roadmap["viewMode"];
+  filters: Record<string, unknown> | null;
+  group_by: Roadmap["groupBy"];
+  zoom: Roadmap["zoom"];
+  zoom_scale: number | string;
+  density: Roadmap["density"];
+  timeline_sort: TimelineSort | null;
+  visibility: Roadmap["visibility"];
+  editable: boolean;
+  is_system: boolean;
+  position: number | string;
+}
+
+function rowToRoadmap(row: RoadmapRow): Roadmap {
+  return {
+    id: row.id,
+    ownerId: row.owner_id,
+    name: row.name,
+    viewMode: row.view_mode,
+    filters: row.filters ?? {},
+    groupBy: row.group_by,
+    zoom: row.zoom,
+    zoomScale: Number(row.zoom_scale),
+    density: row.density,
+    timelineSort: row.timeline_sort ?? null,
+    visibility: row.visibility,
+    editable: row.editable,
+    isSystem: row.is_system,
+    position: Number(row.position),
+  };
+}
+
+/**
+ * DB row for insert/update. `is_system`/`created_at`/`updated_at` are
+ * omitted — `is_system` is never set by the app (the one System row is
+ * seed-only) and `updated_at` is trigger-maintained.
+ */
+function roadmapToRow(r: Roadmap) {
+  return {
+    id: r.id,
+    owner_id: r.ownerId,
+    name: r.name,
+    view_mode: r.viewMode,
+    filters: r.filters,
+    group_by: r.groupBy,
+    zoom: r.zoom,
+    zoom_scale: r.zoomScale,
+    density: r.density,
+    timeline_sort: r.timelineSort,
+    visibility: r.visibility,
+    editable: r.editable,
+    position: r.position ?? 0,
+  };
+}
+
 export interface Workspace {
   initiatives: Initiative[];
   themes: Theme[];
@@ -183,6 +244,13 @@ export interface Workspace {
   teams: Team[];
   businessUnits: BusinessUnit[];
   strategicObjectives: StrategicObjective[];
+  /**
+   * Small, always-needed metadata (Sprint Heron Week 2), same reasoning as
+   * teams/businessUnits/strategicObjectives above — every nav render needs
+   * to know which Roadmaps exist (at minimum the System row) to resolve
+   * `activeRoadmap`, so this is eager rather than lazy.
+   */
+  roadmaps: Roadmap[];
 }
 
 // ── Reads ──
@@ -190,7 +258,7 @@ export interface Workspace {
 /** Load the full authenticated workspace (all initiatives incl. archived). */
 export async function fetchWorkspace(): Promise<Workspace> {
   const sb = client();
-  const [iniRes, linkRes, themeRes, ownerRes, buRes, teamRes, soRes] = await Promise.all([
+  const [iniRes, linkRes, themeRes, ownerRes, buRes, teamRes, soRes, roadmapRes] = await Promise.all([
     sb.from("initiatives").select("*").order("position", { ascending: true }),
     sb.from("delivery_links").select("*").order("position", { ascending: true }),
     sb.from("themes").select("*"),
@@ -198,8 +266,9 @@ export async function fetchWorkspace(): Promise<Workspace> {
     sb.from("business_units").select("*"),
     sb.from("teams").select("*"),
     sb.from("strategic_objectives").select("*"),
+    sb.from("roadmaps").select("*").order("position", { ascending: true }),
   ]);
-  for (const r of [iniRes, linkRes, themeRes, ownerRes, buRes, teamRes, soRes]) {
+  for (const r of [iniRes, linkRes, themeRes, ownerRes, buRes, teamRes, soRes, roadmapRes]) {
     if (r.error) throw r.error;
   }
 
@@ -218,8 +287,9 @@ export async function fetchWorkspace(): Promise<Workspace> {
   const businessUnits = ((buRes.data ?? []) as BusinessUnitRow[]).map(rowToBusinessUnit);
   const teams = ((teamRes.data ?? []) as TeamRow[]).map(rowToTeam);
   const strategicObjectives = ((soRes.data ?? []) as StrategicObjectiveRow[]).map(rowToStrategicObjective);
+  const roadmaps = ((roadmapRes.data ?? []) as RoadmapRow[]).map(rowToRoadmap);
 
-  return { initiatives, themes, owners, teams, businessUnits, strategicObjectives };
+  return { initiatives, themes, owners, teams, businessUnits, strategicObjectives, roadmaps };
 }
 
 // ── Writes ──
@@ -550,5 +620,55 @@ export async function persistOkr(o: Okr, owners: OkrOwner[], initiativeIds: stri
     p_owners: owners.map(okrOwnerToRow),
     p_initiative_ids: initiativeIds,
   });
+  if (error) throw error;
+}
+
+// ── Roadmaps (Sprint Heron Week 2) — unified List/Board/Timeline saved view ──
+
+/**
+ * Upsert a Roadmap via the `persist_roadmap` RPC (supabase/schema.sql,
+ * supabase/migrations/2026-08-persist-roadmap-rpc.sql) — mirrors
+ * persistOkr()'s delegation to a Postgres function. The authorization
+ * logic (owner full-write / shared-editable filtered-write / System-row
+ * refusal / unauthorized-caller exception) is real conditional logic that
+ * plain RLS can't express as a single `using`/`with check` boolean, so
+ * there's deliberately no UPDATE policy on `roadmaps` at all — see ADR 008
+ * decision 1. Note the RPC may silently ignore some of the fields sent
+ * here (e.g. a shared-editable caller's `name`/`visibility` are pinned to
+ * their current DB values) — that's a documented, deliberate choice in the
+ * function itself, not a bug in this call site.
+ */
+export async function persistRoadmap(r: Roadmap): Promise<void> {
+  const sb = client();
+  const row = roadmapToRow(r);
+
+  const { error } = await sb.rpc("persist_roadmap", {
+    p_id: row.id,
+    p_owner_id: row.owner_id,
+    p_name: row.name,
+    p_view_mode: row.view_mode,
+    p_filters: row.filters,
+    p_group_by: row.group_by,
+    p_zoom: row.zoom,
+    p_zoom_scale: row.zoom_scale,
+    p_density: row.density,
+    p_timeline_sort: row.timeline_sort,
+    p_visibility: row.visibility,
+    p_editable: row.editable,
+    p_position: row.position,
+  });
+  if (error) throw error;
+}
+
+/**
+ * Delete a Roadmap. No RPC needed here (unlike persistRoadmap) — the
+ * `roadmaps` table's plain `DELETE` RLS policy (owner-only, never on
+ * `is_system` rows) is a single boolean check, exactly the case ADR 008
+ * decision 1 says plain RLS is fine for; only the write-side authorization
+ * (owner vs. shared-editable vs. system) needed the RPC's conditional logic.
+ */
+export async function deleteRoadmap(id: string): Promise<void> {
+  const sb = client();
+  const { error } = await sb.from("roadmaps").delete().eq("id", id);
   if (error) throw error;
 }

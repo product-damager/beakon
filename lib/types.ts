@@ -335,3 +335,50 @@ export interface OkrInitiativeLink {
   okrId: string;
   initiativeId: string;
 }
+
+// ── Roadmap (Sprint Heron Week 2 — unified List/Board/Timeline saved view) ──
+
+export type RoadmapVisibility = "private" | "shared";
+
+/**
+ * A saved List/Board/Timeline view. `viewMode` is a property of the saved
+ * object, not a separate nav destination — switching it updates this field
+ * in place, the same way changing a filter would. This is the app's first
+ * per-user-owned, RLS-scoped object: sharing is owner-controlled via
+ * `visibility` + `editable` (private / shared-view-only / shared-editable —
+ * two fields rather than a three-value enum, see ADR 008's "alternatives
+ * considered"). Exactly one system-owned, non-deletable Roadmap always
+ * exists (`id: "roadmap-general"`, `isSystem: true`, `ownerId: null`) — see
+ * docs/decisions/008-roadmap-entity-visibility-model-and-okr-separation.md
+ * decision 2 for why its `viewMode`/`filters`/etc. are never persisted by
+ * anyone (per-user view-mode switching on it is client-only state).
+ */
+export interface Roadmap {
+  id: string;
+  /** Null only for the System Roadmap (`isSystem: true`) — every user-created Roadmap has an owner. */
+  ownerId: string | null;
+  name: string;
+  viewMode: ViewKey;
+  /**
+   * Stored as `jsonb` in the DB — deliberately not the closed `Filters`
+   * type `lib/filters.ts` defines: `filters.ts` already imports from this
+   * file, so importing `Filters` back here would create a cycle. This also
+   * means a malformed/stale shape in the column loses type safety (plan
+   * §5's flagged risk) — callers that apply this as live filter state
+   * (`lib/store.tsx`) are responsible for normalizing/defaulting an
+   * unexpected shape, the same way `normalizeThemeColor()` guards
+   * `themes.color`.
+   */
+  filters: Record<string, unknown>;
+  groupBy: GroupBy;
+  zoom: Zoom;
+  zoomScale: number;
+  density: Density;
+  timelineSort: TimelineSort | null;
+  visibility: RoadmapVisibility;
+  /** Meaningful only when `visibility === "shared"` — ignored while private. */
+  editable: boolean;
+  isSystem: boolean;
+  /** Sidebar sort order among a user's own Roadmaps. */
+  position?: number;
+}

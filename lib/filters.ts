@@ -45,6 +45,35 @@ export const EMPTY_FILTERS: Filters = {
   visibilityMode: "is",
 };
 
+/**
+ * Coerce an arbitrary value (e.g. a Roadmap's `filters` jsonb column) into a
+ * well-formed `Filters`. `roadmaps.filters` is deliberately untyped storage
+ * (see lib/types.ts's `Roadmap.filters` doc comment) — a malformed/stale
+ * shape there would otherwise produce `undefined` fields that crash
+ * `applyFilters`/`FilterBar` on read. Same defensive-normalization pattern
+ * `normalizeThemeColor()` established for `themes.color`.
+ */
+export function normalizeFilters(raw: unknown): Filters {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const strArray = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  const mode = (v: unknown): FilterMode => (v === "is_not" ? "is_not" : "is");
+  return {
+    search: typeof r.search === "string" ? r.search : EMPTY_FILTERS.search,
+    owners: strArray(r.owners),
+    teams: strArray(r.teams),
+    themes: strArray(r.themes),
+    statuses: strArray(r.statuses) as Status[],
+    visibility: strArray(r.visibility) as Visibility[],
+    showDone: typeof r.showDone === "boolean" ? r.showDone : EMPTY_FILTERS.showDone,
+    ownersMode: mode(r.ownersMode),
+    teamsMode: mode(r.teamsMode),
+    themesMode: mode(r.themesMode),
+    statusesMode: mode(r.statusesMode),
+    visibilityMode: mode(r.visibilityMode),
+  };
+}
+
 /** True when an initiative's value passes a field filter given its selected values + mode. */
 function matchesField(values: string[], mode: FilterMode, value: string): boolean {
   if (!values.length) return true;

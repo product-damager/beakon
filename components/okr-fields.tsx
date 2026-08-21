@@ -7,7 +7,7 @@ import { ownerName } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Button, Eyebrow } from "./ui";
 import { NativeSelect, TextInput } from "./form";
-import { useOutsideClose } from "./hooks";
+import { useOutsideClose, usePopoverPlacement } from "./hooks";
 
 // Exported so components/initiative-fields.tsx's TeamPicker (team-only, no BU
 // option) can match this dropdown's exact look without redefining it.
@@ -193,6 +193,7 @@ export function TeamOrBuPicker({
     setQuery("");
   };
   useOutsideClose(ref, open, close);
+  const placement = usePopoverPlacement(ref, open);
 
   const selectedTeam = teamId ? teams.find((t) => t.id === teamId) : undefined;
   const selectedBu = businessUnitId ? businessUnits.find((b) => b.id === businessUnitId) : undefined;
@@ -228,7 +229,12 @@ export function TeamOrBuPicker({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-full rounded-xl border border-beige-20 bg-white p-2 shadow-lg">
+        <div
+          className={cn(
+            "absolute left-0 z-50 w-full rounded-xl border border-beige-20 bg-white p-2 shadow-lg",
+            placement === "top" ? "bottom-full mb-1" : "top-full mt-1"
+          )}
+        >
           <div className="relative mb-2">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-beige-60" />
             <input

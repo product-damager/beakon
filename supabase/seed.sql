@@ -5,7 +5,7 @@
 -- Owner emails are demo values — set one to your own sign-in email if you want
 -- the profile/identity features to match you when testing against preview.
 
-truncate delivery_links, okr_checkins, okr_flags, okr_owners, okr_initiatives, okrs, teams, business_units, strategic_objectives, initiatives, themes, owners restart identity cascade;
+truncate delivery_links, okr_checkins, okr_flags, okr_owners, okr_initiatives, okrs, roadmaps, teams, business_units, strategic_objectives, initiatives, themes, owners restart identity cascade;
 
 -- ── Business units ──────────────────────────────────────────────────────
 -- Inserted before `owners`/`initiatives` since both now carry a `team_id`
@@ -58,6 +58,13 @@ insert into themes (id, name, description, color) values
   ('t-trust', 'Data & Trust', 'Statistical rigor, privacy, and results people can rely on.', 'pink'),
   ('t-platform', 'Platform & Scale', 'Performance, reliability, and enterprise readiness.', 'orange'),
   ('t-dx', 'Developer Experience', 'SDKs, docs, and APIs that make integration effortless.', 'beige');
+
+-- ── Roadmaps (Sprint Heron Week 2) ───────────────────────────────────────
+-- The one always-present, non-deletable, view-mode-immutable "General
+-- Roadmap" — see docs/decisions/008-roadmap-entity-visibility-model-and-okr-
+-- separation.md decision 2. owner_id is null (is_system rows have none).
+insert into roadmaps (id, owner_id, name, is_system, filters) values
+  ('roadmap-general', null, 'General Roadmap', true, '{}'::jsonb);
 
 insert into initiatives
   (id, title, summary, problem, expected_outcome, status, owner_id, team_id, theme_id, strategic_objective_id,

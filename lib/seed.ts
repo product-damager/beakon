@@ -4,6 +4,7 @@ import type {
   Okr,
   OkrOwner,
   Owner,
+  Roadmap,
   StrategicObjective,
   Team,
   Theme,
@@ -662,4 +663,26 @@ export const OKR_OWNERS: OkrOwner[] = [
 export const OKR_INITIATIVES: { okrId: string; initiativeId: string }[] = [
   { okrId: "okr-pbx-adoption-q1", initiativeId: "i-pbx" },
   { okrId: "okr-pbx-adoption-q2", initiativeId: "i-pbx" },
+];
+
+// ── Roadmaps (Sprint Heron Week 2) — mirrors supabase/seed.sql's one seeded
+// System Roadmap row exactly (`roadmap-general`). Seed/demo mode fallback so
+// local dev without Supabase always has the one always-present Roadmap. ──
+export const ROADMAPS: Roadmap[] = [
+  {
+    id: "roadmap-general",
+    ownerId: null,
+    name: "General Roadmap",
+    viewMode: "list",
+    filters: {},
+    groupBy: "theme",
+    zoom: "month",
+    zoomScale: 1,
+    density: "comfortable",
+    timelineSort: null,
+    visibility: "private",
+    editable: false,
+    isSystem: true,
+    position: 0,
+  },
 ];

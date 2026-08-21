@@ -1,6 +1,6 @@
 "use client";
 
-import { type ButtonHTMLAttributes, type ReactNode } from "react";
+import { type ButtonHTMLAttributes, type ComponentType, type ReactNode } from "react";
 import { cn, initials } from "@/lib/cn";
 import {
   HEALTH_META,
@@ -167,6 +167,57 @@ export function Avatar({
     >
       {initials(name)}
     </span>
+  );
+}
+
+// ── Icon-only segmented control ──
+/**
+ * Icon-only variant of the toolbar `Segmented` control (FilterBar.tsx:60-86
+ * — a text-labeled mutually-exclusive toggle for Group/Zoom). Deliberately a
+ * separate small component here rather than adding an `iconOnly` prop to
+ * that one: FilterBar.tsx's toolbar internals are owned by a different,
+ * fully-independent Sprint Heron Week 2 workstream (Timeline header/toolbar
+ * compaction, T42-T46) mid-build in this same sprint, so this avoids a file
+ * conflict rather than reusing that exact component. Same visual language
+ * (rounded-lg border, p-0.5 wrapper, active = bg-green-90/text-white) —
+ * sized per docs/design/roadmap-sidebar-header-sharing.md §2.1 (`px-2 py-1.5`
+ * per button, tighter than the text variant's `px-2.5 py-1`).
+ */
+export function IconSegmented<T extends string>({
+  options,
+  value,
+  onChange,
+  disabled,
+}: {
+  options: { value: T; label: string; icon: ComponentType<{ size?: number; strokeWidth?: number }> }[];
+  value: T;
+  onChange: (v: T) => void;
+  /** e.g. a Shared+View-only Roadmap — matches Button's disabled treatment. */
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex items-center rounded-lg border border-beige-30 bg-white p-0.5">
+      {options.map((o) => {
+        const Icon = o.icon;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            aria-label={o.label}
+            title={o.label}
+            disabled={disabled}
+            onClick={() => onChange(o.value)}
+            className={cn(
+              "flex items-center justify-center rounded-md px-2 py-1.5 transition-colors",
+              "disabled:pointer-events-none disabled:opacity-50",
+              value === o.value ? "bg-green-90 text-white" : "text-green-70 hover:bg-beige-10"
+            )}
+          >
+            <Icon size={16} strokeWidth={1.75} />
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

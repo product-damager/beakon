@@ -37,6 +37,28 @@ function newOkrDraft(teams: Team[], strategicObjectives: StrategicObjective[]): 
   };
 }
 
+/** localStorage key for the full OkrFilters object (Sprint Heron Week 2,
+ * ADR 008 decision 3) — persists team/BU/quarter/objective/governance-
+ * status/showArchived across reloads, the reload-reset papercut the PM
+ * named. Deliberately the full object, not a partial pin. */
+const OKR_FILTERS_STORAGE_KEY = "beakon:okrFilters";
+
+/** Merge whatever's in localStorage over EMPTY_OKR_FILTERS defaults —
+ * defensive the same way normalizeFilters() is for Roadmap.filters: a
+ * stale/malformed stored shape (e.g. from an older filter shape) should
+ * degrade to sane defaults, not crash on read. */
+function loadStoredOkrFilters(): OkrFilters {
+  if (typeof window === "undefined") return EMPTY_OKR_FILTERS;
+  try {
+    const raw = window.localStorage.getItem(OKR_FILTERS_STORAGE_KEY);
+    if (!raw) return EMPTY_OKR_FILTERS;
+    const parsed = JSON.parse(raw) as Partial<OkrFilters>;
+    return { ...EMPTY_OKR_FILTERS, ...parsed };
+  } catch {
+    return EMPTY_OKR_FILTERS;
+  }
+}
+
 export default function OkrsPage() {
   // useSearchParams() (used to open "New OKR" from AppShell's header button —
   // see components/AppShell.tsx) needs a Suspense boundary per Next.js.
@@ -67,9 +89,22 @@ function OkrsPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [filters, setFilters] = useState<OkrFilters>(EMPTY_OKR_FILTERS);
+  // Initialize from localStorage (lazy initializer — runs once, avoids a
+  // render with defaults immediately followed by a render with the stored
+  // value). Persisted on every change below.
+  const [filters, setFilters] = useState<OkrFilters>(loadStoredOkrFilters);
   const [selectedOkrId, setSelectedOkrId] = useState<string | null>(null);
   const [creatingDraft, setCreatingDraft] = useState<Okr | null>(null);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(OKR_FILTERS_STORAGE_KEY, JSON.stringify(filters));
+    } catch {
+      // localStorage can throw (private mode, quota) — filters still work
+      // for this session, just won't survive a reload. Not worth surfacing
+      // as an app-level error for a papercut-fix feature.
+    }
+  }, [filters]);
 
   // AppShell's "New OKR" button navigates to /okrs?new=1 (no second global
   // provider for OKR state — see lib/useOkrWorkspace.ts's own doc comment).

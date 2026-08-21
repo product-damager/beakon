@@ -9,7 +9,16 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { CalendarRange, ChevronRight, Minimize2, Plus, TriangleAlert } from "lucide-react";
+import {
+  CalendarRange,
+  ChevronRight,
+  Group,
+  Minimize2,
+  Plus,
+  Rows2,
+  Rows3,
+  TriangleAlert,
+} from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import { activeFilterCount, applyFilters, groupInitiatives, sortInitiatives } from "@/lib/filters";
 import { barPosition, buildColumns, buildWindow, formatShortEN, shiftISODays, todayMarker } from "@/lib/dates";
@@ -21,11 +30,13 @@ import {
   THEME_COLOR_META,
   ZOOM_SCALE_MAX,
   ZOOM_SCALE_MIN,
+  type GroupBy,
   type Initiative,
   type Zoom,
 } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Avatar, Button, Eyebrow } from "./ui";
+import { InlineTagSelect } from "./form";
 import { FilterBar } from "./FilterBar";
 import { Logo } from "./Logo";
 
@@ -34,6 +45,11 @@ const LABEL_W = 268;
 // snapshot (false) during SSR + hydration so both renders match, then flips to true.
 const emptySubscribe = () => () => {};
 const UNIT: Record<Zoom, number> = { month: 116, quarter: 220, half: 320 };
+
+const GROUP_BY_LABEL: Record<GroupBy, string> = { theme: "Theme", team: "Team", owner: "Owner" };
+const GROUP_BY_KEYS = Object.keys(GROUP_BY_LABEL) as GroupBy[];
+const ZOOM_LABEL: Record<Zoom, string> = { month: "Month", quarter: "Quarter", half: "Half-year" };
+const ZOOM_KEYS = Object.keys(ZOOM_LABEL) as Zoom[];
 
 // ── Drag-to-replan ──────────────────────────────────────────────────────────
 const DAY_MS = 86_400_000;
@@ -84,10 +100,13 @@ export function Timeline() {
     owners,
     teams,
     groupBy,
+    setGroupBy,
     zoom,
+    setZoom,
     zoomScale,
     setZoomScale,
     density,
+    setDensity,
     timelineSort,
     presentation,
     selectedId,
@@ -311,7 +330,7 @@ export function Timeline() {
         </div>
       ) : (
         <>
-          <FilterBar showGrouping showZoom showPresentation flush />
+          <FilterBar pillCap={2} showSort showZoomScale showPresentation flush />
           <div className="flex items-center justify-between border-b border-beige-20 bg-background px-6 py-2">
             <Eyebrow className="flex items-center gap-2">
               <span>
@@ -337,10 +356,27 @@ export function Timeline() {
         <div ref={scrollRef} className="calm-scroll h-full overflow-auto">
           <div className="flex min-h-full flex-col" style={{ minWidth: LABEL_W + canvasWidth }}>
             {/* Time-axis header — sticky to the top, scrolls horizontally with the canvas */}
-            <div className="sticky top-0 z-20 flex shrink-0 border-b border-beige-20 bg-background">
-              {/* Corner cell — frozen on both axes */}
+            <div className="sticky top-0 z-20 flex h-12 shrink-0 border-b border-beige-20 bg-background">
+              {/* Corner cell — frozen on both axes. Houses the grouping control (the
+                  row's only control for `groupBy` now that the toolbar's old Group
+                  segmented control is gone). A native <select>'s closed state can be
+                  restyled, but its open options list is OS-rendered and can't match
+                  the app's design — so this uses InlineTagSelect (the same custom
+                  popover pattern List/OkrList use for inline edits) instead, sized to
+                  fit the row's existing h-12/items-end baseline. */}
               <div className="sticky left-0 z-10 flex w-[268px] shrink-0 items-end bg-background px-6 pb-2 pt-3">
-                <span className="mono-label text-beige-60">{groupBy}</span>
+                <div className="flex w-full items-center gap-1.5">
+                  <Group size={14} className="shrink-0 text-beige-60" />
+                  <InlineTagSelect
+                    label="Group timeline by"
+                    value={groupBy}
+                    options={GROUP_BY_KEYS}
+                    render={(g: GroupBy) => (
+                      <span className="text-[13px] font-medium text-green-90">{GROUP_BY_LABEL[g]}</span>
+                    )}
+                    onSelect={setGroupBy}
+                  />
+                </div>
               </div>
               <div className="relative h-12" style={{ width: canvasWidth }}>
                 {columns.map((c) => (
@@ -575,6 +611,49 @@ export function Timeline() {
             </div>
           </div>
         </div>
+        {!presentation && (
+          // Sticky-right region — density + zoom-granularity. A sibling of the
+          // scroll container (`scrollRef`), not a flex child inside the
+          // horizontally-scrolling `canvasWidth` div, so it never scrolls away
+          // with the date columns: it's an absolutely-positioned overlay pinned
+          // to this wrapper's top-right corner, above the scrolling content on
+          // both axes, regardless of scroll position.
+          <div className="absolute right-0 top-0 z-40 flex h-12 items-center gap-2 border-b border-l border-beige-20 bg-background px-3">
+            <div className="flex items-center rounded-lg border border-beige-30 bg-white p-0.5">
+              {(
+                [
+                  { value: "comfortable", icon: Rows2, label: "Comfortable rows" },
+                  { value: "compact", icon: Rows3, label: "Compact rows" },
+                ] as const
+              ).map(({ value, icon: Icon, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setDensity(value)}
+                  title={label}
+                  aria-label={label}
+                  aria-pressed={density === value}
+                  className={cn(
+                    "flex h-7 w-7 items-center justify-center rounded-md transition-colors",
+                    density === value ? "bg-green-90 text-white" : "text-green-70 hover:bg-beige-10"
+                  )}
+                >
+                  <Icon size={15} />
+                </button>
+              ))}
+            </div>
+
+            <InlineTagSelect
+              label="Zoom granularity"
+              value={zoom}
+              options={ZOOM_KEYS}
+              render={(z: Zoom) => (
+                <span className="text-[13px] font-medium text-green-90">{ZOOM_LABEL[z]}</span>
+              )}
+              onSelect={setZoom}
+            />
+          </div>
+        )}
         {filtered.length === 0 && <EmptyState />}
       </div>
     </div>
