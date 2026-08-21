@@ -26,6 +26,14 @@ const config: Config = {
         beige: {
           5: "#f8f8f7", 10: "#f4f4f1", 20: "#efefeb", 30: "#e6e6e0", 40: "#d6d6cd",
           50: "#b8b8a8", 60: "#8c8c73",
+          // Added Sprint Heron Week 1 (docs/design/app-shell-and-settings.md
+          // finding 1b) — beige-60 measures ~2.98:1 on white, failing WCAG AA
+          // (4.5:1). beige-70 measures ~5.4:1 on white — verified via the
+          // WCAG relative-luminance formula, not eyeballed. Scoped fix: only
+          // repoints the four named real-copy call sites the brief listed
+          // (SettingsDialog, AppShell sidebar subtitle, Archived, Toaster) —
+          // every other beige-60 usage (102 call sites) is untouched.
+          70: "#6b6b58",
         },
         blue: {
           5: "#f5f6ff", 10: "#f0f2ff", 20: "#e5e9ff", 30: "#d1d8ff", 40: "#b3beff",

@@ -138,17 +138,11 @@ create or replace view initiative_scores as
 select id, round((demand * impact * viability) / effort) as dive_score
 from initiatives;
 
--- ── Public projection for the external roadmap page ──
--- Approved (external), non-archived items only, with internal-only fields
--- (notes, DIVE inputs, health, owner) stripped out. Owned by postgres so it
--- bypasses RLS on `initiatives` — safe because it only ever selects external rows.
-create or replace view external_roadmap as
-select
-  i.id, i.title, i.summary, i.expected_outcome, i.status,
-  i.team, i.theme_id, i.target_start, i.target_end, i.position
-from initiatives i
-where i.visibility = 'external' and i.archived = false
-order by i.position;
+-- Note: `external_roadmap`'s view definition used to live here. It's been
+-- moved below (after `teams`/`strategic_objectives` exist) because Sprint
+-- Heron Week 1 repoints its column list from `i.team` to `i.team_id`, which
+-- requires `initiatives.team_id` (added further down) to already exist — see
+-- that section for the full view definition.
 
 -- ══════════════════════════════════════════════════════════════════════
 -- Row Level Security
@@ -182,7 +176,10 @@ exception when duplicate_object then null; end $$;
 -- The anonymous public (share page) reads ONLY the external_roadmap view,
 -- plus themes/owners for labels. No direct anon access to `initiatives`.
 -- Signed-in users can open the share page too, so grant both roles.
-grant select on external_roadmap to anon, authenticated;
+-- Note: the `grant select on external_roadmap` statement itself moved further
+-- down in this file, alongside the view's definition (Sprint Heron Week 1
+-- moved the view below `teams`/`strategic_objectives` — see that section) —
+-- a `grant` on a view that doesn't exist yet would fail on a fresh database.
 
 do $$ begin
   create policy "anon read themes" on themes
@@ -239,6 +236,78 @@ create table if not exists strategic_objectives (
   year smallint not null,
   sponsor_id text references owners (id)
 );
+
+-- ══════════════════════════════════════════════════════════════════════
+-- Sprint Heron Week 1 — unify Initiative/Owner team + Initiative strategic
+-- goal onto the real `teams`/`strategic_objectives` tables OKRs already use.
+-- See docs/decisions/006-unify-initiative-team-defer-strategic-goal.md and
+-- docs/decisions/007-heron-week-1-data-model-and-drawer-conventions.md.
+--
+-- Additive only — both new columns start NULL on every existing row and are
+-- backfilled by a separate one-off script (NOT folded into this idempotent
+-- file, per supabase/README.md's golden rule):
+-- supabase/migrations/2026-08-heron-team-strategic-objective-backfill.sql.
+-- The legacy `initiatives.team`/`strategic_goal` text columns and `owners.team`
+-- stay in the schema, inert, until a later follow-up migration drops them
+-- (006's step 3) — explicitly not this pass.
+-- ══════════════════════════════════════════════════════════════════════
+alter table initiatives add column if not exists team_id text references teams (id);
+-- Loosening a NOT NULL is safe to re-run against existing rows (never fails,
+-- unlike tightening one) — every initiative keeps its legacy `team` value
+-- until the backfill script sets `team_id`, and the app switches reads over.
+alter table initiatives alter column team drop not null;
+alter table initiatives add column if not exists strategic_objective_id text
+  references strategic_objectives (id);
+-- owners.team was already nullable — no constraint change needed here.
+alter table owners add column if not exists team_id text references teams (id);
+
+-- ── Public projection for the external roadmap page ──
+-- Approved (external), non-archived items only, with internal-only fields
+-- (notes, DIVE inputs, health, owner) stripped out. Owned by postgres so it
+-- bypasses RLS on `initiatives` — safe because it only ever selects external
+-- rows. Selects `team_id` (not the legacy `team`) per Heron Week 1's
+-- unification — confirmed no consumer (fetchExternalRoadmap()/
+-- PublicInitiative in lib/data.ts, ExternalRoadmap.tsx) ever read `team` off
+-- this view, so this is a clean column-list swap, not a breaking change.
+--
+-- `create or replace view` can change a column's expression but NOT its name
+-- or position — on any database where this view already exists with its old
+-- column named `team` (i.e. beakon-prod, which is never dropped/rebuilt),
+-- the `create or replace view` below would fail with Postgres error 42P16
+-- ("cannot change name of view column ... to ...") without renaming that
+-- column first. Guarded so it's a no-op on a fresh database (view doesn't
+-- exist yet) and on any database where the rename has already happened —
+-- see supabase/migrations/2026-08-heron-team-strategic-objective-backfill.sql's
+-- "Part A0" for the incident this guards against, and
+-- supabase/README.md's golden-rule section for why this pattern (not a bare
+-- rename) belongs directly in schema.sql.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'external_roadmap'
+      and column_name = 'team'
+  ) and not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'external_roadmap'
+      and column_name = 'team_id'
+  ) then
+    alter view external_roadmap rename column team to team_id;
+  end if;
+end $$;
+
+create or replace view external_roadmap as
+select
+  i.id, i.title, i.summary, i.expected_outcome, i.status,
+  i.team_id, i.theme_id, i.target_start, i.target_end, i.position
+from initiatives i
+where i.visibility = 'external' and i.archived = false
+order by i.position;
+
+-- Grant moved here (from the RLS section above) since it targets this view —
+-- must run after the view exists, which on a fresh database it now does only
+-- from this point on.
+grant select on external_roadmap to anon, authenticated;
 
 -- ── OKRs ──
 create table if not exists okrs (

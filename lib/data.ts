@@ -33,9 +33,9 @@ interface InitiativeRow {
   expected_outcome: string | null;
   status: Status;
   owner_id: string | null;
-  team: string;
+  team_id: string | null;
   theme_id: string | null;
-  strategic_goal: string | null;
+  strategic_objective_id: string | null;
   demand: number | string | null;
   impact: number | string | null;
   viability: number | string | null;
@@ -70,9 +70,16 @@ function rowToInitiative(row: InitiativeRow, links: DeliveryLink[]): Initiative 
     expectedOutcome: row.expected_outcome ?? "",
     status: row.status,
     ownerId: row.owner_id ?? "",
-    team: row.team,
+    // team_id is nullable at the DB level only transitionally (until the
+    // Heron Week 1 backfill runs on a given environment) — every row written
+    // by the app going forward always sets a real team, so the "" fallback
+    // here mirrors ownerId/themeId's existing not-yet-set convention rather
+    // than meaning anything on its own.
+    teamId: row.team_id ?? "",
     themeId: row.theme_id ?? "",
-    strategicGoal: row.strategic_goal ?? "",
+    // Nullable and stays that way — unlike team, an unset strategic
+    // objective is a real, expected, permanent state (ADR 007 decision 1).
+    strategicObjectiveId: row.strategic_objective_id ?? null,
     // Any NULL score column means the initiative was saved unscored.
     scores:
       row.demand == null || row.impact == null || row.viability == null || row.effort == null
@@ -106,9 +113,9 @@ function initiativeToRow(i: Initiative) {
     expected_outcome: i.expectedOutcome,
     status: i.status,
     owner_id: i.ownerId || null,
-    team: i.team,
+    team_id: i.teamId || null,
     theme_id: i.themeId || null,
-    strategic_goal: i.strategicGoal,
+    strategic_objective_id: i.strategicObjectiveId,
     demand: i.scores?.demand ?? null,
     impact: i.scores?.impact ?? null,
     viability: i.scores?.viability ?? null,
@@ -134,7 +141,7 @@ interface OwnerRow {
   surname: string | null;
   role: string | null;
   email: string | null;
-  team: string | null;
+  team_id: string | null;
 }
 
 function rowToOwner(o: OwnerRow): Owner {
@@ -144,7 +151,7 @@ function rowToOwner(o: OwnerRow): Owner {
     surname: o.surname ?? undefined,
     role: o.role ?? "",
     email: o.email ?? undefined,
-    team: o.team ?? undefined,
+    teamId: o.team_id ?? undefined,
   };
 }
 
@@ -155,7 +162,7 @@ function ownerToRow(o: Owner) {
     surname: o.surname ?? "",
     role: o.role ?? "",
     email: o.email ?? null,
-    team: o.team ?? null,
+    team_id: o.teamId ?? null,
   };
 }
 
@@ -163,6 +170,19 @@ export interface Workspace {
   initiatives: Initiative[];
   themes: Theme[];
   owners: Owner[];
+  /**
+   * Moved here from OkrWorkspace/fetchOkrWorkspace() by Sprint Heron Week 1
+   * (ADR 007 decision 3): once Initiative/Owner depend on `teams` for every
+   * list/filter/settings render (and Initiative depends on
+   * `strategic_objectives` for its optional objective display), these three
+   * reference tables have to be available wherever Initiative/Owner are —
+   * which today means eagerly, on every app open. `okrs`/`okr_owners`/
+   * `okr_initiatives` stay lazy in OkrWorkspace — OKR-specific write data is
+   * still only needed on `/okrs`.
+   */
+  teams: Team[];
+  businessUnits: BusinessUnit[];
+  strategicObjectives: StrategicObjective[];
 }
 
 // ── Reads ──
@@ -170,13 +190,16 @@ export interface Workspace {
 /** Load the full authenticated workspace (all initiatives incl. archived). */
 export async function fetchWorkspace(): Promise<Workspace> {
   const sb = client();
-  const [iniRes, linkRes, themeRes, ownerRes] = await Promise.all([
+  const [iniRes, linkRes, themeRes, ownerRes, buRes, teamRes, soRes] = await Promise.all([
     sb.from("initiatives").select("*").order("position", { ascending: true }),
     sb.from("delivery_links").select("*").order("position", { ascending: true }),
     sb.from("themes").select("*"),
     sb.from("owners").select("*"),
+    sb.from("business_units").select("*"),
+    sb.from("teams").select("*"),
+    sb.from("strategic_objectives").select("*"),
   ]);
-  for (const r of [iniRes, linkRes, themeRes, ownerRes]) {
+  for (const r of [iniRes, linkRes, themeRes, ownerRes, buRes, teamRes, soRes]) {
     if (r.error) throw r.error;
   }
 
@@ -192,8 +215,11 @@ export async function fetchWorkspace(): Promise<Workspace> {
   );
   const themes = (themeRes.data ?? []).map(rowToTheme);
   const owners = ((ownerRes.data ?? []) as OwnerRow[]).map(rowToOwner);
+  const businessUnits = ((buRes.data ?? []) as BusinessUnitRow[]).map(rowToBusinessUnit);
+  const teams = ((teamRes.data ?? []) as TeamRow[]).map(rowToTeam);
+  const strategicObjectives = ((soRes.data ?? []) as StrategicObjectiveRow[]).map(rowToStrategicObjective);
 
-  return { initiatives, themes, owners };
+  return { initiatives, themes, owners, teams, businessUnits, strategicObjectives };
 }
 
 // ── Writes ──
@@ -449,36 +475,35 @@ function okrOwnerToRow(o: OkrOwner) {
 }
 
 export interface OkrWorkspace {
-  businessUnits: BusinessUnit[];
-  teams: Team[];
-  strategicObjectives: StrategicObjective[];
   okrs: Okr[];
   okrOwners: OkrOwner[];
   okrInitiatives: OkrInitiativeLink[];
 }
 
 /**
- * Load the OKR workspace (business units, teams, strategic objectives, OKRs,
- * ownership, initiative links). Kept separate from fetchWorkspace() — that one
- * loads on every app open today and is initiative-only; this is lazily called.
+ * Load the OKR-specific workspace (OKRs, ownership, initiative links). Kept
+ * separate from fetchWorkspace() — that one loads on every app open today
+ * and this is lazily called, only on `/okrs`.
+ *
+ * `businessUnits`/`teams`/`strategicObjectives` used to live here too, but
+ * Sprint Heron Week 1 moved them into fetchWorkspace()/Workspace instead
+ * (ADR 007 decision 3) — Initiative/Owner now depend on `teams` (and
+ * Initiative on `strategic_objectives`) for every list/filter/settings
+ * render, so these three reference tables have to be eagerly available
+ * wherever Initiative/Owner are, not just on `/okrs`. Callers here should
+ * read them from useRoadmap() instead.
  */
 export async function fetchOkrWorkspace(): Promise<OkrWorkspace> {
   const sb = client();
-  const [buRes, teamRes, soRes, okrRes, ownerRes, initRes] = await Promise.all([
-    sb.from("business_units").select("*"),
-    sb.from("teams").select("*"),
-    sb.from("strategic_objectives").select("*"),
+  const [okrRes, ownerRes, initRes] = await Promise.all([
     sb.from("okrs").select("*").order("position", { ascending: true }),
     sb.from("okr_owners").select("*"),
     sb.from("okr_initiatives").select("*"),
   ]);
-  for (const r of [buRes, teamRes, soRes, okrRes, ownerRes, initRes]) {
+  for (const r of [okrRes, ownerRes, initRes]) {
     if (r.error) throw r.error;
   }
 
-  const businessUnits = ((buRes.data ?? []) as BusinessUnitRow[]).map(rowToBusinessUnit);
-  const teams = ((teamRes.data ?? []) as TeamRow[]).map(rowToTeam);
-  const strategicObjectives = ((soRes.data ?? []) as StrategicObjectiveRow[]).map(rowToStrategicObjective);
   const okrs = ((okrRes.data ?? []) as OkrRow[]).map(rowToOkr);
   const okrOwners = ((ownerRes.data ?? []) as OkrOwnerRow[]).map(rowToOkrOwner);
   const okrInitiatives = ((initRes.data ?? []) as OkrInitiativeRow[]).map((r) => ({
@@ -486,7 +511,7 @@ export async function fetchOkrWorkspace(): Promise<OkrWorkspace> {
     initiativeId: r.initiative_id,
   }));
 
-  return { businessUnits, teams, strategicObjectives, okrs, okrOwners, okrInitiatives };
+  return { okrs, okrOwners, okrInitiatives };
 }
 
 /**

@@ -9,11 +9,12 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { CalendarRange, ChevronRight, Minimize2, Plus } from "lucide-react";
+import { CalendarRange, ChevronRight, Minimize2, Plus, TriangleAlert } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import { activeFilterCount, applyFilters, groupInitiatives, sortInitiatives } from "@/lib/filters";
 import { barPosition, buildColumns, buildWindow, formatShortEN, shiftISODays, todayMarker } from "@/lib/dates";
 import {
+  HEALTH_META,
   ownerName,
   STATUS_META,
   STATUSES,
@@ -61,12 +62,27 @@ function StatusLegend() {
   );
 }
 
+/** Warning-triangle icon for at_risk/blocked rows — red for blocked, orange
+ * for at_risk, matching HEALTH_META's own hue split. Replaces a plain color
+ * dot so the signal reads even without color (shape + placement, not just
+ * hue). */
+function HealthFlagIcon({ health, className }: { health: "at_risk" | "blocked"; className?: string }) {
+  return (
+    <TriangleAlert
+      size={13}
+      className={cn(health === "blocked" ? "text-red-60" : "text-orange-60", className)}
+      aria-hidden
+    />
+  );
+}
+
 export function Timeline() {
   const {
     initiatives,
     filters,
     themes,
     owners,
+    teams,
     groupBy,
     zoom,
     zoomScale,
@@ -87,8 +103,12 @@ export function Timeline() {
   const editable = !presentation;
 
   const filtered = useMemo(
-    () => applyFilters(initiatives, filters, themes, owners),
-    [initiatives, filters, themes, owners]
+    () => applyFilters(initiatives, filters, themes, owners, teams),
+    [initiatives, filters, themes, owners, teams]
+  );
+  const riskyCount = useMemo(
+    () => filtered.filter((i) => i.health === "at_risk" || i.health === "blocked").length,
+    [filtered]
   );
   const window = useMemo(
     () => buildWindow(filtered.map((i) => ({ start: i.targetStart, end: i.targetEnd }))),
@@ -99,8 +119,8 @@ export function Timeline() {
   // Sort the flat list before grouping so each group inherits the chosen order.
   const sorted = useMemo(() => sortInitiatives(filtered, timelineSort), [filtered, timelineSort]);
   const groups = useMemo(
-    () => groupInitiatives(sorted, groupBy, themes, owners),
-    [sorted, groupBy, themes, owners]
+    () => groupInitiatives(sorted, groupBy, themes, owners, teams),
+    [sorted, groupBy, themes, owners, teams]
   );
 
   const canvasWidth = Math.max(720, columns.length * UNIT[zoom] * zoomScale);
@@ -293,8 +313,17 @@ export function Timeline() {
         <>
           <FilterBar showGrouping showZoom showPresentation flush />
           <div className="flex items-center justify-between border-b border-beige-20 bg-background px-6 py-2">
-            <Eyebrow>
-              {filtered.length} initiative{filtered.length === 1 ? "" : "s"}
+            <Eyebrow className="flex items-center gap-2">
+              <span>
+                {filtered.length} initiative{filtered.length === 1 ? "" : "s"}
+              </span>
+              {riskyCount > 0 && (
+                <span className="flex items-center gap-1.5 text-orange-70">
+                  <span className="text-beige-40">|</span>
+                  <TriangleAlert size={13} />
+                  <span>{riskyCount} risky</span>
+                </span>
+              )}
             </Eyebrow>
             <StatusLegend />
           </div>
@@ -349,7 +378,17 @@ export function Timeline() {
                       style={{ left: `${c.leftPct}%` }}
                     />
                   ))}
-                  {today !== null && (
+                </div>
+              </div>
+              {/* Own positioned layer, well above the (non-positioned, z-auto)
+               * group-header bands below — those otherwise paint over a z-0
+               * marker despite it being declared later in the DOM. */}
+              {today !== null && (
+                <div
+                  className="pointer-events-none absolute inset-0 z-30"
+                  style={{ marginLeft: LABEL_W }}
+                >
+                  <div className="relative h-full" style={{ width: canvasWidth }}>
                     <div
                       className="absolute bottom-0 top-0 border-l-2 border-dashed border-lime-50"
                       style={{ left: `${today}%` }}
@@ -358,9 +397,9 @@ export function Timeline() {
                         Today
                       </span>
                     </div>
-                  )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {groups.map((g) => {
                 const isCollapsed = collapsed.has(g.key);
@@ -435,6 +474,11 @@ export function Timeline() {
                                 neutral
                               />
                             )}
+                            {(i.health === "at_risk" || i.health === "blocked") && (
+                              <span title={HEALTH_META[i.health].label}>
+                                <HealthFlagIcon health={i.health} className="shrink-0" />
+                              </span>
+                            )}
                             <button
                               onClick={() => select(i.id)}
                               className="truncate text-left text-[13px] font-medium text-green-90 hover:text-green-60"
@@ -468,6 +512,7 @@ export function Timeline() {
                                 onPointerUp={endDrag}
                                 onPointerCancel={cancelDrag}
                                 title={`${i.title} · ${meta.label}`}
+                                aria-label={`${i.title} · ${meta.label}`}
                                 className={cn(
                                   "flex h-full w-full items-center overflow-hidden rounded-md px-2.5 text-left text-xs font-medium shadow-sm transition-[filter,box-shadow] hover:brightness-105",
                                   meta.bar,

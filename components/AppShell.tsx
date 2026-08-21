@@ -32,13 +32,15 @@ const TITLES: Record<string, string> = {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { currentOwner, openCreate, presentation, error, dismissError, loading } = useRoadmap();
+  const { currentOwner, getTeam, openCreate, presentation, error, dismissError, loading } = useRoadmap();
   const { authRequired, email, signOut } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Prefer the matched owner profile; fall back to email (or a demo label).
   const displayName = ownerName(currentOwner) || (authRequired ? email ?? "Signed in" : "You");
   const subtitle =
-    [currentOwner?.team, currentOwner?.role].filter(Boolean).join(" · ") || "Product team";
+    [currentOwner?.teamId ? getTeam(currentOwner.teamId)?.name : undefined, currentOwner?.role]
+      .filter(Boolean)
+      .join(" · ") || "Product team";
 
   if (presentation) {
     // Presentation mode drops all chrome for a clean, room-ready timeline.
@@ -158,7 +160,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Plus size={16} strokeWidth={2} />
               New OKR
             </Button>
-          ) : (
+          ) : pathname === "/archived" ? null : (
             <Button size="sm" onClick={openCreate}>
               <Plus size={16} strokeWidth={2} />
               New initiative

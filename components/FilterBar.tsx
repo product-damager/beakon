@@ -25,7 +25,6 @@ import {
   ownerName,
   STATUS_META,
   STATUSES,
-  TEAMS,
   THEME_COLOR_META,
   ZOOM_SCALE_MAX,
   ZOOM_SCALE_MIN,
@@ -263,11 +262,11 @@ function FilterPill({ field }: { field: FieldDef }) {
       >
         <button
           onClick={() => setOpen((o) => !o)}
-          className="flex h-full items-center gap-1.5 rounded-l-lg pl-2.5 pr-2 text-[13px] hover:bg-beige-10"
+          className="flex h-full max-w-[220px] items-center gap-1.5 rounded-l-lg pl-2.5 pr-2 text-[13px] hover:bg-beige-10"
         >
-          <span className="font-medium text-green-90">{field.label}</span>
-          <span className="text-beige-60">{mode === "is_not" ? "is not" : "is"}</span>
-          <span className="font-medium text-green-70">{summary}</span>
+          <span className="shrink-0 font-medium text-green-90">{field.label}</span>
+          <span className="shrink-0 text-beige-60">{mode === "is_not" ? "is not" : "is"}</span>
+          <span className="truncate font-medium text-green-70">{summary}</span>
         </button>
         <button
           onClick={remove}
@@ -358,6 +357,7 @@ export function FilterBar({
     resetFilters,
     owners,
     themes,
+    teams,
     groupBy,
     setGroupBy,
     zoom,
@@ -393,8 +393,9 @@ export function FilterBar({
         key: "teams",
         modeKey: "teamsMode",
         label: "Team",
-        searchable: false,
-        options: TEAMS.map((t) => ({ value: t, label: t })),
+        // 11 real teams (was 3 hardcoded) — searchable now that the list is longer.
+        searchable: true,
+        options: teams.map((t) => ({ value: t.id, label: t.name })),
       },
       {
         key: "themes",
@@ -418,7 +419,7 @@ export function FilterBar({
         ],
       },
     ],
-    [owners, themes]
+    [owners, themes, teams]
   );
 
   const activeCount = activeFilterCount(filters);

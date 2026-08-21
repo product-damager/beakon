@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, X } from "lucide-react";
 import { useOkrWorkspace } from "@/lib/useOkrWorkspace";
+import { useRoadmap } from "@/lib/store";
 import { EMPTY_OKR_FILTERS, OkrFilterBar, applyOkrFilters, type OkrFilters } from "@/components/OkrFilterBar";
 import { OkrList } from "@/components/OkrList";
 import { OkrDrawer } from "@/components/OkrDrawer";
@@ -47,10 +48,11 @@ export default function OkrsPage() {
 }
 
 function OkrsPageInner() {
+  // teams/businessUnits/strategicObjectives moved to useRoadmap()'s eager
+  // fetch in Sprint Heron Week 1 (ADR 007 decision 3) — this page reads
+  // them from there instead of useOkrWorkspace, which stays OKR-write-only.
+  const { teams, businessUnits, strategicObjectives } = useRoadmap();
   const {
-    businessUnits,
-    teams,
-    strategicObjectives,
     okrs,
     okrOwners,
     okrInitiatives,

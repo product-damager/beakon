@@ -7,25 +7,9 @@
 
 truncate delivery_links, okr_checkins, okr_flags, okr_owners, okr_initiatives, okrs, teams, business_units, strategic_objectives, initiatives, themes, owners restart identity cascade;
 
-insert into owners (id, name, surname, role, email, team) values
-  ('u-magali',  'Magali',  'Roux',      'Head of Product',      'mroux@example.com',      'App System'),
-  ('u-helene',  'Hélène',  'Dupont',    'Senior PM',            'hdupont@example.com',    'Tech & Perso Builders'),
-  ('u-seimour', 'Seimour', 'Karim',     'Product Manager',      'skarim@example.com',     'Visual Builders'),
-  ('u-nadia',   'Nadia',   'Belhaj',    'PM, Platform',         'nbelhaj@example.com',    'App System'),
-  ('u-tom',     'Tom',     'Verhoeven', 'Engineering Manager',  'tverhoeven@example.com', 'Tech & Perso Builders'),
-  ('u-lea',     'Léa',     'Fontaine',  'Senior PM',            'lfontaine@example.com',  'Tech & Perso Builders'),
-  ('u-marc',    'Marc',    'Dubois',    'Staff Engineer',       'mdubois@example.com',    'App System'),
-  ('u-sofia',   'Sofia',   'Almeida',   'Design Lead',          'salmeida@example.com',   'Visual Builders');
-
-insert into themes (id, name, description, color) values
-  ('t-ai', 'AI-led Experimentation', 'Make testing and personalization smarter with predictive models.', 'lime'),
-  ('t-fm', 'Feature Management', 'Ship and control features safely with flags and rollouts.', 'blue'),
-  ('t-web', 'Web Experimentation', 'Faster, flicker-free client-side and server-side testing.', 'green'),
-  ('t-trust', 'Data & Trust', 'Statistical rigor, privacy, and results people can rely on.', 'pink'),
-  ('t-platform', 'Platform & Scale', 'Performance, reliability, and enterprise readiness.', 'orange'),
-  ('t-dx', 'Developer Experience', 'SDKs, docs, and APIs that make integration effortless.', 'beige');
-
 -- ── Business units ──────────────────────────────────────────────────────
+-- Inserted before `owners`/`initiatives` since both now carry a `team_id`
+-- FK into `teams` (Heron Week 1 unification — docs/decisions/006-.../007-...).
 insert into business_units (id, name) values
   ('bu-setup',   'BU Set up'),
   ('bu-build',   'BU Build'),
@@ -47,14 +31,36 @@ insert into teams (id, name, business_unit_id) values
   ('team-ai-tools',              'AI Tools',                'bu-disrupt');
 
 -- ── Strategic objectives (2026) ─────────────────────────────────────────
+-- Also inserted before `initiatives`, which now carries a
+-- `strategic_objective_id` FK into this table.
 insert into strategic_objectives (id, name, description, year, sponsor_id) values
   ('so-core',     'Core: Strengthening our foundations',        '', 2026, null),
   ('so-ai',       'AI: Scaling PBX adoption',                   '', 2026, null),
   ('so-data',     'Data: Powering trusted Insights & Outcomes', '', 2026, null),
   ('so-internal', 'Internal',                                   '', 2026, null);
 
+-- team_id (not the legacy `team` text) — per Heron Week 1's unification,
+-- mirrors lib/seed.ts's OWNERS exactly.
+insert into owners (id, name, surname, role, email, team_id) values
+  ('u-magali',  'Magali',  'Roux',      'Head of Product',      'mroux@example.com',      'team-app-system'),
+  ('u-helene',  'Hélène',  'Dupont',    'Senior PM',            'hdupont@example.com',    'team-tech-perso-builders'),
+  ('u-seimour', 'Seimour', 'Karim',     'Product Manager',      'skarim@example.com',     'team-visual-builders'),
+  ('u-nadia',   'Nadia',   'Belhaj',    'PM, Platform',         'nbelhaj@example.com',    'team-app-system'),
+  ('u-tom',     'Tom',     'Verhoeven', 'Engineering Manager',  'tverhoeven@example.com', 'team-tech-perso-builders'),
+  ('u-lea',     'Léa',     'Fontaine',  'Senior PM',            'lfontaine@example.com',  'team-tech-perso-builders'),
+  ('u-marc',    'Marc',    'Dubois',    'Staff Engineer',       'mdubois@example.com',    'team-app-system'),
+  ('u-sofia',   'Sofia',   'Almeida',   'Design Lead',          'salmeida@example.com',   'team-visual-builders');
+
+insert into themes (id, name, description, color) values
+  ('t-ai', 'AI-led Experimentation', 'Make testing and personalization smarter with predictive models.', 'lime'),
+  ('t-fm', 'Feature Management', 'Ship and control features safely with flags and rollouts.', 'blue'),
+  ('t-web', 'Web Experimentation', 'Faster, flicker-free client-side and server-side testing.', 'green'),
+  ('t-trust', 'Data & Trust', 'Statistical rigor, privacy, and results people can rely on.', 'pink'),
+  ('t-platform', 'Platform & Scale', 'Performance, reliability, and enterprise readiness.', 'orange'),
+  ('t-dx', 'Developer Experience', 'SDKs, docs, and APIs that make integration effortless.', 'beige');
+
 insert into initiatives
-  (id, title, summary, problem, expected_outcome, status, owner_id, team, theme_id, strategic_goal,
+  (id, title, summary, problem, expected_outcome, status, owner_id, team_id, theme_id, strategic_objective_id,
    demand, impact, viability, effort, health, target_start, target_end, depends_on, visibility, notes,
    position, updated_at)
 values
@@ -62,7 +68,7 @@ values
    'Second-generation predictive segments powering audience targeting across web and feature flags.',
    'Manual segment building is slow and misses high-intent users; teams want targeting that adapts automatically.',
    'Adopting accounts see a measurable lift in conversion on personalized experiences within one quarter.',
-   'in_development', 'u-magali', 'Tech & Perso Builders', 't-ai', 'Lead the market on AI-driven experimentation',
+   'in_development', 'u-magali', 'team-tech-perso-builders', 't-ai', 'so-ai',
    1000, 10, 0.8, 8, 'on_track', '2026-04-01', '2026-09-30', '{i-stats}', 'external',
    'Legal reviewing model card language before we can name accuracy figures externally.',
    1000, '2026-07-02T09:20:00Z'),
@@ -71,7 +77,7 @@ values
    'Rewrite the client-side apply path to eliminate flicker on slow connections.',
    'Flicker on first paint undermines trust in client-side tests, especially on media sites.',
    'Sub-50ms apply time on P75 pages; flicker complaints drop to near zero.',
-   'in_development', 'u-helene', 'Visual Builders', 't-web', 'Best-in-class web testing experience',
+   'in_development', 'u-helene', 'team-visual-builders', 't-web', 'so-core',
    1000, 10, 1, 5, 'on_track', '2026-05-01', '2026-08-15', '{}', 'external',
    'Perf budget agreed with SDK team. Watch bundle size regression.',
    2000, '2026-07-06T14:05:00Z'),
@@ -80,7 +86,7 @@ values
    'Graduate the Bayesian results engine from beta to general availability.',
    'Customers want faster, more interpretable results than frequentist-only reporting allows.',
    'Bayesian reporting available to all plans with clear decision guidance.',
-   'solution_framing', 'u-nadia', 'Tech & Perso Builders', 't-trust', 'Results people can trust',
+   'solution_framing', 'u-nadia', 'team-tech-perso-builders', 't-trust', 'so-data',
    1000, 3, 0.5, 8, 'at_risk', '2026-03-01', '2026-07-31', '{}', 'internal',
    'Validation dataset behind schedule; risk to July GA. Considering a two-week slip.',
    3000, '2026-07-07T08:40:00Z'),
@@ -89,7 +95,7 @@ values
    'Add approval workflows and audit trails to flag changes in production.',
    'Enterprise accounts need governance before flags touch production traffic.',
    'Approvals, roles, and full audit history available for flag changes.',
-   'planned', 'u-seimour', 'App System', 't-fm', 'Enterprise-grade feature control',
+   'planned', 'u-seimour', 'team-app-system', 't-fm', 'so-core',
    250, 3, 0.8, 5, 'on_track', '2026-08-01', '2026-11-30', '{}', 'external', '',
    4000, '2026-06-28T11:15:00Z'),
 
@@ -97,7 +103,7 @@ values
    'Ship an edge-optimized SDK for Cloudflare Workers and Vercel Edge.',
    'Teams on edge runtimes lack a low-latency way to run server-side experiments.',
    'Officially supported edge SDK with <5ms decision latency.',
-   'opportunity_framing', 'u-tom', 'App System', 't-platform', 'Meet developers where they build',
+   'opportunity_framing', 'u-tom', 'team-app-system', 't-platform', 'so-internal',
    250, 3, 0.8, 6, 'on_track', '2026-09-01', '2026-12-31', '{i-flicker}', 'internal',
    'Sequenced after rendering engine work frees up SDK capacity.',
    5000, '2026-06-20T16:00:00Z'),
@@ -106,7 +112,7 @@ values
    'Generate and test personalized copy variants with an AI assist.',
    'Building many variants by hand is expensive; teams under-test personalization.',
    'Users create tested personalization campaigns in minutes, not days.',
-   'opportunity_framing', 'u-magali', 'Tech & Perso Builders', 't-ai', 'Lead the market on AI-driven experimentation',
+   'opportunity_framing', 'u-magali', 'team-tech-perso-builders', 't-ai', 'so-ai',
    1000, 10, 0.5, 10, 'at_risk', '2026-10-01', '2027-02-28', '{i-pbx}', 'internal',
    'Still in discovery. Depends on PBX v2 shipping the segment API.',
    6000, '2026-07-01T10:30:00Z'),
@@ -115,7 +121,7 @@ values
    'Respect consent signals end-to-end and reconcile with analytics partners.',
    'Privacy regulations require consent-aware measurement without breaking reporting.',
    'Consent-aware data collection with no gaps in trusted reporting.',
-   'in_development', 'u-nadia', 'Tech & Perso Builders', 't-trust', 'Privacy-first by design',
+   'in_development', 'u-nadia', 'team-tech-perso-builders', 't-trust', 'so-data',
    1000, 1, 1, 4, 'on_track', '2026-06-01', '2026-09-15', '{}', 'internal',
    'Coordinating with the Google consent-mode v2 timeline.',
    7000, '2026-07-05T13:10:00Z'),
@@ -124,7 +130,7 @@ values
    'Native iOS/Android experimentation with a unified results model.',
    'Mobile teams run tests in a separate tool with inconsistent metrics.',
    'One experimentation model spanning web and mobile.',
-   'planned', 'u-seimour', 'App System', 't-fm', 'One platform across surfaces',
+   'planned', 'u-seimour', 'team-app-system', 't-fm', 'so-core',
    1000, 3, 0.5, 12, 'blocked', '2026-11-01', '2027-03-31', '{}', 'internal',
    'Needs staffing decision in Q4 planning.',
    8000, '2026-06-15T09:00:00Z'),
@@ -133,7 +139,7 @@ values
    'Rebuild first-run onboarding so new accounts launch a test in day one.',
    'Time-to-first-test is too long; new accounts stall during setup.',
    'Median time-to-first-test cut in half.',
-   'released', 'u-helene', 'Visual Builders', 't-web', 'Best-in-class web testing experience',
+   'released', 'u-helene', 'team-visual-builders', 't-web', 'so-core',
    1000, 1, 1, 3, 'on_track', '2026-02-01', '2026-05-15', '{}', 'external',
    'Shipped. Monitoring activation funnel for the next month.',
    9000, '2026-05-16T17:45:00Z'),
@@ -142,7 +148,7 @@ values
    'Stream raw experiment data to Snowflake and BigQuery.',
    'Data teams want experiment data in their warehouse for custom analysis.',
    'Reliable, documented exports to major warehouses.',
-   'solution_framing', 'u-tom', 'App System', 't-platform', 'Open, composable data',
+   'solution_framing', 'u-tom', 'team-app-system', 't-platform', 'so-data',
    250, 1, 0.8, 4, 'on_track', '2026-09-15', '2026-12-15', '{i-consent}', 'internal', '',
    10000, '2026-06-18T12:00:00Z'),
 
@@ -150,7 +156,7 @@ values
    'An assistant that suggests test ideas from site behavior and past results.',
    'Teams run out of test ideas and repeat low-impact experiments.',
    'A steady stream of ranked, evidence-backed test ideas.',
-   'in_development', 'u-magali', 'Tech & Perso Builders', 't-ai', 'Lead the market on AI-driven experimentation',
+   'in_development', 'u-magali', 'team-tech-perso-builders', 't-ai', 'so-ai',
    1000, 3, 0.5, 6, 'at_risk', '2026-05-15', '2026-08-31', '{i-stats}', 'internal',
    'Quality of suggestions inconsistent; may narrow beta scope.',
    11000, '2026-07-04T15:30:00Z'),
@@ -159,7 +165,7 @@ values
    'Instantly revert a running experiment or flag from any results view.',
    'Reverting a bad variant takes too many steps during incidents.',
    'Single action to safely roll back, with confirmation and audit.',
-   'released', 'u-seimour', 'App System', 't-fm', 'Enterprise-grade feature control',
+   'released', 'u-seimour', 'team-app-system', 't-fm', 'so-core',
    250, 1, 1, 2, 'on_track', '2026-03-15', '2026-05-01', '{}', 'external',
    'Shipped and well received in support tickets.',
    12000, '2026-05-02T10:00:00Z'),
@@ -168,7 +174,7 @@ values
    'Automated user provisioning and group-to-role mapping via SCIM.',
    'Large accounts manage users by hand; access drifts out of sync.',
    'Users and roles stay in sync with the customer''s IdP automatically.',
-   'planned', 'u-nadia', 'App System', 't-platform', 'Enterprise readiness',
+   'planned', 'u-nadia', 'team-app-system', 't-platform', 'so-core',
    250, 1, 1, 3, 'on_track', '2026-08-15', '2026-10-31', '{}', 'internal',
    'Requested by two enterprise renewals this year.',
    13000, '2026-06-25T14:20:00Z'),
@@ -177,7 +183,7 @@ values
    'A faster, block-based visual editor for building experiments without code.',
    'The current editor struggles on complex pages and slows non-technical users down.',
    'Non-technical users build and launch a variant in under ten minutes.',
-   'opportunity_framing', 'u-sofia', 'Visual Builders', 't-web', 'Best-in-class web testing experience',
+   'opportunity_framing', 'u-sofia', 'team-visual-builders', 't-web', 'so-core',
    250, 3, 0.8, 7, 'on_track', '2026-09-01', '2027-01-15', '{}', 'external',
    'Design system alignment needed before build.',
    14000, '2026-06-30T10:00:00Z'),
@@ -186,7 +192,7 @@ values
    'Reserve a global holdout audience to measure the true incremental impact of all experiments.',
    'Teams can''t quantify the aggregate lift of their experimentation program.',
    'A trustworthy program-level incrementality number per account.',
-   'planned', 'u-nadia', 'Tech & Perso Builders', 't-trust', 'Results people can trust',
+   'planned', 'u-nadia', 'team-tech-perso-builders', 't-trust', 'so-data',
    50, 3, 1, 3, 'on_track', '2026-10-01', '2026-12-31', '{i-stats}', 'internal', '',
    15000, '2026-06-22T09:30:00Z'),
 
@@ -194,7 +200,7 @@ values
    'A consistent, well-documented REST API covering experiments, flags, and results.',
    'The current API is inconsistent and blocks deeper customer integrations.',
    'Partners and customers automate workflows against a stable v3 API.',
-   'solution_framing', 'u-marc', 'App System', 't-dx', 'Open, composable platform',
+   'solution_framing', 'u-marc', 'team-app-system', 't-dx', 'so-core',
    250, 1, 0.8, 5, 'on_track', '2026-08-15', '2026-11-30', '{}', 'external', '',
    16000, '2026-06-27T11:00:00Z'),
 
@@ -202,7 +208,7 @@ values
    'Natural-language summaries that explain what an experiment''s results mean and what to do next.',
    'Interpreting results correctly requires stats expertise many teams lack.',
    'Every result ships with a clear, trustworthy recommendation.',
-   'opportunity_framing', 'u-lea', 'Tech & Perso Builders', 't-ai', 'Lead the market on AI-driven experimentation',
+   'opportunity_framing', 'u-lea', 'team-tech-perso-builders', 't-ai', 'so-ai',
    1000, 3, 0.5, 8, 'at_risk', '2026-11-01', '2027-03-31', '{i-stats}', 'internal',
    'Depends on Bayesian GA for reliable inputs.',
    17000, '2026-07-03T14:00:00Z'),
@@ -211,7 +217,7 @@ values
    'Auto-allocate traffic to winning variants to reduce regret during a test.',
    'Fixed traffic splits waste conversions on losing variants.',
    'Optional bandit mode that maximizes conversions while a test runs.',
-   'planned', 'u-magali', 'Tech & Perso Builders', 't-ai', 'Lead the market on AI-driven experimentation',
+   'planned', 'u-magali', 'team-tech-perso-builders', 't-ai', 'so-ai',
    250, 3, 0.8, 6, 'on_track', '2026-10-15', '2027-02-15', '{i-stats}', 'internal', '',
    18000, '2026-06-24T13:00:00Z'),
 
@@ -219,7 +225,7 @@ values
    'Rewritten SDK documentation with copy-paste quickstarts for every framework.',
    'Developers stall during integration because docs are outdated and scattered.',
    'Time-to-first-SDK-call drops sharply across supported languages.',
-   'released', 'u-marc', 'App System', 't-dx', 'Meet developers where they build',
+   'released', 'u-marc', 'team-app-system', 't-dx', 'so-internal',
    250, 0.5, 1, 2, 'on_track', '2026-04-01', '2026-06-15', '{}', 'external',
    'Shipped; tracking docs bounce rate.',
    19000, '2026-06-16T09:00:00Z');

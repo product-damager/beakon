@@ -31,7 +31,10 @@ const HEALTH_KEYS = Object.keys(HEALTH_META) as Health[];
  * STATUS_META's delivery-funnel colors), following the same tag-class shape.
  */
 export const OKR_GOVERNANCE_META: Record<OkrGovernanceStatus, { label: string; tag: string; order: number }> = {
-  draft: { label: "Draft", tag: "bg-beige-20 text-beige-60", order: 0 },
+  // bg-beige-20/text-beige-60 measured ~2.98:1 on white — fails WCAG AA
+  // (4.5:1). text-beige-70 (~5.4:1 on white, ~4.7:1 on this bg) keeps Draft
+  // the visually quietest of the six governance states without the fail.
+  draft: { label: "Draft", tag: "bg-beige-20 text-beige-70", order: 0 },
   to_validate: { label: "To validate", tag: "bg-blue-30 text-blue-70", order: 1 },
   being_reviewed: { label: "Being reviewed", tag: "bg-orange-30 text-orange-70", order: 2 },
   to_refine: { label: "To refine", tag: "bg-pink-30 text-pink-60", order: 3 },
@@ -41,10 +44,25 @@ export const OKR_GOVERNANCE_META: Record<OkrGovernanceStatus, { label: string; t
 /** Governance values in workflow order, for the inline picker options. */
 const GOVERNANCE_KEYS = Object.keys(OKR_GOVERNANCE_META) as OkrGovernanceStatus[];
 
+/** Short column alias per strategic objective, so the list column doesn't
+ * have to carry each objective's full name ("Core: Strengthening our
+ * foundations", etc.) — the full name is still available via a `title`
+ * tooltip at the call site. Keyed by id, not parsed from the name string,
+ * so it doesn't silently break if naming conventions change. Falls back to
+ * the full name for any future objective not yet given a short alias. */
+const STRATEGIC_OBJECTIVE_ALIAS: Record<string, string> = {
+  "so-core": "Core",
+  "so-ai": "AI",
+  "so-data": "Data",
+  "so-internal": "Internal",
+};
+
 /** Achievement is null when the OKR hasn't been assessed yet — mirrors the
- * DIVE "Not cast yet" convention (see lib/types.ts's scoreTier()). */
+ * DIVE "Not cast yet" convention (see lib/types.ts's scoreTier()). Rendered
+ * as the shorter "N/A" to keep the list column compact; a `title` tooltip
+ * at the call site spells out "Not assessed yet" for anyone who hovers. */
 export function formatAchievement(a: number | null): string {
-  return a === null ? "Not assessed yet" : `${Math.round(a * 100)}%`;
+  return a === null ? "N/A" : `${Math.round(a * 100)}%`;
 }
 
 interface Column {
@@ -55,13 +73,13 @@ interface Column {
 }
 
 const COLUMNS: Column[] = [
-  { k: "title", label: "Title" },
-  { k: "team", label: "Team" },
-  { k: "objective", label: "Strategic objective" },
+  { k: "title", label: "Title", className: "w-80" },
+  { k: "objective", label: "Objective", className: "w-20" },
   { k: "quarter", label: "Quarter" },
-  { k: "governance", label: "Governance" },
-  { k: "health", label: "Health" },
-  { k: "achievement", label: "Achievement", align: "right" },
+  { k: "governance", label: "Governance", className: "w-44" },
+  { k: "health", label: "Health", className: "w-32" },
+  { k: "team", label: "Team", className: "w-28" },
+  { k: "achievement", label: "Achievement", align: "right", className: "w-28" },
   { k: "updated", label: "Updated", align: "right" },
 ];
 
@@ -199,18 +217,20 @@ export function OkrList({
                     }}
                     className="cursor-pointer border-b border-beige-10 hover:bg-beige-10"
                   >
-                    <td className="px-3 py-2.5">
-                      <span className="font-medium text-green-90">{o.title || "Untitled OKR"}</span>
+                    <td className="w-80 max-w-0 px-3 py-2.5">
+                      <span className="block truncate font-medium text-green-90" title={o.title || "Untitled OKR"}>
+                        {o.title || "Untitled OKR"}
+                      </span>
                     </td>
-                    <td className="px-3 py-2.5">
-                      <span className="text-green-70">{ownerLabel(o)}</span>
+                    <td className="w-20 max-w-0 truncate px-3 py-2.5 text-green-70" title={objective?.name}>
+                      {objective ? (STRATEGIC_OBJECTIVE_ALIAS[objective.id] ?? objective.name) : "—"}
                     </td>
-                    <td className="px-3 py-2.5 text-green-70">{objective?.name ?? "—"}</td>
                     <td className="whitespace-nowrap px-3 py-2.5 text-green-70">
                       Q{o.quarter} {o.year}
                     </td>
-                    <td className="px-3 py-2.5">
+                    <td className="w-44 p-0">
                       <InlineTagSelect
+                        fill
                         label="Change governance"
                         value={o.governanceStatus}
                         options={GOVERNANCE_KEYS}
@@ -228,8 +248,9 @@ export function OkrList({
                         }}
                       />
                     </td>
-                    <td className="px-3 py-2.5">
+                    <td className="w-32 p-0">
                       <InlineTagSelect
+                        fill
                         label="Change health"
                         value={o.health}
                         options={HEALTH_KEYS}
@@ -240,12 +261,16 @@ export function OkrList({
                         }}
                       />
                     </td>
-                    <td className="px-3 py-2.5 text-right">
+                    <td className="w-28 max-w-0 truncate px-3 py-2.5" title={ownerLabel(o)}>
+                      <span className="text-green-70">{ownerLabel(o)}</span>
+                    </td>
+                    <td className="w-28 px-3 py-2.5 text-right">
                       <span
                         className={cn(
                           "font-display font-semibold tabular-nums",
                           o.achievement === null ? "text-beige-60" : "text-green-90"
                         )}
+                        title={o.achievement === null ? "Not assessed yet" : undefined}
                       >
                         {formatAchievement(o.achievement)}
                       </span>

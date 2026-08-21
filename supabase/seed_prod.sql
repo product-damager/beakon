@@ -5,8 +5,9 @@
 --
 -- Safe to re-run: every row upserts, so you can edit a name/email/color below
 -- and run it again to update. Requires the schema.sql columns (email, surname).
--- Note: `team` is intentionally NOT seeded — each person picks it in-app under
--- profile settings, and re-running this file won't clobber that choice.
+-- Note: `team_id` (formerly `team`) is intentionally NOT seeded — each
+-- person picks it in-app under profile settings, and re-running this file
+-- won't clobber that choice.
 
 -- ── Owners ──────────────────────────────────────────────────────────────
 -- The `email` must match each person's product sign-in email exactly.

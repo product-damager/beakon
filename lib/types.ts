@@ -43,8 +43,8 @@ export interface Owner {
   role: string;
   /** Product team sign-in email; used to auto-identify the signed-in user as owner. */
   email?: string;
-  /** The person's team (one of TEAMS); set from profile settings. */
-  team?: string;
+  /** The person's team (a real `teams` row id); set from profile settings. */
+  teamId?: string;
 }
 
 /**
@@ -96,9 +96,16 @@ export interface Initiative {
   expectedOutcome: string;
   status: Status;
   ownerId: string;
-  team: string;
+  /** A real `teams` row id — every initiative has exactly one team. */
+  teamId: string;
   themeId: string;
-  strategicGoal: string;
+  /**
+   * A real `strategic_objectives` row id, or null if unset. Unlike
+   * `Okr.strategicObjectiveId` (required), this is optional — `beakon-prod`'s
+   * existing initiatives start unset and there's no lossy remapping problem
+   * (see docs/decisions/007-heron-week-1-data-model-and-drawer-conventions.md).
+   */
+  strategicObjectiveId: string | null;
   scores: Scores | null; // null = unscored ("Not cast yet") — DIVE deferred
   health: Health;
   targetStart: string; // ISO date
@@ -176,12 +183,6 @@ export const VIABILITY_OPTIONS = [
   { value: 1, label: "Proven", pct: "100%" },
   { value: 0.8, label: "Evidence", pct: "80%" },
   { value: 0.5, label: "Hopeful", pct: "50%" },
-] as const;
-
-export const TEAMS = [
-  "App System",
-  "Tech & Perso Builders",
-  "Visual Builders",
 ] as const;
 
 /** Delivery funnel order: discovery → shaping → build → ship. */

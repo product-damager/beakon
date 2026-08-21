@@ -9,15 +9,18 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { INITIATIVES, OWNERS, THEMES } from "./seed";
+import { BUSINESS_UNITS, INITIATIVES, OWNERS, STRATEGIC_OBJECTIVES, TEAMS_TABLE, THEMES } from "./seed";
 import { EMPTY_FILTERS, type Filters } from "./filters";
-import { TEAMS, ZOOM_SCALE_MAX, ZOOM_SCALE_MIN } from "./types";
+import { ZOOM_SCALE_MAX, ZOOM_SCALE_MIN } from "./types";
 import type {
+  BusinessUnit,
   Density,
   GroupBy,
   Initiative,
   Owner,
   Status,
+  StrategicObjective,
+  Team,
   Theme,
   TimelineSort,
   Zoom,
@@ -62,6 +65,15 @@ interface RoadmapState {
   initiatives: Initiative[];
   themes: Theme[];
   owners: Owner[];
+  /**
+   * Moved here from useOkrWorkspace by Sprint Heron Week 1 (ADR 007 decision
+   * 3) — Initiative/Owner now depend on `teams` for every list/filter/
+   * settings render, so these three reference tables must be eagerly
+   * available wherever Initiative/Owner are, not lazily on `/okrs` only.
+   */
+  teams: Team[];
+  businessUnits: BusinessUnit[];
+  strategicObjectives: StrategicObjective[];
 
   /** True while the initial Supabase load is in flight. */
   loading: boolean;
@@ -108,7 +120,7 @@ interface RoadmapState {
   /** Create a new theme (persists + adds to state). */
   addTheme: (t: Theme) => void;
   /** Update the signed-in user's profile (name / surname / team / role). */
-  saveProfile: (patch: { name: string; surname: string; team: string; role: string }) => void;
+  saveProfile: (patch: { name: string; surname: string; teamId: string; role: string }) => void;
   /** Board drag: set status and place before `beforeId` (null = end of target column). */
   moveInitiative: (id: string, toStatus: Status, beforeId: string | null) => void;
   archiveInitiative: (id: string) => void;
@@ -121,6 +133,8 @@ interface RoadmapState {
   getOwner: (id: string) => Owner | undefined;
   getTheme: (id: string) => Theme | undefined;
   getInitiative: (id: string) => Initiative | undefined;
+  getTeam: (id: string) => Team | undefined;
+  getStrategicObjective: (id: string) => StrategicObjective | undefined;
 }
 
 const Ctx = createContext<RoadmapState | null>(null);
@@ -135,6 +149,13 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
   );
   const [themes, setThemes] = useState<Theme[]>(() => (isSupabaseConfigured ? [] : THEMES));
   const [owners, setOwners] = useState<Owner[]>(() => (isSupabaseConfigured ? [] : OWNERS));
+  const [teams, setTeams] = useState<Team[]>(() => (isSupabaseConfigured ? [] : TEAMS_TABLE));
+  const [businessUnits, setBusinessUnits] = useState<BusinessUnit[]>(() =>
+    isSupabaseConfigured ? [] : BUSINESS_UNITS
+  );
+  const [strategicObjectives, setStrategicObjectives] = useState<StrategicObjective[]>(() =>
+    isSupabaseConfigured ? [] : STRATEGIC_OBJECTIVES
+  );
   const [loading, setLoading] = useState<boolean>(isSupabaseConfigured);
   const [error, setError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -163,6 +184,9 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
         setInitiatives(w.initiatives);
         setThemes(w.themes);
         setOwners(w.owners);
+        setTeams(w.teams);
+        setBusinessUnits(w.businessUnits);
+        setStrategicObjectives(w.strategicObjectives);
       })
       .catch((e: unknown) => {
         if (!active) return;
@@ -344,7 +368,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
   }, [owners, session]);
 
   const saveProfile = useCallback(
-    (patch: { name: string; surname: string; team: string; role: string }) => {
+    (patch: { name: string; surname: string; teamId: string; role: string }) => {
       const email = session?.user?.email ?? undefined;
       // Edit the matched owner row if there is one; otherwise create a profile
       // keyed to the signed-in email so anyone in the domain can identify.
@@ -356,7 +380,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
         name: patch.name.trim(),
         surname: patch.surname.trim() || undefined,
         role: patch.role.trim(),
-        team: patch.team || undefined,
+        teamId: patch.teamId || undefined,
         email: base.email ?? email,
       };
       setOwners((prev) =>
@@ -382,12 +406,13 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       status: "planned",
       ownerId: currentOwner?.id ?? owners[0]?.id ?? "",
       // Default to the creator's own team so they don't have to switch off a
-      // fixed default; falls back to the first team when it's not set yet.
-      team: currentOwner?.team ?? TEAMS[0],
+      // fixed default; falls back to the first real team when it's not set yet.
+      teamId: currentOwner?.teamId ?? teams[0]?.id ?? "",
       // Start unthemed rather than silently inheriting the first theme — the
       // creator makes theme an explicit choice (see W4).
       themeId: "",
-      strategicGoal: "",
+      // Start with no strategic objective — optional, unlike OKR's required field.
+      strategicObjectiveId: null,
       // Start unscored — a made-up default DIVE reads as a real priority nobody set.
       scores: null,
       health: "on_track",
@@ -400,7 +425,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       updatedAt: new Date().toISOString(),
       archived: false,
     };
-  }, [owners, currentOwner]);
+  }, [owners, currentOwner, teams]);
 
   const select = useCallback((id: string | null) => {
     setSelectedId(id);
@@ -419,12 +444,20 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
     (id: string) => initiatives.find((i) => i.id === id),
     [initiatives]
   );
+  const getTeam = useCallback((id: string) => teams.find((t) => t.id === id), [teams]);
+  const getStrategicObjective = useCallback(
+    (id: string) => strategicObjectives.find((s) => s.id === id),
+    [strategicObjectives]
+  );
 
   const value = useMemo<RoadmapState>(
     () => ({
       initiatives,
       themes,
       owners,
+      teams,
+      businessUnits,
+      strategicObjectives,
       currentOwner,
       loading,
       error,
@@ -464,11 +497,16 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       getOwner,
       getTheme,
       getInitiative,
+      getTeam,
+      getStrategicObjective,
     }),
     [
       initiatives,
       themes,
       owners,
+      teams,
+      businessUnits,
+      strategicObjectives,
       currentOwner,
       loading,
       error,
@@ -502,6 +540,8 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       getOwner,
       getTheme,
       getInitiative,
+      getTeam,
+      getStrategicObjective,
     ]
   );
 

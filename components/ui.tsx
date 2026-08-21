@@ -77,7 +77,7 @@ export function Tag({
   return (
     <span
       className={cn(
-        "mono-label inline-flex items-center gap-1 px-2 py-1 leading-none",
+        "mono-label inline-flex items-center gap-1 whitespace-nowrap px-2 py-1 leading-none",
         shape === "square" ? "rounded-sm" : "rounded-md",
         className
       )}

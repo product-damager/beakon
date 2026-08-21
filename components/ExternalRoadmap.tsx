@@ -8,6 +8,7 @@ import { fetchExternalRoadmap, type PublicInitiative } from "@/lib/data";
 import { INITIATIVES, THEMES } from "@/lib/seed";
 import { cn } from "@/lib/cn";
 import { Logo } from "./Logo";
+import { Tag } from "./ui";
 
 // External-facing statuses use friendlier, audience-ready language.
 const PUBLIC_STATUS: Record<string, string> = {
@@ -37,6 +38,12 @@ export function ExternalRoadmap() {
     isSupabaseConfigured ? [] : SEED_EXTERNAL
   );
   const [themes, setThemes] = useState<Theme[]>(isSupabaseConfigured ? [] : THEMES);
+  // Same shape as LoginScreen's own status state — loading/empty/error need to
+  // render distinctly rather than all falling through to the same blank grid
+  // (docs/design/public-share-and-auth.md finding 2).
+  const [status, setStatus] = useState<"loading" | "ready" | "error">(
+    isSupabaseConfigured ? "loading" : "ready"
+  );
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
@@ -46,8 +53,13 @@ export function ExternalRoadmap() {
         if (!active) return;
         setItems(r.items);
         setThemes(r.themes);
+        setStatus("ready");
       })
-      .catch((e) => console.error("[beakon] external roadmap load failed", e));
+      .catch((e) => {
+        console.error("[beakon] external roadmap load failed", e);
+        if (!active) return;
+        setStatus("error");
+      });
     return () => {
       active = false;
     };
@@ -69,9 +81,14 @@ export function ExternalRoadmap() {
       {/* Branded header (placeholder — swap in the real marketing header later) */}
       <header className="border-b border-beige-20 bg-white">
         <div className="mx-auto max-w-5xl px-8 py-10">
-          <div className="flex items-center gap-2.5">
-            <Logo size={26} />
-            <span className="font-display text-lg font-semibold text-green-90">Product team</span>
+          <div className="flex items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2.5">
+              <Logo size={26} />
+              <span className="font-display text-lg font-semibold text-green-90">Product team</span>
+            </div>
+            {/* Persistent marker so this page is never mistaken for an internal
+             * screenshot (docs/design/public-share-and-auth.md finding 4). */}
+            <Tag className="bg-beige-20 text-beige-60">Public view</Tag>
           </div>
           <div className="mono-label mt-8 text-lime-70">Product roadmap</div>
           <h1 className="mt-2 max-w-2xl font-display text-4xl font-semibold leading-tight text-green-90">
@@ -85,66 +102,101 @@ export function ExternalRoadmap() {
       </header>
 
       <main className="mx-auto max-w-5xl px-8 py-10">
-        {/* Legend */}
-        <div className="mb-6 flex flex-wrap items-center gap-x-5 gap-y-2">
-          {STATUSES.map((s) => (
-            <span key={s} className="flex items-center gap-1.5 text-xs text-green-70">
-              <span className={cn("h-2.5 w-2.5 rounded-full", STATUS_META[s].dot)} />
-              {PUBLIC_STATUS[s]}
-            </span>
-          ))}
-        </div>
-
-        <div className="overflow-hidden rounded-2xl border border-beige-20 bg-white">
-          {/* Axis */}
-          <div className="flex border-b border-beige-20">
-            <div className="w-[240px] shrink-0" />
-            <div className="relative h-10" style={{ width: canvasWidth }}>
-              {columns.map((c) => (
-                <div
-                  key={c.key}
-                  className="absolute bottom-1.5 flex items-baseline gap-1"
-                  style={{ left: `${c.leftPct}%` }}
-                >
-                  <span className="text-[13px] font-medium text-green-70">{c.label}</span>
-                  <span className="mono-label-sm text-beige-60">{c.sublabel}</span>
-                </div>
+        {status === "loading" ? (
+          <div className="flex flex-col items-center gap-3 rounded-2xl border border-beige-20 bg-white px-8 py-16 text-center">
+            <Logo size={26} tile className="animate-pulse" />
+            <span className="mono-label-sm text-beige-60">Loading roadmap…</span>
+          </div>
+        ) : status === "error" ? (
+          <div className="flex flex-col items-center gap-2 rounded-2xl border border-beige-20 bg-white px-8 py-16 text-center">
+            <div className="font-display text-lg font-semibold text-green-90">Couldn&apos;t load the roadmap</div>
+            <p className="max-w-sm text-sm text-beige-60">
+              Something went wrong loading this page. Try refreshing — if it keeps happening, let
+              us know.
+            </p>
+          </div>
+        ) : items.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 rounded-2xl border border-beige-20 bg-white px-8 py-16 text-center">
+            <div className="font-display text-lg font-semibold text-green-90">Nothing to show yet</div>
+            <p className="max-w-sm text-sm text-beige-60">
+              No initiatives are marked for external sharing right now — check back soon.
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Legend */}
+            <div className="mb-6 flex flex-wrap items-center gap-x-5 gap-y-2">
+              {STATUSES.map((s) => (
+                <span key={s} className="flex items-center gap-1.5 text-xs text-green-70">
+                  <span className={cn("h-2.5 w-2.5 rounded-full", STATUS_META[s].dot)} />
+                  {PUBLIC_STATUS[s]}
+                </span>
               ))}
             </div>
-          </div>
 
-          {groups.map((g) => (
-            <div key={g.theme.id} className="border-b border-beige-10 last:border-b-0">
-              <div className="flex items-center gap-2 bg-beige-5 px-6 py-2">
-                <span className={cn("h-3 w-1 shrink-0 rounded-[2px]", THEME_COLOR_META[g.theme.color].dot)} />
-                <span className="text-[13px] font-semibold text-green-90">{g.theme.name}</span>
-              </div>
-              {g.items.map((i) => {
-                const pos = barPosition(i.targetStart, i.targetEnd, window);
-                const meta = STATUS_META[i.status];
-                return (
-                  <div key={i.id} className="flex items-stretch">
-                    <div className="flex w-[240px] shrink-0 items-center px-6 py-3">
-                      <span className="text-[13px] font-medium text-green-90">{i.title}</span>
-                    </div>
-                    <div className="relative py-3" style={{ width: canvasWidth }}>
-                      <div
-                        title={i.title}
-                        className={cn(
-                          "absolute top-1/2 flex h-7 -translate-y-1/2 items-center overflow-hidden rounded-md px-2.5 text-xs font-medium",
-                          meta.bar
-                        )}
-                        style={{ left: `${pos.leftPct}%`, width: `max(28px, ${pos.widthPct}%)` }}
-                      >
-                        <span className="truncate">{i.title}</span>
-                      </div>
+            <div className="overflow-hidden rounded-2xl border border-beige-20 bg-white">
+              {/* Horizontal scroll, not pan/zoom — this is a read-only public
+               * view, unlike Timeline's internal editing surface. */}
+              <div className="calm-scroll overflow-x-auto">
+                <div style={{ minWidth: 240 + canvasWidth }}>
+                  {/* Axis */}
+                  <div className="flex border-b border-beige-20">
+                    <div className="w-[240px] shrink-0" />
+                    <div className="relative h-10" style={{ width: canvasWidth }}>
+                      {columns.map((c) => (
+                        <div
+                          key={c.key}
+                          className="absolute bottom-1.5 flex items-baseline gap-1"
+                          style={{ left: `${c.leftPct}%` }}
+                        >
+                          <span className="text-[13px] font-medium text-green-70">{c.label}</span>
+                          <span className="mono-label-sm text-beige-60">{c.sublabel}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                );
-              })}
+
+                  {groups.map((g) => (
+                    <div key={g.theme.id} className="border-b border-beige-10 last:border-b-0">
+                      <div className="flex items-center gap-2 bg-beige-5 px-6 py-2">
+                        <span className={cn("h-3 w-1 shrink-0 rounded-[2px]", THEME_COLOR_META[g.theme.color].dot)} />
+                        <span className="text-[13px] font-semibold text-green-90">{g.theme.name}</span>
+                      </div>
+                      {g.items.map((i) => {
+                        const pos = barPosition(i.targetStart, i.targetEnd, window);
+                        const meta = STATUS_META[i.status];
+                        return (
+                          <div key={i.id} className="flex items-stretch">
+                            <div className="flex w-[240px] min-w-0 shrink-0 items-center px-6 py-3">
+                              <span
+                                className="truncate text-[13px] font-medium text-green-90"
+                                title={i.title}
+                              >
+                                {i.title}
+                              </span>
+                            </div>
+                            <div className="relative py-3" style={{ width: canvasWidth }}>
+                              <div
+                                title={i.title}
+                                className={cn(
+                                  "absolute top-1/2 flex h-7 -translate-y-1/2 items-center overflow-hidden rounded-md px-2.5 text-xs font-medium",
+                                  meta.bar
+                                )}
+                                style={{ left: `${pos.leftPct}%`, width: `max(28px, ${pos.widthPct}%)` }}
+                              >
+                                <span className="truncate">{i.title}</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-          ))}
-        </div>
+          </>
+        )}
 
         <p className="mt-6 text-center text-xs text-beige-60">
           Curated external view · internal notes, scores, and owners are never shown here.

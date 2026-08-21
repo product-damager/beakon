@@ -10,10 +10,12 @@ import {
   IMPACT_OPTIONS,
   THEME_COLOR_META,
   VIABILITY_OPTIONS,
+  type BusinessUnit,
   type DeliveryLink,
   type DeliveryLinkType,
   type Initiative,
   type Scores,
+  type Team,
   type Theme,
   type ThemeColor,
 } from "@/lib/types";
@@ -21,6 +23,7 @@ import { cn } from "@/lib/cn";
 import { Button, Eyebrow, ScoreTierTag } from "./ui";
 import { Field, NativeSelect, TextInput } from "./form";
 import { useOutsideClose } from "./hooks";
+import { baseInput, TeamGroupList } from "./okr-fields";
 
 /** Prepend https:// to a scheme-less URL so a delivery link never becomes relative. */
 export function withScheme(url: string): string {
@@ -46,6 +49,91 @@ export function PropRow({
         {label}
       </span>
       <div className="min-w-0 self-center text-sm text-green-90">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * Team-only picker (11 real squads, searchable, grouped by parent business
+ * unit) — the initiative-domain sibling of okr-fields.tsx's TeamOrBuPicker,
+ * minus the business-unit option (initiatives/owners pick a real team only,
+ * see docs/decisions/007-heron-week-1-data-model-and-drawer-conventions.md
+ * decision 2). Shares the grouped-Teams-list rendering (TeamGroupList) and
+ * dropdown-shell input styling (baseInput) with that picker rather than
+ * duplicating them.
+ */
+export function TeamPicker({
+  teams,
+  businessUnits,
+  teamId,
+  onChange,
+}: {
+  teams: Team[];
+  businessUnits: BusinessUnit[];
+  teamId?: string;
+  onChange: (teamId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  const close = () => {
+    setOpen(false);
+    setQuery("");
+  };
+  useOutsideClose(ref, open, close);
+
+  const selectedTeam = teamId ? teams.find((t) => t.id === teamId) : undefined;
+  const q = query.trim().toLowerCase();
+  const shownTeams = teams.filter((t) => !q || t.name.toLowerCase().includes(q));
+
+  const pick = (id: string) => {
+    onChange(id);
+    close();
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        aria-label="Team"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className={cn(baseInput, "flex h-9 w-full items-center gap-2 pr-9 text-left")}
+      >
+        <span className={cn("truncate", selectedTeam ? "text-green-90" : "text-beige-60")}>
+          {selectedTeam?.name ?? "Choose a team"}
+        </span>
+        <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-beige-60" />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-1 w-full rounded-xl border border-beige-20 bg-white p-2 shadow-lg">
+          <div className="relative mb-2">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-beige-60" />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Escape" && (e.preventDefault(), close())}
+              placeholder="Search teams…"
+              className="h-8 w-full rounded-lg border border-beige-30 bg-white pl-8 pr-3 text-sm text-green-90 placeholder:text-beige-60 focus:outline-none focus:ring-2 focus:ring-green-90"
+            />
+          </div>
+          <div className="calm-scroll max-h-60 space-y-0.5 overflow-auto" role="listbox">
+            <TeamGroupList
+              teams={teams}
+              businessUnits={businessUnits}
+              query={query}
+              selectedTeamId={teamId}
+              onPick={pick}
+            />
+            {shownTeams.length === 0 && (
+              <div className="px-2.5 py-2 text-sm text-beige-60">No matches</div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -7,6 +7,21 @@ import { Button } from "./ui";
 import { Field, TextInput } from "./form";
 import { Logo } from "./Logo";
 
+/**
+ * Supabase's `enforce_company_domain` trigger (supabase/schema.sql) rejects
+ * signups outside the company domain / allow-list by raising a Postgres
+ * exception — which GoTrue often surfaces as a generic wrapper message
+ * ("Database error saving new user") rather than the trigger's own text, and
+ * even the raw trigger text isn't something a rejected user should have to
+ * parse. Pattern-match both shapes and substitute friendly, actionable copy.
+ */
+function friendlyAuthError(raw: string): string {
+  if (/restricted to our team email|allow-listed address|database error saving new user/i.test(raw)) {
+    return "That email isn't recognized yet. Sign in with your work email, or ask your workspace admin to add you.";
+  }
+  return raw;
+}
+
 export function LoginScreen() {
   const { signIn } = useAuth();
   const [email, setEmail] = useState("");
@@ -20,7 +35,7 @@ export function LoginScreen() {
     setError(null);
     const err = await signIn(email);
     if (err) {
-      setError(err);
+      setError(friendlyAuthError(err));
       setStatus("idle");
     } else {
       setStatus("sent");
@@ -84,7 +99,7 @@ export function LoginScreen() {
         </div>
 
         <p className="mt-6 text-center text-xs text-beige-60">
-          Access is limited...
+          Access is limited to Kameleoon team members and individually allow-listed guests.
         </p>
       </div>
     </div>
