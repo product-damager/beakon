@@ -1,13 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { GripVertical } from "lucide-react";
+import { CalendarRange, GripVertical } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import { applyFilters } from "@/lib/filters";
 import { quarterLabelFromISO } from "@/lib/dates";
-import { diveScore, ownerName, STATUS_META, STATUSES, THEME_COLOR_META, type Initiative, type Status } from "@/lib/types";
+import { ownerName, STATUS_META, STATUSES, THEME_COLOR_META, type Initiative, type Status } from "@/lib/types";
 import { cn } from "@/lib/cn";
-import { Avatar, Eyebrow, ScoreTierTag } from "./ui";
+import { Avatar, Eyebrow, HealthTag, Tag } from "./ui";
 import { FilterBar } from "./FilterBar";
 
 /**
@@ -34,11 +34,9 @@ function orderWithDeps(items: Initiative[]): Initiative[] {
 function Card({
   initiative,
   related,
-  dragging,
 }: {
   initiative: Initiative;
   related?: boolean;
-  dragging?: boolean;
 }) {
   const { getOwner, getTheme, select, saveInitiative, notify, owners } = useRoadmap();
   const owner = getOwner(initiative.ownerId);
@@ -48,11 +46,11 @@ function Card({
     <div
       className={cn(
         "group relative rounded-xl border bg-white p-3 shadow-sm transition-all",
+        // The drag ghost + the wrapper's opacity-40 already carry the drag
+        // signal — no separate border/shadow branch needed here.
         related
           ? "border-lime-50 ring-2 ring-lime-40"
-          : dragging
-            ? "border-green-40 shadow-md"
-            : "border-beige-20 hover:border-green-40"
+          : "border-beige-20 hover:border-green-40"
       )}
     >
       <GripVertical
@@ -62,17 +60,28 @@ function Card({
       <button onClick={() => select(initiative.id)} className="block w-full pr-4 text-left">
         <div className="mb-2 flex items-center gap-1.5">
           {theme && <span className={cn("h-3 w-1 shrink-0 rounded-[2px]", THEME_COLOR_META[theme.color].dot)} />}
-          <span className="mono-label-sm truncate text-beige-60">{theme?.name}</span>
+          <span className="mono-label-sm min-w-0 flex-1 truncate text-beige-60">{theme?.name}</span>
         </div>
-        <div className="text-sm font-medium leading-snug text-green-90 group-hover:text-green-60">
-          {initiative.title}
+        <div className="flex min-w-0 items-start gap-1.5">
+          <div
+            className={cn(
+              "line-clamp-2 min-h-[2.4rem] flex-1 text-sm font-medium leading-snug group-hover:text-green-60",
+              initiative.archived ? "text-beige-70" : "text-green-90"
+            )}
+          >
+            {initiative.title || "Untitled initiative"}
+          </div>
+          {initiative.archived && (
+            <Tag className="shrink-0 bg-beige-20 text-beige-70">Archived</Tag>
+          )}
         </div>
       </button>
-      <div className="mt-3 flex flex-col items-start gap-2">
-        <span className="mono-label-sm whitespace-nowrap text-beige-60">
-          {quarterLabelFromISO(initiative.targetStart)}
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <HealthTag health={initiative.health} />
+        <span className="mono-label-sm flex items-center gap-1 whitespace-nowrap text-beige-60">
+          <CalendarRange size={13} strokeWidth={1.75} />
+          {quarterLabelFromISO(initiative.targetEnd)}
         </span>
-        <ScoreTierTag score={diveScore(initiative.scores)} />
       </div>
       {/* Quick edit */}
       <div className="mt-3 flex items-center gap-2 border-t border-beige-10 pt-2.5">
@@ -103,19 +112,21 @@ function Card({
 }
 
 function Placeholder() {
+  // Fixed height matching a card clamped to a 2-line title (simpler and more
+  // predictable than tracking the actual dragged card's height dynamically).
   return (
-    <div className="pointer-events-none h-[104px] rounded-xl border-2 border-dashed border-green-50 bg-green-10/60" />
+    <div className="pointer-events-none h-[152px] rounded-xl border-2 border-dashed border-green-50 bg-green-10/60" />
   );
 }
 
 export function Board() {
-  const { initiatives, filters, themes, owners, moveInitiative, notify } = useRoadmap();
+  const { initiatives, filters, themes, owners, teams, moveInitiative, notify } = useRoadmap();
   const [dragId, setDragId] = useState<string | null>(null);
   const [drop, setDrop] = useState<{ status: Status; beforeId: string | null } | null>(null);
 
   const filtered = useMemo(
-    () => applyFilters(initiatives, filters, themes, owners),
-    [initiatives, filters, themes, owners]
+    () => applyFilters(initiatives, filters, themes, owners, teams),
+    [initiatives, filters, themes, owners, teams]
   );
 
   const columns = useMemo(() => {
@@ -227,16 +238,20 @@ export function Board() {
                         <Card
                           initiative={i}
                           related={Boolean(dragId) && relatedIds.has(i.id)}
-                          dragging={dragId === i.id}
                         />
                       </div>
                     </div>
                   ))}
                   {/* Placeholder / hint at the end of the column */}
                   {dragId && drop?.status === s && drop.beforeId === null && <Placeholder />}
-                  {items.length === 0 && !isTarget && (
+                  {items.length === 0 && !isTarget && Boolean(dragId) && (
                     <div className="flex min-h-[92px] items-center justify-center rounded-lg border border-dashed border-beige-30 px-4 py-6 text-center text-xs leading-relaxed text-balance text-beige-60">
                       Drop here to mark {STATUS_META[s].label.toLowerCase()}
+                    </div>
+                  )}
+                  {items.length === 0 && !dragId && (
+                    <div className="flex min-h-[92px] items-center justify-center rounded-lg px-4 py-6 text-center text-xs leading-relaxed text-balance text-beige-40">
+                      No initiatives
                     </div>
                   )}
                 </div>

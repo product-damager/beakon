@@ -96,6 +96,39 @@ if the table already has rows).
 > **breaking migration**. Don't fold it into `schema.sql` — write it as a separate,
 > reviewed one-off statement, test it on preview first, and back up prod before running it there.
 
+**Exception — repointing a view's column list to a renamed/new column.** `create or
+replace view` can change a column's underlying expression, but not its name or position
+(Postgres error 42P16 if you try). If a `schema.sql` view definition needs to select a
+differently-named column than it used to (e.g. Sprint Heron Week 1's `external_roadmap`
+moving from `i.team` to `i.team_id`), the *rename itself* still needs a guarded, one-time
+`do $$ ... end $$` block — but unlike a column rename on a table, it's safe to put that
+guard directly in `schema.sql`, immediately before the `create or replace view`, rather
+than exiling it to a one-off migration file:
+
+```sql
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = '<view_name>'
+      and column_name = '<old_name>'
+  ) and not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = '<view_name>'
+      and column_name = '<new_name>'
+  ) then
+    alter view <view_name> rename column <old_name> to <new_name>;
+  end if;
+end $$;
+```
+
+This is safe to fold into `schema.sql` (unlike a bare rename) because the existence
+checks make it a permanent no-op once applied: skip if the view doesn't exist yet (fresh
+install), skip if the rename already happened, run once otherwise. Without it, the next
+`schema.sql` run against an environment that still has the old column name fails with
+42P16 — see `supabase/migrations/2026-08-heron-team-strategic-objective-backfill.sql`'s
+"Part A0" for the incident this guards against.
+
 ### Workflow: apply a schema change
 
 **1. Test on preview (rebuild from scratch).** Preview holds only disposable data, so the

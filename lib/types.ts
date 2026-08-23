@@ -1,5 +1,7 @@
 // ── Core domain types for Beakon ──
 
+import type { OkrFilters } from "./okrFilters";
+
 export type Status =
   | "planned"
   | "opportunity_framing"
@@ -7,7 +9,7 @@ export type Status =
   | "in_development"
   | "released";
 export type Visibility = "internal" | "external";
-export type Health = "on_track" | "at_risk" | "blocked";
+export type Health = "on_track" | "at_risk" | "blocked" | "delayed";
 export type GroupBy = "theme" | "team" | "owner";
 export type Zoom = "month" | "quarter" | "half";
 /** Sort dimension for timeline rows within each group. */
@@ -33,7 +35,7 @@ export const ZOOM_SCALE_STEP = 0.2;
 /** Product friendly palette family used to color a theme. */
 export type ThemeColor = "green" | "blue" | "lime" | "pink" | "orange" | "beige";
 
-export type DeliveryLinkType = "redmine" | "figma" | "spec" | "notion" | "other";
+export type DeliveryLinkType = "redmine" | "figma" | "spec" | "notion" | "jira" | "linear" | "other";
 
 export interface Owner {
   id: string;
@@ -43,8 +45,8 @@ export interface Owner {
   role: string;
   /** Product team sign-in email; used to auto-identify the signed-in user as owner. */
   email?: string;
-  /** The person's team (one of TEAMS); set from profile settings. */
-  team?: string;
+  /** The person's team (a real `teams` row id); set from profile settings. */
+  teamId?: string;
 }
 
 /**
@@ -96,9 +98,16 @@ export interface Initiative {
   expectedOutcome: string;
   status: Status;
   ownerId: string;
-  team: string;
+  /** A real `teams` row id — every initiative has exactly one team. */
+  teamId: string;
   themeId: string;
-  strategicGoal: string;
+  /**
+   * A real `strategic_objectives` row id, or null if unset. Unlike
+   * `Okr.strategicObjectiveId` (required), this is optional — `beakon-prod`'s
+   * existing initiatives start unset and there's no lossy remapping problem
+   * (see docs/decisions/007-heron-week-1-data-model-and-drawer-conventions.md).
+   */
+  strategicObjectiveId: string | null;
   scores: Scores | null; // null = unscored ("Not cast yet") — DIVE deferred
   health: Health;
   targetStart: string; // ISO date
@@ -178,12 +187,6 @@ export const VIABILITY_OPTIONS = [
   { value: 0.5, label: "Hopeful", pct: "50%" },
 ] as const;
 
-export const TEAMS = [
-  "App System",
-  "Tech & Perso Builders",
-  "Visual Builders",
-] as const;
-
 /** Delivery funnel order: discovery → shaping → build → ship. */
 export const STATUSES: Status[] = [
   "planned",
@@ -203,7 +206,7 @@ export interface StatusMeta {
 /** Status is the meaning-bearing color on the timeline. Lime is reserved for UI accents. */
 export const STATUS_META: Record<Status, StatusMeta> = {
   planned: {
-    label: "Planned",
+    label: "Backlog",
     bar: "bg-blue-40 text-blue-80",
     dot: "bg-blue-50",
     tag: "bg-blue-30 text-blue-70",
@@ -234,11 +237,23 @@ export const STATUS_META: Record<Status, StatusMeta> = {
   },
 };
 
-/** Delivery health — a live signal, distinct from the RICE estimate. */
+/**
+ * Delivery health — a live signal, distinct from the RICE estimate.
+ * `delayed` (added docs/plans/okr-filters-archive-parity-and-delayed-health.md
+ * item 6) uses its own `amber` hue — distinct from the green/orange/red
+ * severity gradient the other three values use, and from Governance's
+ * blue/pink (see that plan's adjacency-clash analysis) — so it doesn't read
+ * as either a worse `at_risk` or a governance state at a glance. Sort order
+ * (`HEALTH_ORDER` in components/List.tsx / OkrList.tsx, frontend-owned) is
+ * `{ on_track: 0, at_risk: 1, blocked: 2, delayed: 3 }` per the PM's explicit
+ * decision — Delayed sorts last, overriding the design brief's proposed
+ * on_track→delayed→at_risk→blocked severity placement. Don't "fix" this back.
+ */
 export const HEALTH_META: Record<Health, { label: string; tag: string; dot: string }> = {
   on_track: { label: "On track", tag: "bg-green-30 text-green-70", dot: "bg-green-60" },
   at_risk: { label: "At risk", tag: "bg-orange-30 text-orange-70", dot: "bg-orange-60" },
   blocked: { label: "Blocked", tag: "bg-red-30 text-red-70", dot: "bg-red-60" },
+  delayed: { label: "Delayed", tag: "bg-amber-30 text-amber-70", dot: "bg-amber-60" },
 };
 
 export const THEME_COLOR_META: Record<ThemeColor, { dot: string; soft: string; text: string }> = {
@@ -268,6 +283,8 @@ export const DELIVERY_TYPE_LABEL: Record<DeliveryLinkType, string> = {
   figma: "Figma",
   spec: "Spec",
   notion: "Notion",
+  jira: "Jira",
+  linear: "Linear",
   other: "Other",
 };
 
@@ -333,4 +350,82 @@ export interface OkrOwner {
 export interface OkrInitiativeLink {
   okrId: string;
   initiativeId: string;
+}
+
+// ── OkrView (Sprint Heron Week 3 — saved/shareable "My OKRs" filter view) ──
+
+export type OkrViewVisibility = "private" | "shared";
+
+/**
+ * A saved, named `OkrFilters` snapshot, structurally parallel to `Roadmap`'s
+ * owner/private/shared-view/shared-edit sharing model but deliberately
+ * narrower — see
+ * docs/decisions/009-okr-saved-views-reverse-adr-008-deferral.md. There is
+ * no System OkrView: `ownerId` is never null (the existing unfiltered
+ * "OKRs" nav entry already covers that role, unchanged), and there is no
+ * `viewMode`/`groupBy`/`zoom`/`density`/`timelineSort` equivalent — an OKR
+ * saved view is only a named filter snapshot plus sharing metadata.
+ */
+export interface OkrView {
+  id: string;
+  ownerId: string;
+  name: string;
+  filters: OkrFilters;
+  visibility: OkrViewVisibility;
+  /** Meaningful only when `visibility === "shared"` — ignored while private. */
+  editable: boolean;
+  /** Sidebar sort order among a user's own saved OKR views. */
+  position?: number;
+  /** Group keys ("bu:<id>" / "team:<id>", same shape lib/okrGrouping.ts
+   *  produces) that were collapsed when this view was last saved. Absence
+   *  from this array means expanded — including for any BU/Team that
+   *  didn't exist yet when the view was saved. */
+  collapsedGroupKeys: string[];
+}
+
+// ── Roadmap (Sprint Heron Week 2 — unified List/Board/Timeline saved view) ──
+
+export type RoadmapVisibility = "private" | "shared";
+
+/**
+ * A saved List/Board/Timeline view. `viewMode` is a property of the saved
+ * object, not a separate nav destination — switching it updates this field
+ * in place, the same way changing a filter would. This is the app's first
+ * per-user-owned, RLS-scoped object: sharing is owner-controlled via
+ * `visibility` + `editable` (private / shared-view-only / shared-editable —
+ * two fields rather than a three-value enum, see ADR 008's "alternatives
+ * considered"). Exactly one system-owned, non-deletable Roadmap always
+ * exists (`id: "roadmap-general"`, `isSystem: true`, `ownerId: null`) — see
+ * docs/decisions/008-roadmap-entity-visibility-model-and-okr-separation.md
+ * decision 2 for why its `viewMode`/`filters`/etc. are never persisted by
+ * anyone (per-user view-mode switching on it is client-only state).
+ */
+export interface Roadmap {
+  id: string;
+  /** Null only for the System Roadmap (`isSystem: true`) — every user-created Roadmap has an owner. */
+  ownerId: string | null;
+  name: string;
+  viewMode: ViewKey;
+  /**
+   * Stored as `jsonb` in the DB — deliberately not the closed `Filters`
+   * type `lib/filters.ts` defines: `filters.ts` already imports from this
+   * file, so importing `Filters` back here would create a cycle. This also
+   * means a malformed/stale shape in the column loses type safety (plan
+   * §5's flagged risk) — callers that apply this as live filter state
+   * (`lib/store.tsx`) are responsible for normalizing/defaulting an
+   * unexpected shape, the same way `normalizeThemeColor()` guards
+   * `themes.color`.
+   */
+  filters: Record<string, unknown>;
+  groupBy: GroupBy;
+  zoom: Zoom;
+  zoomScale: number;
+  density: Density;
+  timelineSort: TimelineSort | null;
+  visibility: RoadmapVisibility;
+  /** Meaningful only when `visibility === "shared"` — ignored while private. */
+  editable: boolean;
+  isSystem: boolean;
+  /** Sidebar sort order among a user's own Roadmaps. */
+  position?: number;
 }

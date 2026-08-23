@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
-import { ownerName, TEAMS, type Owner } from "@/lib/types";
+import { ownerName, type BusinessUnit, type Owner, type Team } from "@/lib/types";
 import { Avatar, Button, Eyebrow } from "./ui";
-import { Field, NativeSelect, TextInput } from "./form";
+import { Field, TextInput } from "./form";
+import { TeamPicker } from "./initiative-fields";
 
 /** Profile settings — edit your display name and team. Launched from the sidebar. */
 export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { currentOwner, saveProfile } = useRoadmap();
+  const { currentOwner, teams, businessUnits, saveProfile, notify } = useRoadmap();
   const { email } = useAuth();
 
   useEffect(() => {
@@ -27,9 +28,12 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
       <ProfileForm
         owner={currentOwner}
         email={email}
+        teams={teams}
+        businessUnits={businessUnits}
         onClose={onClose}
         onSave={(patch) => {
           saveProfile(patch);
+          notify({ message: "Profile updated", tone: "success" });
           onClose();
         }}
       />
@@ -40,26 +44,31 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
 function ProfileForm({
   owner,
   email,
+  teams,
+  businessUnits,
   onClose,
   onSave,
 }: {
   owner: Owner | undefined;
   email: string | null;
+  teams: Team[];
+  businessUnits: BusinessUnit[];
   onClose: () => void;
-  onSave: (patch: { name: string; surname: string; team: string; role: string }) => void;
+  onSave: (patch: { name: string; surname: string; teamId: string; role: string }) => void;
 }) {
   const [name, setName] = useState(owner?.name ?? "");
   const [surname, setSurname] = useState(owner?.surname ?? "");
   const [role, setRole] = useState(owner?.role ?? "");
-  const [team, setTeam] = useState(owner?.team ?? "");
+  const [teamId, setTeamId] = useState(owner?.teamId ?? "");
 
   // Live preview of how the name will render, using the same rule as everywhere else.
   const preview =
     ownerName({ id: "", name, surname, role: "", email: email ?? undefined }) || "—";
-  const previewSub = [team, role].filter(Boolean).join(" · ");
+  const teamName = teams.find((t) => t.id === teamId)?.name ?? "";
+  const previewSub = [teamName, role].filter(Boolean).join(" · ");
 
   const save = () =>
-    onSave({ name: name.trim(), surname: surname.trim(), team, role: role.trim() });
+    onSave({ name: name.trim(), surname: surname.trim(), teamId, role: role.trim() });
 
   return (
     <div className="relative w-full max-w-md animate-slide-up rounded-2xl bg-white shadow-2xl">
@@ -107,14 +116,12 @@ function ProfileForm({
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="Team">
-            <NativeSelect value={team} onChange={(e) => setTeam(e.target.value)}>
-              <option value="">No team</option>
-              {TEAMS.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </NativeSelect>
+            <TeamPicker
+              teams={teams}
+              businessUnits={businessUnits}
+              teamId={teamId}
+              onChange={setTeamId}
+            />
           </Field>
           <Field label="Job title">
             <TextInput
@@ -125,7 +132,7 @@ function ProfileForm({
           </Field>
         </div>
 
-        <p className="text-xs text-beige-60">
+        <p className="text-xs text-beige-70">
           Leave both name fields empty to show your email instead. Extra spaces are trimmed.
         </p>
       </div>

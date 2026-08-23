@@ -5,6 +5,9 @@
 
 import { supabase } from "./supabase";
 import { normalizeThemeColor } from "./types";
+import { normalizeOkrFilters } from "./okrFilters";
+import type { OkrFilters } from "./okrFilters";
+import { normalizeCollapsedGroupKeys } from "./okrGrouping";
 import type {
   BusinessUnit,
   DeliveryLink,
@@ -12,11 +15,14 @@ import type {
   Okr,
   OkrInitiativeLink,
   OkrOwner,
+  OkrView,
   Owner,
+  Roadmap,
   StrategicObjective,
   Status,
   Team,
   Theme,
+  TimelineSort,
 } from "./types";
 
 function client() {
@@ -33,9 +39,9 @@ interface InitiativeRow {
   expected_outcome: string | null;
   status: Status;
   owner_id: string | null;
-  team: string;
+  team_id: string | null;
   theme_id: string | null;
-  strategic_goal: string | null;
+  strategic_objective_id: string | null;
   demand: number | string | null;
   impact: number | string | null;
   viability: number | string | null;
@@ -70,9 +76,16 @@ function rowToInitiative(row: InitiativeRow, links: DeliveryLink[]): Initiative 
     expectedOutcome: row.expected_outcome ?? "",
     status: row.status,
     ownerId: row.owner_id ?? "",
-    team: row.team,
+    // team_id is nullable at the DB level only transitionally (until the
+    // Heron Week 1 backfill runs on a given environment) — every row written
+    // by the app going forward always sets a real team, so the "" fallback
+    // here mirrors ownerId/themeId's existing not-yet-set convention rather
+    // than meaning anything on its own.
+    teamId: row.team_id ?? "",
     themeId: row.theme_id ?? "",
-    strategicGoal: row.strategic_goal ?? "",
+    // Nullable and stays that way — unlike team, an unset strategic
+    // objective is a real, expected, permanent state (ADR 007 decision 1).
+    strategicObjectiveId: row.strategic_objective_id ?? null,
     // Any NULL score column means the initiative was saved unscored.
     scores:
       row.demand == null || row.impact == null || row.viability == null || row.effort == null
@@ -106,9 +119,9 @@ function initiativeToRow(i: Initiative) {
     expected_outcome: i.expectedOutcome,
     status: i.status,
     owner_id: i.ownerId || null,
-    team: i.team,
+    team_id: i.teamId || null,
     theme_id: i.themeId || null,
-    strategic_goal: i.strategicGoal,
+    strategic_objective_id: i.strategicObjectiveId,
     demand: i.scores?.demand ?? null,
     impact: i.scores?.impact ?? null,
     viability: i.scores?.viability ?? null,
@@ -134,7 +147,7 @@ interface OwnerRow {
   surname: string | null;
   role: string | null;
   email: string | null;
-  team: string | null;
+  team_id: string | null;
 }
 
 function rowToOwner(o: OwnerRow): Owner {
@@ -144,7 +157,7 @@ function rowToOwner(o: OwnerRow): Owner {
     surname: o.surname ?? undefined,
     role: o.role ?? "",
     email: o.email ?? undefined,
-    team: o.team ?? undefined,
+    teamId: o.team_id ?? undefined,
   };
 }
 
@@ -155,7 +168,107 @@ function ownerToRow(o: Owner) {
     surname: o.surname ?? "",
     role: o.role ?? "",
     email: o.email ?? null,
-    team: o.team ?? null,
+    team_id: o.teamId ?? null,
+  };
+}
+
+interface RoadmapRow {
+  id: string;
+  owner_id: string | null;
+  name: string;
+  view_mode: Roadmap["viewMode"];
+  filters: Record<string, unknown> | null;
+  group_by: Roadmap["groupBy"];
+  zoom: Roadmap["zoom"];
+  zoom_scale: number | string;
+  density: Roadmap["density"];
+  timeline_sort: TimelineSort | null;
+  visibility: Roadmap["visibility"];
+  editable: boolean;
+  is_system: boolean;
+  position: number | string;
+}
+
+function rowToRoadmap(row: RoadmapRow): Roadmap {
+  return {
+    id: row.id,
+    ownerId: row.owner_id,
+    name: row.name,
+    viewMode: row.view_mode,
+    filters: row.filters ?? {},
+    groupBy: row.group_by,
+    zoom: row.zoom,
+    zoomScale: Number(row.zoom_scale),
+    density: row.density,
+    timelineSort: row.timeline_sort ?? null,
+    visibility: row.visibility,
+    editable: row.editable,
+    isSystem: row.is_system,
+    position: Number(row.position),
+  };
+}
+
+/**
+ * DB row for insert/update. `is_system`/`created_at`/`updated_at` are
+ * omitted — `is_system` is never set by the app (the one System row is
+ * seed-only) and `updated_at` is trigger-maintained.
+ */
+function roadmapToRow(r: Roadmap) {
+  return {
+    id: r.id,
+    owner_id: r.ownerId,
+    name: r.name,
+    view_mode: r.viewMode,
+    filters: r.filters,
+    group_by: r.groupBy,
+    zoom: r.zoom,
+    zoom_scale: r.zoomScale,
+    density: r.density,
+    timeline_sort: r.timelineSort,
+    visibility: r.visibility,
+    editable: r.editable,
+    position: r.position ?? 0,
+  };
+}
+
+interface OkrViewRow {
+  id: string;
+  owner_id: string;
+  name: string;
+  filters: OkrFilters;
+  visibility: OkrView["visibility"];
+  editable: boolean;
+  position: number | string;
+  collapsed_group_keys: string[];
+}
+
+function rowToOkrView(row: OkrViewRow): OkrView {
+  return {
+    id: row.id,
+    ownerId: row.owner_id,
+    name: row.name,
+    filters: normalizeOkrFilters(row.filters),
+    visibility: row.visibility,
+    editable: row.editable,
+    position: Number(row.position),
+    collapsedGroupKeys: normalizeCollapsedGroupKeys(row.collapsed_group_keys ?? []),
+  };
+}
+
+/**
+ * DB row for insert/update. `created_at`/`updated_at` are omitted —
+ * `updated_at` is trigger-maintained (`okr_views_touch_updated_at`).
+ */
+function okrViewToRow(v: OkrView) {
+  return {
+    id: v.id,
+    owner_id: v.ownerId,
+    name: v.name,
+    filters: v.filters,
+    visibility: v.visibility,
+    editable: v.editable,
+    position: v.position ?? 0,
+    collapsed_group_keys: v.collapsedGroupKeys,
   };
 }
 
@@ -163,6 +276,34 @@ export interface Workspace {
   initiatives: Initiative[];
   themes: Theme[];
   owners: Owner[];
+  /**
+   * Moved here from OkrWorkspace/fetchOkrWorkspace() by Sprint Heron Week 1
+   * (ADR 007 decision 3): once Initiative/Owner depend on `teams` for every
+   * list/filter/settings render (and Initiative depends on
+   * `strategic_objectives` for its optional objective display), these three
+   * reference tables have to be available wherever Initiative/Owner are —
+   * which today means eagerly, on every app open. `okrs`/`okr_owners`/
+   * `okr_initiatives` stay lazy in OkrWorkspace — OKR-specific write data is
+   * still only needed on `/okrs`.
+   */
+  teams: Team[];
+  businessUnits: BusinessUnit[];
+  strategicObjectives: StrategicObjective[];
+  /**
+   * Small, always-needed metadata (Sprint Heron Week 2), same reasoning as
+   * teams/businessUnits/strategicObjectives above — every nav render needs
+   * to know which Roadmaps exist (at minimum the System row) to resolve
+   * `activeRoadmap`, so this is eager rather than lazy.
+   */
+  roadmaps: Roadmap[];
+  /**
+   * Saved/shareable "My OKRs" filter views (Sprint Heron Week 3, ADR 009).
+   * Fetched eagerly alongside `roadmaps`, not lazily via OkrWorkspace —
+   * despite being conceptually "about OKRs," this is sidebar-shaped data
+   * (the "My views" nav section needs the list on every render), the same
+   * classification call that already put `roadmaps` in this eager bucket.
+   */
+  okrViews: OkrView[];
 }
 
 // ── Reads ──
@@ -170,13 +311,19 @@ export interface Workspace {
 /** Load the full authenticated workspace (all initiatives incl. archived). */
 export async function fetchWorkspace(): Promise<Workspace> {
   const sb = client();
-  const [iniRes, linkRes, themeRes, ownerRes] = await Promise.all([
-    sb.from("initiatives").select("*").order("position", { ascending: true }),
-    sb.from("delivery_links").select("*").order("position", { ascending: true }),
-    sb.from("themes").select("*"),
-    sb.from("owners").select("*"),
-  ]);
-  for (const r of [iniRes, linkRes, themeRes, ownerRes]) {
+  const [iniRes, linkRes, themeRes, ownerRes, buRes, teamRes, soRes, roadmapRes, okrViewRes] =
+    await Promise.all([
+      sb.from("initiatives").select("*").order("position", { ascending: true }),
+      sb.from("delivery_links").select("*").order("position", { ascending: true }),
+      sb.from("themes").select("*"),
+      sb.from("owners").select("*"),
+      sb.from("business_units").select("*"),
+      sb.from("teams").select("*"),
+      sb.from("strategic_objectives").select("*"),
+      sb.from("roadmaps").select("*").order("position", { ascending: true }),
+      sb.from("okr_views").select("*").order("position", { ascending: true }),
+    ]);
+  for (const r of [iniRes, linkRes, themeRes, ownerRes, buRes, teamRes, soRes, roadmapRes, okrViewRes]) {
     if (r.error) throw r.error;
   }
 
@@ -192,8 +339,13 @@ export async function fetchWorkspace(): Promise<Workspace> {
   );
   const themes = (themeRes.data ?? []).map(rowToTheme);
   const owners = ((ownerRes.data ?? []) as OwnerRow[]).map(rowToOwner);
+  const businessUnits = ((buRes.data ?? []) as BusinessUnitRow[]).map(rowToBusinessUnit);
+  const teams = ((teamRes.data ?? []) as TeamRow[]).map(rowToTeam);
+  const strategicObjectives = ((soRes.data ?? []) as StrategicObjectiveRow[]).map(rowToStrategicObjective);
+  const roadmaps = ((roadmapRes.data ?? []) as RoadmapRow[]).map(rowToRoadmap);
+  const okrViews = ((okrViewRes.data ?? []) as OkrViewRow[]).map(rowToOkrView);
 
-  return { initiatives, themes, owners };
+  return { initiatives, themes, owners, teams, businessUnits, strategicObjectives, roadmaps, okrViews };
 }
 
 // ── Writes ──
@@ -449,36 +601,35 @@ function okrOwnerToRow(o: OkrOwner) {
 }
 
 export interface OkrWorkspace {
-  businessUnits: BusinessUnit[];
-  teams: Team[];
-  strategicObjectives: StrategicObjective[];
   okrs: Okr[];
   okrOwners: OkrOwner[];
   okrInitiatives: OkrInitiativeLink[];
 }
 
 /**
- * Load the OKR workspace (business units, teams, strategic objectives, OKRs,
- * ownership, initiative links). Kept separate from fetchWorkspace() — that one
- * loads on every app open today and is initiative-only; this is lazily called.
+ * Load the OKR-specific workspace (OKRs, ownership, initiative links). Kept
+ * separate from fetchWorkspace() — that one loads on every app open today
+ * and this is lazily called, only on `/okrs`.
+ *
+ * `businessUnits`/`teams`/`strategicObjectives` used to live here too, but
+ * Sprint Heron Week 1 moved them into fetchWorkspace()/Workspace instead
+ * (ADR 007 decision 3) — Initiative/Owner now depend on `teams` (and
+ * Initiative on `strategic_objectives`) for every list/filter/settings
+ * render, so these three reference tables have to be eagerly available
+ * wherever Initiative/Owner are, not just on `/okrs`. Callers here should
+ * read them from useRoadmap() instead.
  */
 export async function fetchOkrWorkspace(): Promise<OkrWorkspace> {
   const sb = client();
-  const [buRes, teamRes, soRes, okrRes, ownerRes, initRes] = await Promise.all([
-    sb.from("business_units").select("*"),
-    sb.from("teams").select("*"),
-    sb.from("strategic_objectives").select("*"),
+  const [okrRes, ownerRes, initRes] = await Promise.all([
     sb.from("okrs").select("*").order("position", { ascending: true }),
     sb.from("okr_owners").select("*"),
     sb.from("okr_initiatives").select("*"),
   ]);
-  for (const r of [buRes, teamRes, soRes, okrRes, ownerRes, initRes]) {
+  for (const r of [okrRes, ownerRes, initRes]) {
     if (r.error) throw r.error;
   }
 
-  const businessUnits = ((buRes.data ?? []) as BusinessUnitRow[]).map(rowToBusinessUnit);
-  const teams = ((teamRes.data ?? []) as TeamRow[]).map(rowToTeam);
-  const strategicObjectives = ((soRes.data ?? []) as StrategicObjectiveRow[]).map(rowToStrategicObjective);
   const okrs = ((okrRes.data ?? []) as OkrRow[]).map(rowToOkr);
   const okrOwners = ((ownerRes.data ?? []) as OkrOwnerRow[]).map(rowToOkrOwner);
   const okrInitiatives = ((initRes.data ?? []) as OkrInitiativeRow[]).map((r) => ({
@@ -486,7 +637,7 @@ export async function fetchOkrWorkspace(): Promise<OkrWorkspace> {
     initiativeId: r.initiative_id,
   }));
 
-  return { businessUnits, teams, strategicObjectives, okrs, okrOwners, okrInitiatives };
+  return { okrs, okrOwners, okrInitiatives };
 }
 
 /**
@@ -525,5 +676,95 @@ export async function persistOkr(o: Okr, owners: OkrOwner[], initiativeIds: stri
     p_owners: owners.map(okrOwnerToRow),
     p_initiative_ids: initiativeIds,
   });
+  if (error) throw error;
+}
+
+// ── Roadmaps (Sprint Heron Week 2) — unified List/Board/Timeline saved view ──
+
+/**
+ * Upsert a Roadmap via the `persist_roadmap` RPC (supabase/schema.sql,
+ * supabase/migrations/2026-08-persist-roadmap-rpc.sql) — mirrors
+ * persistOkr()'s delegation to a Postgres function. The authorization
+ * logic (owner full-write / shared-editable filtered-write / System-row
+ * refusal / unauthorized-caller exception) is real conditional logic that
+ * plain RLS can't express as a single `using`/`with check` boolean, so
+ * there's deliberately no UPDATE policy on `roadmaps` at all — see ADR 008
+ * decision 1. Note the RPC may silently ignore some of the fields sent
+ * here (e.g. a shared-editable caller's `name`/`visibility` are pinned to
+ * their current DB values) — that's a documented, deliberate choice in the
+ * function itself, not a bug in this call site.
+ */
+export async function persistRoadmap(r: Roadmap): Promise<void> {
+  const sb = client();
+  const row = roadmapToRow(r);
+
+  const { error } = await sb.rpc("persist_roadmap", {
+    p_id: row.id,
+    p_owner_id: row.owner_id,
+    p_name: row.name,
+    p_view_mode: row.view_mode,
+    p_filters: row.filters,
+    p_group_by: row.group_by,
+    p_zoom: row.zoom,
+    p_zoom_scale: row.zoom_scale,
+    p_density: row.density,
+    p_timeline_sort: row.timeline_sort,
+    p_visibility: row.visibility,
+    p_editable: row.editable,
+    p_position: row.position,
+  });
+  if (error) throw error;
+}
+
+/**
+ * Delete a Roadmap. No RPC needed here (unlike persistRoadmap) — the
+ * `roadmaps` table's plain `DELETE` RLS policy (owner-only, never on
+ * `is_system` rows) is a single boolean check, exactly the case ADR 008
+ * decision 1 says plain RLS is fine for; only the write-side authorization
+ * (owner vs. shared-editable vs. system) needed the RPC's conditional logic.
+ */
+export async function deleteRoadmap(id: string): Promise<void> {
+  const sb = client();
+  const { error } = await sb.from("roadmaps").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/**
+ * Upsert an OkrView through `persist_okr_view()` — mirrors `persistRoadmap`
+ * exactly, minus the fields OkrView doesn't have (viewMode/groupBy/zoom/
+ * density/timelineSort). See supabase/migrations/2026-08-persist-okr-view-
+ * rpc.sql for the RPC's full authorization shape: owner gets a full write;
+ * a shared+editable non-owner's write is silently narrowed to name/filters
+ * only, with owner_id/visibility/editable/position pinned to their current
+ * DB values regardless of what's sent here — that's a documented,
+ * deliberate choice in the function itself, not a bug in this call site.
+ */
+export async function persistOkrView(v: OkrView): Promise<void> {
+  const sb = client();
+  const row = okrViewToRow(v);
+
+  const { error } = await sb.rpc("persist_okr_view", {
+    p_id: row.id,
+    p_owner_id: row.owner_id,
+    p_name: row.name,
+    p_filters: row.filters,
+    p_visibility: row.visibility,
+    p_editable: row.editable,
+    p_position: row.position,
+    p_collapsed_group_keys: row.collapsed_group_keys,
+  });
+  if (error) throw error;
+}
+
+/**
+ * Delete an OkrView. No RPC needed here (unlike persistOkrView) — the
+ * `okr_views` table's plain `DELETE` RLS policy (owner-only) is a single
+ * boolean check, exactly the case ADR 008 decision 1 (and ADR 009, for this
+ * entity) says plain RLS is fine for; only the write-side authorization
+ * (owner vs. shared-editable) needed the RPC's conditional logic.
+ */
+export async function deleteOkrView(id: string): Promise<void> {
+  const sb = client();
+  const { error } = await sb.from("okr_views").delete().eq("id", id);
   if (error) throw error;
 }

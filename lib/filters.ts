@@ -4,6 +4,7 @@ import type {
   Initiative,
   Owner,
   Status,
+  Team,
   Theme,
   ThemeColor,
   TimelineSort,
@@ -44,6 +45,35 @@ export const EMPTY_FILTERS: Filters = {
   visibilityMode: "is",
 };
 
+/**
+ * Coerce an arbitrary value (e.g. a Roadmap's `filters` jsonb column) into a
+ * well-formed `Filters`. `roadmaps.filters` is deliberately untyped storage
+ * (see lib/types.ts's `Roadmap.filters` doc comment) — a malformed/stale
+ * shape there would otherwise produce `undefined` fields that crash
+ * `applyFilters`/`FilterBar` on read. Same defensive-normalization pattern
+ * `normalizeThemeColor()` established for `themes.color`.
+ */
+export function normalizeFilters(raw: unknown): Filters {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const strArray = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  const mode = (v: unknown): FilterMode => (v === "is_not" ? "is_not" : "is");
+  return {
+    search: typeof r.search === "string" ? r.search : EMPTY_FILTERS.search,
+    owners: strArray(r.owners),
+    teams: strArray(r.teams),
+    themes: strArray(r.themes),
+    statuses: strArray(r.statuses) as Status[],
+    visibility: strArray(r.visibility) as Visibility[],
+    showDone: typeof r.showDone === "boolean" ? r.showDone : EMPTY_FILTERS.showDone,
+    ownersMode: mode(r.ownersMode),
+    teamsMode: mode(r.teamsMode),
+    themesMode: mode(r.themesMode),
+    statusesMode: mode(r.statusesMode),
+    visibilityMode: mode(r.visibilityMode),
+  };
+}
+
 /** True when an initiative's value passes a field filter given its selected values + mode. */
 function matchesField(values: string[], mode: FilterMode, value: string): boolean {
   if (!values.length) return true;
@@ -66,17 +96,24 @@ export function applyFilters(
   initiatives: Initiative[],
   f: Filters,
   themes: Theme[],
-  owners: Owner[]
+  owners: Owner[],
+  teams: Team[],
+  /** `archived: true` flips the archived-only view (Archived.tsx) — default false matches every other consumer. */
+  options?: { archived?: boolean }
 ): Initiative[] {
+  const wantArchived = options?.archived ?? false;
   const themeName = (id: string) => themes.find((t) => t.id === id)?.name ?? "";
   const ownerLabel = (id: string) => ownerName(owners.find((o) => o.id === id));
+  // i.teamId is a real teams-row id, not a display string (unlike the old
+  // i.team) — resolve it for the search haystack.
+  const teamName = (id: string) => teams.find((t) => t.id === id)?.name ?? "";
   const q = f.search.trim().toLowerCase();
 
   return initiatives.filter((i) => {
-    if (i.archived) return false;
+    if (i.archived !== wantArchived) return false;
     if (!f.showDone && i.status === "released") return false;
     if (!matchesField(f.owners, f.ownersMode, i.ownerId)) return false;
-    if (!matchesField(f.teams, f.teamsMode, i.team)) return false;
+    if (!matchesField(f.teams, f.teamsMode, i.teamId)) return false;
     if (!matchesField(f.themes, f.themesMode, i.themeId)) return false;
     if (!matchesField(f.statuses, f.statusesMode, i.status)) return false;
     if (!matchesField(f.visibility, f.visibilityMode, i.visibility)) return false;
@@ -86,7 +123,7 @@ export function applyFilters(
         i.summary,
         themeName(i.themeId),
         ownerLabel(i.ownerId),
-        i.team,
+        teamName(i.teamId),
       ]
         .join(" ")
         .toLowerCase();
@@ -131,7 +168,8 @@ export function groupInitiatives(
   initiatives: Initiative[],
   groupBy: GroupBy,
   themes: Theme[],
-  owners: Owner[]
+  owners: Owner[],
+  teams: Team[]
 ): Group[] {
   const groups: Group[] = [];
   const index = new Map<string, Group>();
@@ -151,7 +189,8 @@ export function groupInitiatives(
       const t = themes.find((x) => x.id === i.themeId);
       ensure(i.themeId, t?.name ?? "No theme", t?.color).items.push(i);
     } else if (groupBy === "team") {
-      ensure(i.team, i.team).items.push(i);
+      const t = teams.find((x) => x.id === i.teamId);
+      ensure(i.teamId, t?.name ?? "Unassigned team").items.push(i);
     } else {
       const o = owners.find((x) => x.id === i.ownerId);
       ensure(i.ownerId, ownerName(o) || "Unassigned", undefined, o?.role).items.push(i);

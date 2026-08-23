@@ -7,13 +7,10 @@ import {
   ArrowUpDown,
   Check,
   ChevronRight,
-  Group,
   Maximize2,
   Minus,
   Plus,
   RotateCcw,
-  Rows2,
-  Rows3,
   Search,
   X,
 } from "lucide-react";
@@ -25,14 +22,11 @@ import {
   ownerName,
   STATUS_META,
   STATUSES,
-  TEAMS,
   THEME_COLOR_META,
   ZOOM_SCALE_MAX,
   ZOOM_SCALE_MIN,
   ZOOM_SCALE_STEP,
-  type GroupBy,
   type TimelineSortKey,
-  type Zoom,
 } from "@/lib/types";
 import { Button } from "./ui";
 
@@ -58,7 +52,7 @@ interface FieldDef {
   searchable: boolean;
 }
 
-function Segmented<T extends string>({
+export function Segmented<T extends string>({
   options,
   value,
   onChange,
@@ -263,11 +257,11 @@ function FilterPill({ field }: { field: FieldDef }) {
       >
         <button
           onClick={() => setOpen((o) => !o)}
-          className="flex h-full items-center gap-1.5 rounded-l-lg pl-2.5 pr-2 text-[13px] hover:bg-beige-10"
+          className="flex h-full max-w-[220px] items-center gap-1.5 rounded-l-lg pl-2.5 pr-2 text-[13px] hover:bg-beige-10"
         >
-          <span className="font-medium text-green-90">{field.label}</span>
-          <span className="text-beige-60">{mode === "is_not" ? "is not" : "is"}</span>
-          <span className="font-medium text-green-70">{summary}</span>
+          <span className="shrink-0 font-medium text-green-90">{field.label}</span>
+          <span className="shrink-0 text-beige-60">{mode === "is_not" ? "is not" : "is"}</span>
+          <span className="truncate font-medium text-green-70">{summary}</span>
         </button>
         <button
           onClick={remove}
@@ -280,6 +274,41 @@ function FilterPill({ field }: { field: FieldDef }) {
       {open && (
         <div className="absolute left-0 top-full z-50 mt-1 rounded-xl border border-beige-20 bg-white p-3 shadow-lg">
           <FieldEditor field={field} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── "+N more" overflow chip — collapses filter pills past the visible cap.
+// Same visual language as FilterPill (height/border/radius) but no fork of it:
+// the popover it opens renders the exact same FilterPill component for each
+// collapsed field, so List/Board (which never pass a pill cap) are unaffected
+// and each collapsed field stays independently editable/removable. ──────────
+function OverflowPillsChip({ fields }: { fields: FieldDef[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useOutsideClose(ref, open, () => setOpen(false));
+
+  if (fields.length === 0) return null;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-label={`${fields.length} more active filters`}
+        className={cn(
+          "flex h-9 items-center rounded-lg border bg-white px-2.5 text-[13px] font-medium text-green-70 transition-colors hover:bg-beige-10",
+          open ? "border-green-90" : "border-beige-30"
+        )}
+      >
+        +{fields.length} more
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-1 flex flex-col gap-1.5 rounded-xl border border-beige-20 bg-white p-2 shadow-lg">
+          {fields.map((f) => (
+            <FilterPill key={f.key} field={f} />
+          ))}
         </div>
       )}
     </div>
@@ -341,13 +370,24 @@ function AddFilterButton({ fields }: { fields: FieldDef[] }) {
 
 // ── Toolbar ─────────────────────────────────────────────────────────────────
 export function FilterBar({
-  showGrouping = false,
-  showZoom = false,
+  /** Cap the visible filter pills at this count (fixed field order), collapsing
+   * the rest into a trailing "+N more" overflow chip. `undefined` (the default,
+   * what List/Board get via the bare `<FilterBar />` call) renders every active
+   * pill with no cap — today's List/Board behavior, unchanged. */
+  pillCap,
+  /** Continuous zoom −/%/+ control only. Grouping, zoom-granularity and density
+   * all render in Timeline's own date-grid header now, not here. */
+  showZoomScale = false,
+  /** Timeline-only sort-by-key control (`start`/`score`/`status`/`title`) —
+   * List/Board have no equivalent concept, so this stays its own prop rather
+   * than folding under `showZoomScale`. */
+  showSort = false,
   showPresentation = false,
   flush = false,
 }: {
-  showGrouping?: boolean;
-  showZoom?: boolean;
+  pillCap?: number;
+  showZoomScale?: boolean;
+  showSort?: boolean;
   showPresentation?: boolean;
   /** Drop this bar's own border/blur so it merges with the strip below it. */
   flush?: boolean;
@@ -358,14 +398,9 @@ export function FilterBar({
     resetFilters,
     owners,
     themes,
-    groupBy,
-    setGroupBy,
-    zoom,
-    setZoom,
+    teams,
     zoomScale,
     setZoomScale,
-    density,
-    setDensity,
     setPresentation,
   } = useRoadmap();
 
@@ -393,8 +428,9 @@ export function FilterBar({
         key: "teams",
         modeKey: "teamsMode",
         label: "Team",
-        searchable: false,
-        options: TEAMS.map((t) => ({ value: t, label: t })),
+        // 11 real teams (was 3 hardcoded) — searchable now that the list is longer.
+        searchable: true,
+        options: teams.map((t) => ({ value: t.id, label: t.name })),
       },
       {
         key: "themes",
@@ -418,10 +454,16 @@ export function FilterBar({
         ],
       },
     ],
-    [owners, themes]
+    [owners, themes, teams]
   );
 
   const activeCount = activeFilterCount(filters);
+  const activeFields = useMemo(
+    () => fields.filter((f) => (filters[f.key] as string[]).length > 0),
+    [fields, filters]
+  );
+  const visiblePillFields = pillCap != null ? activeFields.slice(0, pillCap) : fields;
+  const overflowPillFields = pillCap != null ? activeFields.slice(pillCap) : [];
 
   return (
     <div
@@ -443,9 +485,10 @@ export function FilterBar({
         />
       </div>
 
-      {fields.map((f) => (
+      {visiblePillFields.map((f) => (
         <FilterPill key={f.key} field={f} />
       ))}
+      {pillCap != null && <OverflowPillsChip fields={overflowPillFields} />}
       <AddFilterButton fields={fields} />
 
       {activeCount > 0 && (
@@ -457,94 +500,43 @@ export function FilterBar({
         </button>
       )}
 
-      {/* ── How it's displayed (group + zoom + present) ── */}
+      {/* ── How it's displayed (sort + continuous zoom + present) ── */}
       <div className="ml-auto flex items-center gap-2">
-        {showGrouping && (
-          <div className="flex items-center gap-1.5">
-            <Group size={15} className="text-beige-60" />
-            <span className="mono-label-sm hidden text-beige-60 sm:block">Group</span>
-            <Segmented<GroupBy>
-              value={groupBy}
-              onChange={setGroupBy}
-              options={[
-                { value: "theme", label: "Theme" },
-                { value: "team", label: "Team" },
-                { value: "owner", label: "Owner" },
-              ]}
-            />
+        {showSort && <SortControl />}
+
+        {showZoomScale && (
+          // Continuous zoom — magnifies within the chosen granularity. Click the
+          // percentage to snap back to 100%. ⌘/Ctrl + scroll over the canvas also zooms.
+          <div className="flex h-9 items-center rounded-lg border border-beige-30 bg-white">
+            <button
+              type="button"
+              onClick={() => setZoomScale(zoomScale - ZOOM_SCALE_STEP)}
+              disabled={zoomScale <= ZOOM_SCALE_MIN + 0.001}
+              aria-label="Zoom out"
+              className="flex h-full w-8 items-center justify-center rounded-l-lg text-green-70 transition-colors hover:bg-beige-10 disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              <Minus size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoomScale(1)}
+              title="Reset zoom to 100%"
+              className="mono-label-sm h-full w-12 tabular-nums text-green-70 transition-colors hover:bg-beige-10"
+            >
+              {Math.round(zoomScale * 100)}%
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoomScale(zoomScale + ZOOM_SCALE_STEP)}
+              disabled={zoomScale >= ZOOM_SCALE_MAX - 0.001}
+              aria-label="Zoom in"
+              className="flex h-full w-8 items-center justify-center rounded-r-lg text-green-70 transition-colors hover:bg-beige-10 disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              <Plus size={14} />
+            </button>
           </div>
         )}
-        {showZoom && (
-          <>
-            <Segmented<Zoom>
-              value={zoom}
-              onChange={setZoom}
-              options={[
-                { value: "month", label: "Month" },
-                { value: "quarter", label: "Quarter" },
-                { value: "half", label: "Half-year" },
-              ]}
-            />
 
-            {/* Continuous zoom — magnifies within the chosen granularity. Click the
-                percentage to snap back to 100%. ⌘/Ctrl + scroll over the canvas also zooms. */}
-            <div className="flex items-center rounded-lg border border-beige-30 bg-white">
-              <button
-                type="button"
-                onClick={() => setZoomScale(zoomScale - ZOOM_SCALE_STEP)}
-                disabled={zoomScale <= ZOOM_SCALE_MIN + 0.001}
-                aria-label="Zoom out"
-                className="flex h-9 w-8 items-center justify-center rounded-l-lg text-green-70 transition-colors hover:bg-beige-10 disabled:opacity-40 disabled:hover:bg-transparent"
-              >
-                <Minus size={14} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setZoomScale(1)}
-                title="Reset zoom to 100%"
-                className="mono-label-sm h-9 w-12 tabular-nums text-green-70 transition-colors hover:bg-beige-10"
-              >
-                {Math.round(zoomScale * 100)}%
-              </button>
-              <button
-                type="button"
-                onClick={() => setZoomScale(zoomScale + ZOOM_SCALE_STEP)}
-                disabled={zoomScale >= ZOOM_SCALE_MAX - 0.001}
-                aria-label="Zoom in"
-                className="flex h-9 w-8 items-center justify-center rounded-r-lg text-green-70 transition-colors hover:bg-beige-10 disabled:opacity-40 disabled:hover:bg-transparent"
-              >
-                <Plus size={14} />
-              </button>
-            </div>
-
-            {/* Row density */}
-            <div className="flex items-center rounded-lg border border-beige-30 bg-white p-0.5">
-              {(
-                [
-                  { value: "comfortable", icon: Rows2, label: "Comfortable rows" },
-                  { value: "compact", icon: Rows3, label: "Compact rows" },
-                ] as const
-              ).map(({ value, icon: Icon, label }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setDensity(value)}
-                  title={label}
-                  aria-label={label}
-                  aria-pressed={density === value}
-                  className={cn(
-                    "flex h-7 w-7 items-center justify-center rounded-md transition-colors",
-                    density === value ? "bg-green-90 text-white" : "text-green-70 hover:bg-beige-10"
-                  )}
-                >
-                  <Icon size={15} />
-                </button>
-              ))}
-            </div>
-
-            <SortControl />
-          </>
-        )}
         {showPresentation && (
           <Button variant="outline" size="sm" onClick={() => setPresentation(true)}>
             <Maximize2 size={15} /> Present

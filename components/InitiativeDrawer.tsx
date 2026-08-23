@@ -2,14 +2,13 @@
 
 import { useRef, useState } from "react";
 import {
-  Activity,
   Archive,
   ArchiveRestore,
   CalendarRange,
-  CircleDot,
   Clock,
   Eye,
   Palette,
+  Target,
   User,
   Users,
   X,
@@ -21,7 +20,6 @@ import {
   normalizeThemeColor,
   ownerName,
   STATUSES,
-  TEAMS,
   THEME_COLOR_META,
   type Health,
   type Initiative,
@@ -39,6 +37,7 @@ import {
   DiveEditor,
   makeWouldCycle,
   PropRow,
+  TeamPicker,
   ThemeCreator,
   withScheme,
 } from "./initiative-fields";
@@ -66,6 +65,9 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
     initiatives,
     owners,
     themes,
+    teams,
+    businessUnits,
+    strategicObjectives,
     getOwner,
     getTheme,
     saveInitiative,
@@ -80,9 +82,11 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
   const [d, setD] = useState<Initiative>(source);
   const [titleTouched, setTitleTouched] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  // Both detail sections start collapsed: the drawer opens on the at-a-glance
-  // read (properties + summary) and you expand into the case or the plumbing.
+  // All three detail sections start collapsed: the drawer opens on the
+  // at-a-glance read (properties + summary) and you expand into the case,
+  // the links, or the plumbing.
   const [rationaleOpen, setRationaleOpen] = useState(false);
+  const [linksOpen, setLinksOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 
   // Local edit + autosave. Discrete controls commit immediately via patch(); free
@@ -134,7 +138,10 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
       dot: THEME_COLOR_META[normalizeThemeColor(t.color)].dot,
     })),
   ];
-
+  const strategicObjectiveOptions = [
+    { value: "", label: "No strategic objective" },
+    ...strategicObjectives.map((s) => ({ value: s.id, label: s.name })),
+  ];
   const dirty = creating && JSON.stringify(d) !== JSON.stringify(source);
   const attemptClose = () => {
     if (dirty) setConfirmOpen(true);
@@ -205,11 +212,10 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
         {creating && titleTouched && titleMissing && (
           <p className="mt-1 text-xs text-red-70">Give the initiative a title.</p>
         )}
-      </div>
-
-      {/* Properties — compact labeled rows, edited in place */}
-      <div className="flex flex-col gap-0.5 px-4 py-3">
-        <PropRow icon={CircleDot} label="Status">
+        {/* Status/Health live once, here — pinned in the sticky header as the
+         * single interactive control (ADR 007 decision 4), not duplicated as
+         * a body PropRow that scrolls away. */}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <InlineTagSelect
             label="Change status"
             value={d.status}
@@ -217,8 +223,6 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
             render={(s: Status) => <StatusTag status={s} />}
             onSelect={(status) => patch({ status })}
           />
-        </PropRow>
-        <PropRow icon={Activity} label="Health">
           <InlineTagSelect
             label="Change health"
             value={d.health}
@@ -226,7 +230,11 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
             render={(h: Health) => <HealthTag health={h} />}
             onSelect={(health) => patch({ health })}
           />
-        </PropRow>
+        </div>
+      </div>
+
+      {/* Properties — compact labeled rows, edited in place */}
+      <div className="flex flex-col gap-0.5 px-4 py-3">
         <PropRow icon={CalendarRange} label="Timeframe">
           <div className="flex flex-wrap items-center gap-2">
             <TextInput
@@ -274,16 +282,20 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
           />
         </PropRow>
         <PropRow icon={Users} label="Team">
-          <InlineTagSelect
-            label="Change team"
-            value={d.team}
-            options={TEAMS}
-            render={(t) => (
-              <span className="mono-label inline-flex items-center rounded-md bg-beige-10 px-2 py-1 text-beige-60">
-                {t}
-              </span>
-            )}
-            onSelect={(team) => patch({ team })}
+          <TeamPicker
+            teams={teams}
+            businessUnits={businessUnits}
+            teamId={d.teamId}
+            onChange={(teamId) => patch({ teamId })}
+          />
+        </PropRow>
+        <PropRow icon={Target} label="Objective">
+          <SearchableSelect
+            ariaLabel="Strategic objective"
+            value={d.strategicObjectiveId ?? ""}
+            onChange={(v) => patch({ strategicObjectiveId: v || null })}
+            placeholder="No objective"
+            options={strategicObjectiveOptions}
           />
         </PropRow>
         <PropRow icon={Palette} label="Theme">
@@ -309,12 +321,10 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
             value={d.visibility}
             options={VISIBILITIES}
             render={(v) => (
-              <span
-                className={cn(
-                  "mono-label inline-flex items-center rounded-md px-2 py-1",
-                  v === "external" ? "bg-green-30 text-green-70" : "bg-beige-30 text-beige-60"
-                )}
-              >
+              // Neutral for both states (PM-confirmed, Sprint Vireo) —
+              // Visibility isn't a "good/bad" signal, so it drops the
+              // reused green rather than reading as a status color.
+              <span className="mono-label inline-flex items-center rounded-md bg-beige-30 px-2 py-1 text-beige-60">
                 {v === "external" ? "External" : "Internal"}
               </span>
             )}
@@ -330,7 +340,7 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
       </div>
 
       {/* Main — always open: the at-a-glance read */}
-      <div className="flex flex-col gap-4 border-t border-beige-20 px-6 py-5">
+      <div className="flex flex-col gap-3 border-t border-beige-20 px-6 py-4">
         <Field label="Summary">
           <TextArea
             value={d.summary}
@@ -339,6 +349,18 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
             placeholder="One or two lines a stakeholder can grasp quickly."
           />
         </Field>
+
+        <CollapsibleSection
+          label="Links"
+          open={linksOpen}
+          onToggle={() => setLinksOpen((o) => !o)}
+          hint="Delivery links"
+        >
+          <DeliveryLinksEditor
+            links={d.deliveryLinks}
+            onChange={(deliveryLinks) => patch({ deliveryLinks })}
+          />
+        </CollapsibleSection>
 
         {/* The PM case for the initiative — why it matters and how it ranks. */}
         <CollapsibleSection
@@ -360,27 +382,14 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
               onBlur={saveNow}
             />
           </Field>
-          <Field label="Strategic goal">
-            <TextInput
-              value={d.strategicGoal}
-              onChange={(e) => set("strategicGoal", e.target.value)}
-              onBlur={saveNow}
-              placeholder="Which company goal does this serve?"
-            />
-          </Field>
         </CollapsibleSection>
 
         <CollapsibleSection
-          label="Links, dependencies & notes"
+          label="Dependencies & notes"
           open={moreOpen}
           onToggle={() => setMoreOpen((o) => !o)}
-          hint="Delivery links, dependencies & internal notes"
+          hint="Dependencies & internal notes"
         >
-          <DeliveryLinksEditor
-            links={d.deliveryLinks}
-            onChange={(deliveryLinks) => patch({ deliveryLinks })}
-          />
-
           <div>
             <Eyebrow className="mb-2">Depends on</Eyebrow>
             <DependencyPicker
@@ -389,24 +398,68 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
               onChange={(dependsOn) => patch({ dependsOn })}
               wouldCycle={wouldCycle}
               resolveTitle={(id) => initiatives.find((x) => x.id === id)?.title ?? id}
+              renderSelected={(selected, remove) =>
+                selected.length > 0 ? (
+                  <div className="overflow-hidden rounded-lg border border-beige-20">
+                    <table className="w-full text-sm">
+                      <tbody>
+                        {selected.map((id) => {
+                          const dep = initiatives.find((x) => x.id === id);
+                          return (
+                            <tr key={id} className="border-b border-beige-10 last:border-b-0">
+                              <td className="px-3 py-2 text-green-90">
+                                {dep?.title || "Untitled initiative"}
+                              </td>
+                              <td className="w-px whitespace-nowrap px-3 py-2">
+                                {dep && <StatusTag status={dep.status} />}
+                              </td>
+                              <td className="w-px px-2 py-2">
+                                <button
+                                  type="button"
+                                  onClick={() => remove(id)}
+                                  className="shrink-0 rounded p-1 text-beige-60 hover:bg-beige-10 hover:text-red-60"
+                                  aria-label={`Remove dependency: ${dep?.title ?? id}`}
+                                >
+                                  <X size={14} />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-sm text-beige-60">No dependencies yet.</p>
+                )
+              }
             />
           </div>
 
           {!creating && blocks.length > 0 && (
             <div>
               <Eyebrow className="mb-2">Blocks</Eyebrow>
-              <ul className="space-y-1">
-                {blocks.map((b) => (
-                  <li key={b.id}>
-                    <button
-                      onClick={() => select(b.id)}
-                      className="text-left text-sm text-green-70 underline-offset-2 hover:text-green-60 hover:underline"
-                    >
-                      {b.title}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <div className="overflow-hidden rounded-lg border border-beige-20">
+                <table className="w-full text-sm">
+                  <tbody>
+                    {blocks.map((b) => (
+                      <tr key={b.id} className="border-b border-beige-10 last:border-b-0">
+                        <td className="px-3 py-2">
+                          <button
+                            onClick={() => select(b.id)}
+                            className="text-left text-green-70 underline-offset-2 hover:text-green-60 hover:underline"
+                          >
+                            {b.title || "Untitled initiative"}
+                          </button>
+                        </td>
+                        <td className="w-px whitespace-nowrap px-3 py-2">
+                          <StatusTag status={b.status} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
@@ -417,10 +470,10 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
 
         {!creating && (
           <div>
-            <Eyebrow className="mb-1.5 flex items-center gap-1.5">
+            <Eyebrow className="mb-1 flex items-center gap-1.5">
               <Clock size={12} /> Activity
             </Eyebrow>
-            <div className="flex items-center gap-2 rounded-xl border border-dashed border-beige-30 bg-beige-5/50 px-3 py-3 text-sm text-beige-60">
+            <div className="flex items-center gap-2 rounded-xl border border-dashed border-beige-30 bg-beige-5/50 px-3 py-2 text-sm text-beige-60">
               Change history and comments are coming in a later milestone.
             </div>
           </div>
@@ -446,6 +499,7 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
                 onClick={() => {
                   unarchiveInitiative(d.id);
                   notify({ message: `“${d.title}” restored` });
+                  select(null);
                 }}
               >
                 <ArchiveRestore size={15} /> Restore
@@ -459,6 +513,7 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
                     message: `“${d.title}” archived`,
                     action: { label: "Undo", onClick: () => unarchiveInitiative(d.id) },
                   });
+                  select(null);
                 }}
               >
                 <Archive size={15} /> Archive

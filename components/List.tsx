@@ -18,38 +18,51 @@ import {
   type Status,
 } from "@/lib/types";
 import { cn } from "@/lib/cn";
-import { Avatar, HealthTag, StatusTag } from "./ui";
+import { Avatar, HealthTag, StatusTag, Tag } from "./ui";
 import { InlineTagSelect } from "./form";
 import { FilterBar } from "./FilterBar";
 
 type SortKey = "title" | "owner" | "team" | "theme" | "status" | "target" | "priority" | "health" | "updated";
 
-const HEALTH_ORDER: Record<Health, number> = { on_track: 0, at_risk: 1, blocked: 2 };
+const HEALTH_ORDER: Record<Health, number> = { on_track: 0, at_risk: 1, blocked: 2, delayed: 3 };
 /** Health values in severity order, for the inline picker options. */
 const HEALTH_KEYS = Object.keys(HEALTH_META) as Health[];
 
-type SortState = { key: SortKey; dir: 1 | -1 };
+export type SortState<K extends string = string> = { key: K; dir: 1 | -1 };
 
-interface Column {
-  k: SortKey;
+export interface Column<K extends string = string> {
+  k: K;
   label: string;
   align?: "left" | "right" | "center";
   className?: string;
 }
 
-const COLUMNS: Column[] = [
-  { k: "title", label: "Initiative" },
-  { k: "owner", label: "Owner" },
-  { k: "team", label: "Team" },
-  { k: "status", label: "Status" },
+const COLUMNS: Column<SortKey>[] = [
+  { k: "title", label: "Initiative", className: "w-72" },
+  { k: "owner", label: "Owner", className: "w-40" },
+  { k: "status", label: "Status", className: "w-48" },
+  { k: "health", label: "Health", className: "w-32" },
   { k: "target", label: "Target" },
+  { k: "team", label: "Team", className: "w-28" },
   { k: "priority", label: "DIVE", align: "right", className: "w-24" },
-  { k: "health", label: "Health" },
   { k: "updated", label: "Updated", align: "right" },
 ];
 
-/** Sortable column header. Module-level so it isn't re-created on every render. */
-function Th({ col, sort, onToggle }: { col: Column; sort: SortState; onToggle: (k: SortKey) => void }) {
+/**
+ * Sortable column header. Module-level so it isn't re-created on every
+ * render. Generic over the sort-key union so Archived.tsx (its own, smaller
+ * column set) can reuse this exact table-header shell instead of a second
+ * near-identical component.
+ */
+export function Th<K extends string>({
+  col,
+  sort,
+  onToggle,
+}: {
+  col: Column<K>;
+  sort: SortState<K>;
+  onToggle: (k: K) => void;
+}) {
   const { k, label, align = "left", className } = col;
   const active = sort.key === k;
   // Reserve the chevron slot always, so toggling sort never reflows the column.
@@ -84,13 +97,24 @@ function Th({ col, sort, onToggle }: { col: Column; sort: SortState; onToggle: (
 }
 
 export function List() {
-  const { initiatives, filters, themes, owners, getOwner, getTheme, select, saveInitiative, notify } =
-    useRoadmap();
-  const [sort, setSort] = useState<SortState>({ key: "priority", dir: -1 });
+  const {
+    initiatives,
+    filters,
+    themes,
+    owners,
+    teams,
+    getOwner,
+    getTheme,
+    getTeam,
+    select,
+    saveInitiative,
+    notify,
+  } = useRoadmap();
+  const [sort, setSort] = useState<SortState<SortKey>>({ key: "priority", dir: -1 });
 
   const filtered = useMemo(
-    () => applyFilters(initiatives, filters, themes, owners),
-    [initiatives, filters, themes, owners]
+    () => applyFilters(initiatives, filters, themes, owners, teams),
+    [initiatives, filters, themes, owners, teams]
   );
 
   const sorted = useMemo(() => {
@@ -98,7 +122,7 @@ export function List() {
       switch (sort.key) {
         case "title": return i.title.toLowerCase();
         case "owner": return ownerName(getOwner(i.ownerId)).toLowerCase();
-        case "team": return i.team.toLowerCase();
+        case "team": return (getTeam(i.teamId)?.name ?? "").toLowerCase();
         case "theme": return getTheme(i.themeId)?.name.toLowerCase() ?? "";
         case "status": return STATUSES.indexOf(i.status);
         case "target": return i.targetEnd;
@@ -114,7 +138,7 @@ export function List() {
       if (av > bv) return 1 * sort.dir;
       return 0;
     });
-  }, [filtered, sort, getOwner, getTheme]);
+  }, [filtered, sort, getOwner, getTheme, getTeam]);
 
   const toggle = (key: SortKey) =>
     setSort((s) => (s.key === key ? { key, dir: (s.dir * -1) as 1 | -1 } : { key, dir: 1 }));
@@ -137,6 +161,7 @@ export function List() {
                 {sorted.map((i) => {
                   const owner = getOwner(i.ownerId);
                   const theme = getTheme(i.themeId);
+                  const team = getTeam(i.teamId);
                   const score = diveScore(i.scores);
                   const tier = scoreTier(score);
                   return (
@@ -149,26 +174,39 @@ export function List() {
                       }}
                       className="cursor-pointer border-b border-beige-10 hover:bg-beige-10"
                     >
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-2">
+                      <td className="w-72 max-w-0 px-3 py-2.5">
+                        <div className="flex min-w-0 items-center gap-2">
                           {theme && (
                             <span className={cn("h-3 w-1 shrink-0 rounded-[2px]", THEME_COLOR_META[theme.color].dot)} />
                           )}
-                          <span className="font-medium text-green-90">{i.title}</span>
+                          <span
+                            className={cn(
+                              "truncate font-medium",
+                              i.archived ? "text-beige-70" : "text-green-90"
+                            )}
+                            title={i.title || "Untitled initiative"}
+                          >
+                            {i.title || "Untitled initiative"}
+                          </span>
+                          {i.archived && (
+                            <Tag className="shrink-0 bg-beige-20 text-beige-70">Archived</Tag>
+                          )}
                           {i.visibility === "external" && (
-                            <span className="mono-label-sm rounded bg-green-10 px-1.5 py-0.5 text-green-70">Ext</span>
+                            <span className="mono-label-sm shrink-0 rounded bg-beige-20 px-1.5 py-0.5 text-beige-60">
+                              Ext
+                            </span>
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="w-40 max-w-0 px-3 py-2.5">
                         <span className="flex items-center gap-2 text-green-90">
-                          {owner && <Avatar name={ownerName(owner)} className="h-6 w-6 text-[10px]" neutral />}
-                          <span className="whitespace-nowrap">{ownerName(owner)}</span>
+                          {owner && <Avatar name={ownerName(owner)} className="h-6 w-6 shrink-0 text-[10px]" neutral />}
+                          <span className="truncate" title={ownerName(owner)}>{ownerName(owner)}</span>
                         </span>
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-green-70">{i.team}</td>
-                      <td className="px-3 py-2.5">
+                      <td className="w-48 p-0">
                         <InlineTagSelect
+                          fill
                           label="Change status"
                           value={i.status}
                           options={STATUSES}
@@ -179,8 +217,24 @@ export function List() {
                           }}
                         />
                       </td>
+                      <td className="w-32 p-0">
+                        <InlineTagSelect
+                          fill
+                          label="Change health"
+                          value={i.health}
+                          options={HEALTH_KEYS}
+                          render={(h: Health) => <HealthTag health={h} />}
+                          onSelect={(health) => {
+                            saveInitiative({ ...i, health });
+                            notify({ message: `Health set to ${HEALTH_META[health].label}`, tone: "success" });
+                          }}
+                        />
+                      </td>
                       <td className="whitespace-nowrap px-3 py-2.5 text-green-70">
                         {quarterLabelFromISO(i.targetEnd)}
+                      </td>
+                      <td className="w-28 max-w-0 truncate px-3 py-2.5 text-green-70" title={team?.name}>
+                        {team?.name ?? "—"}
                       </td>
                       <td className="w-24 px-3 py-2.5 text-right">
                         <span
@@ -192,18 +246,6 @@ export function List() {
                             {score ?? "—"}
                           </span>
                         </span>
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <InlineTagSelect
-                          label="Change health"
-                          value={i.health}
-                          options={HEALTH_KEYS}
-                          render={(h: Health) => <HealthTag health={h} />}
-                          onSelect={(health) => {
-                            saveInitiative({ ...i, health });
-                            notify({ message: `Health set to ${HEALTH_META[health].label}`, tone: "success" });
-                          }}
-                        />
                       </td>
                       <td className="whitespace-nowrap px-3 py-2.5 text-right text-beige-60">
                         {formatShortEN(i.updatedAt.slice(0, 10))}

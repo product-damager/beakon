@@ -7,10 +7,78 @@ import { ownerName } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Button, Eyebrow } from "./ui";
 import { NativeSelect, TextInput } from "./form";
-import { useOutsideClose } from "./hooks";
+import { useOutsideClose, usePopoverPlacement } from "./hooks";
 
-const baseInput =
+// Exported so components/initiative-fields.tsx's TeamPicker (team-only, no BU
+// option) can match this dropdown's exact look without redefining it.
+export const baseInput =
   "w-full rounded-lg border border-beige-30 bg-white px-3 text-sm text-green-90 placeholder:text-beige-60 focus:outline-none focus:ring-2 focus:ring-green-90";
+
+/**
+ * The grouped "Teams, sub-headed by parent business unit" list rendering
+ * shared by TeamOrBuPicker (below, OKR-only, team-or-BU) and
+ * initiative-fields.tsx's TeamPicker (team-only). Renders only the Teams
+ * section — callers own the surrounding dropdown shell (search box, "no
+ * matches" fallback, business-units section if any).
+ */
+export function TeamGroupList({
+  teams,
+  businessUnits,
+  query,
+  selectedTeamId,
+  onPick,
+}: {
+  teams: Team[];
+  businessUnits: BusinessUnit[];
+  query: string;
+  selectedTeamId?: string;
+  onPick: (id: string) => void;
+}) {
+  const q = query.trim().toLowerCase();
+  const shownTeams = teams.filter((t) => !q || t.name.toLowerCase().includes(q));
+  if (shownTeams.length === 0) return null;
+
+  // Sub-group by parent business unit, one sub-header per BU, with an "Other
+  // teams" fallback bucket for any team whose businessUnitId doesn't resolve.
+  const teamsByBu = businessUnits
+    .map((bu) => ({ bu, teams: shownTeams.filter((t) => t.businessUnitId === bu.id) }))
+    .filter((g) => g.teams.length > 0);
+  const otherTeams = shownTeams.filter((t) => !businessUnits.some((b) => b.id === t.businessUnitId));
+
+  const renderTeamOption = (t: Team) => (
+    <button
+      key={t.id}
+      type="button"
+      role="option"
+      aria-selected={t.id === selectedTeamId}
+      onClick={() => onPick(t.id)}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-beige-10",
+        t.id === selectedTeamId ? "bg-beige-10 text-green-90" : "text-green-90"
+      )}
+    >
+      <span className="truncate">{t.name}</span>
+    </button>
+  );
+
+  return (
+    <>
+      <div className="mono-label-sm px-2.5 py-1.5 text-beige-60">Teams</div>
+      {teamsByBu.map(({ bu, teams: buTeams }) => (
+        <div key={bu.id}>
+          <div className="mono-label-sm px-4 py-1 text-beige-40">{bu.name}</div>
+          {buTeams.map(renderTeamOption)}
+        </div>
+      ))}
+      {otherTeams.length > 0 && (
+        <div>
+          <div className="mono-label-sm px-4 py-1 text-beige-40">Other teams</div>
+          {otherTeams.map(renderTeamOption)}
+        </div>
+      )}
+    </>
+  );
+}
 
 /**
  * Controlled owners editor: list of owner rows, add/remove. Follows
@@ -125,6 +193,7 @@ export function TeamOrBuPicker({
     setQuery("");
   };
   useOutsideClose(ref, open, close);
+  const placement = usePopoverPlacement(ref, open);
 
   const selectedTeam = teamId ? teams.find((t) => t.id === teamId) : undefined;
   const selectedBu = businessUnitId ? businessUnits.find((b) => b.id === businessUnitId) : undefined;
@@ -143,30 +212,6 @@ export function TeamOrBuPicker({
     close();
   };
 
-  const renderTeamOption = (t: Team) => (
-    <button
-      key={t.id}
-      type="button"
-      role="option"
-      aria-selected={t.id === teamId}
-      onClick={() => pickTeam(t.id)}
-      className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-beige-10",
-        t.id === teamId ? "bg-beige-10 text-green-90" : "text-green-90"
-      )}
-    >
-      <span className="truncate">{t.name}</span>
-    </button>
-  );
-
-  // Sub-group the "Teams" section by parent business unit, one sub-header
-  // per BU, with an "Other teams" fallback bucket for any team whose
-  // businessUnitId doesn't resolve to a known BU.
-  const teamsByBu = businessUnits
-    .map((bu) => ({ bu, teams: shownTeams.filter((t) => t.businessUnitId === bu.id) }))
-    .filter((g) => g.teams.length > 0);
-  const otherTeams = shownTeams.filter((t) => !businessUnits.some((b) => b.id === t.businessUnitId));
-
   return (
     <div className="relative" ref={ref}>
       <button
@@ -184,7 +229,12 @@ export function TeamOrBuPicker({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-full rounded-xl border border-beige-20 bg-white p-2 shadow-lg">
+        <div
+          className={cn(
+            "absolute left-0 z-50 w-full rounded-xl border border-beige-20 bg-white p-2 shadow-lg",
+            placement === "top" ? "bottom-full mb-1" : "top-full mt-1"
+          )}
+        >
           <div className="relative mb-2">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-beige-60" />
             <input
@@ -197,23 +247,13 @@ export function TeamOrBuPicker({
             />
           </div>
           <div className="calm-scroll max-h-60 space-y-0.5 overflow-auto" role="listbox">
-            {shownTeams.length > 0 && (
-              <>
-                <div className="mono-label-sm px-2.5 py-1.5 text-beige-60">Teams</div>
-                {teamsByBu.map(({ bu, teams: buTeams }) => (
-                  <div key={bu.id}>
-                    <div className="mono-label-sm px-4 py-1 text-beige-40">{bu.name}</div>
-                    {buTeams.map(renderTeamOption)}
-                  </div>
-                ))}
-                {otherTeams.length > 0 && (
-                  <div>
-                    <div className="mono-label-sm px-4 py-1 text-beige-40">Other teams</div>
-                    {otherTeams.map(renderTeamOption)}
-                  </div>
-                )}
-              </>
-            )}
+            <TeamGroupList
+              teams={teams}
+              businessUnits={businessUnits}
+              query={query}
+              selectedTeamId={teamId}
+              onPick={pickTeam}
+            />
             {shownBus.length > 0 && (
               <>
                 <div className="mono-label-sm px-2.5 py-1.5 text-beige-60">Business units</div>

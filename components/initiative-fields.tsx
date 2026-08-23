@@ -10,23 +10,54 @@ import {
   IMPACT_OPTIONS,
   THEME_COLOR_META,
   VIABILITY_OPTIONS,
+  type BusinessUnit,
   type DeliveryLink,
   type DeliveryLinkType,
   type Initiative,
   type Scores,
+  type Team,
   type Theme,
   type ThemeColor,
 } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Button, Eyebrow, ScoreTierTag } from "./ui";
 import { Field, NativeSelect, TextInput } from "./form";
-import { useOutsideClose } from "./hooks";
+import { useOutsideClose, usePopoverPlacement } from "./hooks";
+import { baseInput, TeamGroupList } from "./okr-fields";
 
 /** Prepend https:// to a scheme-less URL so a delivery link never becomes relative. */
 export function withScheme(url: string): string {
   const t = url.trim();
   if (!t) return "";
   return /^[a-z][a-z0-9+.-]*:\/\//i.test(t) ? t : `https://${t}`;
+}
+
+/**
+ * A stacked "icon · label above value" property row — the OKR drawer's own
+ * property shape, promoted here (Sprint Vireo, Initiative 2) so
+ * InitiativeDrawer can reuse it for fields whose label doesn't fit
+ * `PropRow`'s fixed 104px label column (e.g. "Strategic objective") without
+ * either drawer reinventing this shape a second time. Was a private
+ * function local to OkrDrawer.tsx; OkrDrawer now imports it from here.
+ */
+export function Prop({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: LucideIcon;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-start gap-2.5">
+      <Icon size={15} strokeWidth={1.75} className="mt-0.5 shrink-0 text-beige-60" />
+      <div className="min-w-0 flex-1">
+        <div className="mono-label-sm text-beige-60">{label}</div>
+        <div className="mt-0.5 text-sm text-green-90">{children}</div>
+      </div>
+    </div>
+  );
 }
 
 /** A compact "icon · label · value" property row (Notion-style), label on the left. */
@@ -40,12 +71,103 @@ export function PropRow({
   children: ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-[104px_1fr] items-start gap-3 rounded-lg px-2 py-1.5">
-      <span className="flex items-center gap-2 pt-1.5 text-sm text-beige-60">
+    <div className="grid grid-cols-[104px_1fr] items-start gap-3 rounded-lg px-2 py-1">
+      <span className="flex items-center gap-2 pt-1 text-sm text-beige-60">
         <Icon size={15} strokeWidth={1.75} className="shrink-0" />
         {label}
       </span>
       <div className="min-w-0 self-center text-sm text-green-90">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * Team-only picker (11 real squads, searchable, grouped by parent business
+ * unit) — the initiative-domain sibling of okr-fields.tsx's TeamOrBuPicker,
+ * minus the business-unit option (initiatives/owners pick a real team only,
+ * see docs/decisions/007-heron-week-1-data-model-and-drawer-conventions.md
+ * decision 2). Shares the grouped-Teams-list rendering (TeamGroupList) and
+ * dropdown-shell input styling (baseInput) with that picker rather than
+ * duplicating them.
+ */
+export function TeamPicker({
+  teams,
+  businessUnits,
+  teamId,
+  onChange,
+}: {
+  teams: Team[];
+  businessUnits: BusinessUnit[];
+  teamId?: string;
+  onChange: (teamId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  const close = () => {
+    setOpen(false);
+    setQuery("");
+  };
+  useOutsideClose(ref, open, close);
+  const placement = usePopoverPlacement(ref, open);
+
+  const selectedTeam = teamId ? teams.find((t) => t.id === teamId) : undefined;
+  const q = query.trim().toLowerCase();
+  const shownTeams = teams.filter((t) => !q || t.name.toLowerCase().includes(q));
+
+  const pick = (id: string) => {
+    onChange(id);
+    close();
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        aria-label="Team"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className={cn(baseInput, "flex h-9 w-full items-center gap-2 pr-9 text-left")}
+      >
+        <span className={cn("truncate", selectedTeam ? "text-green-90" : "text-beige-60")}>
+          {selectedTeam?.name ?? "Choose a team"}
+        </span>
+        <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-beige-60" />
+      </button>
+
+      {open && (
+        <div
+          className={cn(
+            "absolute left-0 z-50 w-full rounded-xl border border-beige-20 bg-white p-2 shadow-lg",
+            placement === "top" ? "bottom-full mb-1" : "top-full mt-1"
+          )}
+        >
+          <div className="relative mb-2">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-beige-60" />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Escape" && (e.preventDefault(), close())}
+              placeholder="Search teams…"
+              className="h-8 w-full rounded-lg border border-beige-30 bg-white pl-8 pr-3 text-sm text-green-90 placeholder:text-beige-60 focus:outline-none focus:ring-2 focus:ring-green-90"
+            />
+          </div>
+          <div className="calm-scroll max-h-60 space-y-0.5 overflow-auto" role="listbox">
+            <TeamGroupList
+              teams={teams}
+              businessUnits={businessUnits}
+              query={query}
+              selectedTeamId={teamId}
+              onPick={pick}
+            />
+            {shownTeams.length === 0 && (
+              <div className="px-2.5 py-2 text-sm text-beige-60">No matches</div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -66,7 +188,7 @@ export function CollapsibleSection({
   children: ReactNode;
 }) {
   return (
-    <div className="border-t border-beige-20 pt-4">
+    <div className="border-t border-beige-20 pt-3">
       <button
         type="button"
         onClick={onToggle}
@@ -80,7 +202,7 @@ export function CollapsibleSection({
         <span className="mono-label text-beige-60">{label}</span>
         {!open && hint && <span className="ml-1 truncate text-xs text-beige-60">{hint}</span>}
       </button>
-      {open && <div className="mt-4 flex flex-col gap-4">{children}</div>}
+      {open && <div className="mt-3 flex flex-col gap-3">{children}</div>}
     </div>
   );
 }

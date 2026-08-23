@@ -18,9 +18,24 @@ do $$ begin
   create type initiative_health as enum ('on_track', 'at_risk', 'blocked');
 exception when duplicate_object then null; end $$;
 
+-- "Delayed" added (docs/plans/okr-filters-archive-parity-and-delayed-health.md
+-- item 6) — additive-only, used by both initiatives.health and okrs.health.
+-- `add value if not exists` is the README's documented pattern for new enum
+-- values (supabase/README.md's "Golden rule for editing schema.sql"); no
+-- `do $$ ... exception` guard needed/possible for enum values themselves,
+-- `if not exists` already makes this a no-op on re-run.
+alter type initiative_health add value if not exists 'delayed';
+
 do $$ begin
   create type delivery_link_type as enum ('redmine', 'figma', 'spec', 'notion', 'other');
 exception when duplicate_object then null; end $$;
+
+-- Widen delivery_link_type for Jira/Linear (Sprint Vireo, Initiative 2).
+-- Redmine already exists above; additive-only, no existing rows affected —
+-- same "alter type ... add value if not exists" pattern already used for
+-- initiative_health's 'delayed' value.
+alter type delivery_link_type add value if not exists 'jira';
+alter type delivery_link_type add value if not exists 'linear';
 
 do $$ begin
   create type okr_governance_status as enum
@@ -138,17 +153,11 @@ create or replace view initiative_scores as
 select id, round((demand * impact * viability) / effort) as dive_score
 from initiatives;
 
--- ── Public projection for the external roadmap page ──
--- Approved (external), non-archived items only, with internal-only fields
--- (notes, DIVE inputs, health, owner) stripped out. Owned by postgres so it
--- bypasses RLS on `initiatives` — safe because it only ever selects external rows.
-create or replace view external_roadmap as
-select
-  i.id, i.title, i.summary, i.expected_outcome, i.status,
-  i.team, i.theme_id, i.target_start, i.target_end, i.position
-from initiatives i
-where i.visibility = 'external' and i.archived = false
-order by i.position;
+-- Note: `external_roadmap`'s view definition used to live here. It's been
+-- moved below (after `teams`/`strategic_objectives` exist) because Sprint
+-- Heron Week 1 repoints its column list from `i.team` to `i.team_id`, which
+-- requires `initiatives.team_id` (added further down) to already exist — see
+-- that section for the full view definition.
 
 -- ══════════════════════════════════════════════════════════════════════
 -- Row Level Security
@@ -182,7 +191,10 @@ exception when duplicate_object then null; end $$;
 -- The anonymous public (share page) reads ONLY the external_roadmap view,
 -- plus themes/owners for labels. No direct anon access to `initiatives`.
 -- Signed-in users can open the share page too, so grant both roles.
-grant select on external_roadmap to anon, authenticated;
+-- Note: the `grant select on external_roadmap` statement itself moved further
+-- down in this file, alongside the view's definition (Sprint Heron Week 1
+-- moved the view below `teams`/`strategic_objectives` — see that section) —
+-- a `grant` on a view that doesn't exist yet would fail on a fresh database.
 
 do $$ begin
   create policy "anon read themes" on themes
@@ -239,6 +251,78 @@ create table if not exists strategic_objectives (
   year smallint not null,
   sponsor_id text references owners (id)
 );
+
+-- ══════════════════════════════════════════════════════════════════════
+-- Sprint Heron Week 1 — unify Initiative/Owner team + Initiative strategic
+-- goal onto the real `teams`/`strategic_objectives` tables OKRs already use.
+-- See docs/decisions/006-unify-initiative-team-defer-strategic-goal.md and
+-- docs/decisions/007-heron-week-1-data-model-and-drawer-conventions.md.
+--
+-- Additive only — both new columns start NULL on every existing row and are
+-- backfilled by a separate one-off script (NOT folded into this idempotent
+-- file, per supabase/README.md's golden rule):
+-- supabase/migrations/2026-08-heron-team-strategic-objective-backfill.sql.
+-- The legacy `initiatives.team`/`strategic_goal` text columns and `owners.team`
+-- stay in the schema, inert, until a later follow-up migration drops them
+-- (006's step 3) — explicitly not this pass.
+-- ══════════════════════════════════════════════════════════════════════
+alter table initiatives add column if not exists team_id text references teams (id);
+-- Loosening a NOT NULL is safe to re-run against existing rows (never fails,
+-- unlike tightening one) — every initiative keeps its legacy `team` value
+-- until the backfill script sets `team_id`, and the app switches reads over.
+alter table initiatives alter column team drop not null;
+alter table initiatives add column if not exists strategic_objective_id text
+  references strategic_objectives (id);
+-- owners.team was already nullable — no constraint change needed here.
+alter table owners add column if not exists team_id text references teams (id);
+
+-- ── Public projection for the external roadmap page ──
+-- Approved (external), non-archived items only, with internal-only fields
+-- (notes, DIVE inputs, health, owner) stripped out. Owned by postgres so it
+-- bypasses RLS on `initiatives` — safe because it only ever selects external
+-- rows. Selects `team_id` (not the legacy `team`) per Heron Week 1's
+-- unification — confirmed no consumer (fetchExternalRoadmap()/
+-- PublicInitiative in lib/data.ts, ExternalRoadmap.tsx) ever read `team` off
+-- this view, so this is a clean column-list swap, not a breaking change.
+--
+-- `create or replace view` can change a column's expression but NOT its name
+-- or position — on any database where this view already exists with its old
+-- column named `team` (i.e. beakon-prod, which is never dropped/rebuilt),
+-- the `create or replace view` below would fail with Postgres error 42P16
+-- ("cannot change name of view column ... to ...") without renaming that
+-- column first. Guarded so it's a no-op on a fresh database (view doesn't
+-- exist yet) and on any database where the rename has already happened —
+-- see supabase/migrations/2026-08-heron-team-strategic-objective-backfill.sql's
+-- "Part A0" for the incident this guards against, and
+-- supabase/README.md's golden-rule section for why this pattern (not a bare
+-- rename) belongs directly in schema.sql.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'external_roadmap'
+      and column_name = 'team'
+  ) and not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'external_roadmap'
+      and column_name = 'team_id'
+  ) then
+    alter view external_roadmap rename column team to team_id;
+  end if;
+end $$;
+
+create or replace view external_roadmap as
+select
+  i.id, i.title, i.summary, i.expected_outcome, i.status,
+  i.team_id, i.theme_id, i.target_start, i.target_end, i.position
+from initiatives i
+where i.visibility = 'external' and i.archived = false
+order by i.position;
+
+-- Grant moved here (from the RLS section above) since it targets this view —
+-- must run after the view exists, which on a fresh database it now does only
+-- from this point on.
+grant select on external_roadmap to anon, authenticated;
 
 -- ── OKRs ──
 create table if not exists okrs (
@@ -476,4 +560,372 @@ grant execute on function persist_okr(
   text, text, text, text, text, smallint, smallint, text, okr_governance_status,
   okr_class, date, numeric, initiative_health, text, text, boolean, double precision,
   jsonb, text[]
+) to authenticated;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- Roadmaps (Sprint Heron Week 2) — unified List/Board/Timeline saved view.
+-- See docs/decisions/008-roadmap-entity-visibility-model-and-okr-separation.md
+-- and docs/plans/heron-week-2-unified-roadmap-view.md §2a. This is the app's
+-- first per-user-owned, RLS-scoped object: sharing is owner-controlled
+-- (private / shared-view-only / shared-editable), and exactly one
+-- system-owned, non-deletable "General Roadmap" always exists (seeded below
+-- in seed.sql/seed_prod.sql, id = 'roadmap-general').
+-- ══════════════════════════════════════════════════════════════════════
+
+-- `current_owner_id()` — matches the signed-in JWT's email against `owners`,
+-- the same email-match lib/store.tsx's client-side `currentOwner` already
+-- does, now available server-side for RLS/RPC use. This is the app's first
+-- per-user-scoped RLS — this helper is the seam any future per-user feature
+-- should reuse, not a one-off written just for Roadmaps.
+create or replace function current_owner_id() returns text
+language sql
+security invoker
+stable
+as $$
+  select id from owners where email = (auth.jwt() ->> 'email') limit 1;
+$$;
+
+revoke execute on function current_owner_id() from public;
+grant execute on function current_owner_id() to authenticated;
+
+create table if not exists roadmaps (
+  id text primary key,
+  owner_id text references owners (id),        -- null only for the system row
+  name text not null,
+  view_mode text not null default 'board' check (view_mode in ('list', 'board', 'timeline')),
+  filters jsonb not null default '{}'::jsonb,
+  group_by text not null default 'theme' check (group_by in ('theme', 'team', 'owner')),
+  zoom text not null default 'month' check (zoom in ('month', 'quarter', 'half')),
+  zoom_scale numeric not null default 1,
+  density text not null default 'comfortable' check (density in ('comfortable', 'compact')),
+  timeline_sort jsonb,                          -- { key, dir } or null
+  visibility text not null default 'private' check (visibility in ('private', 'shared')),
+  editable boolean not null default false,       -- meaningful only when visibility = 'shared'
+  is_system boolean not null default false,
+  position double precision not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint roadmaps_system_owner_check
+    check ((is_system and owner_id is null) or (not is_system and owner_id is not null))
+);
+
+-- The `create table if not exists` above only sets `view_mode`'s new
+-- 'board' default for a genuinely fresh install — on a populated database
+-- (beakon-preview/beakon-prod already have this table), `create table` is a
+-- no-op on re-run, so the column's *actual* stored default doesn't change
+-- without an explicit `alter column ... set default`, same pattern as
+-- `owners.name`'s default above. Idempotent (re-running `set default` to
+-- the same value is always safe) and, per the Golden rule, additive/
+-- low-risk: it only changes what a *future* insert with no explicit
+-- `view_mode` gets, not any existing row's already-stored value (the
+-- System Roadmap row's existing stored value needs the separate migration
+-- in supabase/migrations/, scoped to that one row).
+alter table roadmaps alter column view_mode set default 'board';
+
+drop trigger if exists roadmaps_touch_updated_at on roadmaps;
+create trigger roadmaps_touch_updated_at
+  before update on roadmaps
+  for each row execute function touch_updated_at();
+
+alter table roadmaps enable row level security;
+
+-- SELECT/DELETE/INSERT only — deliberately no UPDATE policy. All updates to
+-- filters/groupBy/viewMode/etc. route through persist_roadmap() below,
+-- which runs `security invoker` (still RLS-subject for the reads it does
+-- internally) but keeps the real owner/editable/system authorization logic
+-- in the function body rather than a using/with check boolean (ADR 008
+-- decision 1) — the same reasoning persist_okr() already established for
+-- "authorization too conditional for plain RLS."
+do $$ begin
+  create policy "select own shared or system roadmaps" on roadmaps
+    for select to authenticated
+    using (owner_id = current_owner_id() or visibility = 'shared' or is_system = true);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "delete own non-system roadmaps" on roadmaps
+    for delete to authenticated
+    using (owner_id = current_owner_id() and is_system = false);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "insert own roadmaps" on roadmaps
+    for insert to authenticated
+    with check (owner_id = current_owner_id());
+exception when duplicate_object then null; end $$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- persist_roadmap(): the only path that updates an existing Roadmap's
+-- display fields. See supabase/migrations/2026-08-persist-roadmap-rpc.sql
+-- for the full rationale, matching persist_okr()'s documentation
+-- convention, and the manual test plan.
+-- ══════════════════════════════════════════════════════════════════════
+create or replace function persist_roadmap(
+  p_id text,
+  p_owner_id text,
+  p_name text,
+  p_view_mode text,
+  p_filters jsonb,
+  p_group_by text,
+  p_zoom text,
+  p_zoom_scale numeric,
+  p_density text,
+  p_timeline_sort jsonb,
+  p_visibility text,
+  p_editable boolean,
+  p_position double precision
+) returns void
+language plpgsql
+security invoker
+as $$
+declare
+  v_existing roadmaps%rowtype;
+  v_caller text := current_owner_id();
+begin
+  select * into v_existing from roadmaps where id = p_id;
+
+  if not found then
+    -- Creating a brand-new Roadmap (no existing row with this id yet).
+    -- Nobody creates `is_system` rows through the app — the one System row
+    -- is seed-only — so every insert here is a normal user-owned Roadmap,
+    -- and the caller must be its own owner (mirrors the "insert own
+    -- roadmaps" RLS policy a direct table insert would also enforce).
+    if v_caller is null or p_owner_id is distinct from v_caller then
+      raise exception 'persist_roadmap: cannot create a Roadmap owned by someone other than the caller';
+    end if;
+
+    insert into roadmaps (
+      id, owner_id, name, view_mode, filters, group_by, zoom, zoom_scale,
+      density, timeline_sort, visibility, editable, is_system, position
+    ) values (
+      p_id, p_owner_id, p_name, p_view_mode, p_filters, p_group_by, p_zoom, p_zoom_scale,
+      p_density, p_timeline_sort, p_visibility, p_editable, false, p_position
+    );
+    return;
+  end if;
+
+  if v_existing.is_system then
+    -- ADR 008 decision 2: nobody — not even an "owner," since the System
+    -- row has none — updates the System row's display fields through this
+    -- function. Its view_mode/filters/etc. stay at their seeded defaults;
+    -- per-user view-mode switching on it is client-only state.
+    raise exception 'persist_roadmap: the System Roadmap cannot be updated';
+  end if;
+
+  if v_existing.owner_id = v_caller then
+    -- Full write, including reassigning owner_id/visibility/editable/name —
+    -- ownership transfer isn't getting a UI this week, but the RPC doesn't
+    -- structurally block it (plan §2a / ADR 008).
+    update roadmaps set
+      owner_id      = p_owner_id,
+      name          = p_name,
+      view_mode     = p_view_mode,
+      filters       = p_filters,
+      group_by      = p_group_by,
+      zoom          = p_zoom,
+      zoom_scale    = p_zoom_scale,
+      density       = p_density,
+      timeline_sort = p_timeline_sort,
+      visibility    = p_visibility,
+      editable      = p_editable,
+      position      = p_position
+    where id = p_id;
+    return;
+  end if;
+
+  if v_existing.visibility = 'shared' and v_existing.editable then
+    -- Deliberate silent-ignore, not an error: an editor's client can only
+    -- ever change the view-shaping fields below. owner_id/name/visibility/
+    -- editable/position stay pinned to whatever is already in the DB row
+    -- regardless of what the caller passed for them — sharing settings are
+    -- always owner-only, never delegable to an editor (ADR 008 decision 1).
+    -- A shared-editable client resubmitting its last-known name/visibility
+    -- unchanged is the common case this is built for, not a hostile one.
+    update roadmaps set
+      view_mode     = p_view_mode,
+      filters       = p_filters,
+      group_by      = p_group_by,
+      zoom          = p_zoom,
+      zoom_scale    = p_zoom_scale,
+      density       = p_density,
+      timeline_sort = p_timeline_sort
+    where id = p_id;
+    return;
+  end if;
+
+  raise exception 'persist_roadmap: caller is not authorized to update Roadmap %', p_id;
+end;
+$$;
+
+revoke execute on function persist_roadmap(
+  text, text, text, text, jsonb, text, text, numeric, text, jsonb, text, boolean, double precision
+) from public;
+
+grant execute on function persist_roadmap(
+  text, text, text, text, jsonb, text, text, numeric, text, jsonb, text, boolean, double precision
+) to authenticated;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- okr_views (Sprint Heron Week 3) — saved/shareable "My OKRs" filter
+-- views. Structurally parallel to `roadmaps`' owner/private/shared-view/
+-- shared-edit sharing model, but deliberately narrower: no view_mode/
+-- group_by/zoom/zoom_scale/density/timeline_sort/is_system columns, and
+-- owner_id is NEVER null — there is no OKR-view equivalent of the System
+-- Roadmap; the existing unfiltered "OKRs" nav entry already covers that
+-- role, unchanged. See
+-- docs/decisions/009-okr-saved-views-reverse-adr-008-deferral.md for the
+-- full rationale (including why this reverses, rather than extends, ADR
+-- 008 decision 3's deferral).
+-- ══════════════════════════════════════════════════════════════════════
+create table if not exists okr_views (
+  id text primary key,
+  owner_id text not null references owners (id),   -- never null, no System row for this entity
+  name text not null,
+  filters jsonb not null default '{}'::jsonb,        -- OkrFilters shape, see lib/okrFilters.ts
+  visibility text not null default 'private' check (visibility in ('private', 'shared')),
+  editable boolean not null default false,           -- meaningful only when visibility = 'shared'
+  position double precision not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Group collapse-state for the grouped OKR view (Sprint Vireo, Initiative 1)
+-- — a denylist of collapsed "bu:<id>"/"team:<id>" group keys, absence means
+-- expanded. Additive column, safe on a populated table: existing rows
+-- backfill to '[]' ("nothing collapsed"), the correct default for every
+-- view saved before this sprint. Reverses ADR 009's "filters-only" OkrView
+-- scoping (see docs/decisions/ for the ADR recording this reversal) —
+-- PM-confirmed: saved views become grouping-aware, not just filter
+-- snapshots. See
+-- supabase/migrations/2026-08-okr-views-collapsed-group-keys.sql.
+alter table okr_views add column if not exists collapsed_group_keys jsonb not null default '[]'::jsonb;
+
+drop trigger if exists okr_views_touch_updated_at on okr_views;
+create trigger okr_views_touch_updated_at
+  before update on okr_views
+  for each row execute function touch_updated_at();
+
+alter table okr_views enable row level security;
+
+-- SELECT/DELETE/INSERT only — deliberately no UPDATE policy, mirroring
+-- `roadmaps` exactly. All writes to name/filters/visibility/editable/
+-- position route through persist_okr_view() below, which keeps the real
+-- owner vs. shared-editable authorization logic in the function body
+-- rather than a using/with check boolean (ADR 008 decision 1's reasoning,
+-- applied to this entity per ADR 009).
+do $$ begin
+  create policy "select own or shared okr views" on okr_views
+    for select to authenticated
+    using (owner_id = current_owner_id() or visibility = 'shared');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "delete own okr views" on okr_views
+    for delete to authenticated
+    using (owner_id = current_owner_id());
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "insert own okr views" on okr_views
+    for insert to authenticated
+    with check (owner_id = current_owner_id());
+exception when duplicate_object then null; end $$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- persist_okr_view(): the only path that updates an existing OkrView's
+-- fields. See supabase/migrations/2026-08-persist-okr-view-rpc.sql for
+-- the full rationale, matching persist_roadmap()'s documentation
+-- convention, and the manual test plan. No System-row branch (unlike
+-- persist_roadmap) — there is no immutable row to special-case for this
+-- entity.
+--
+-- Sprint Vireo, Initiative 1: gained a trailing p_collapsed_group_keys
+-- parameter (default '[]'::jsonb) so a saved view's collapsed BU/Team
+-- group keys travel with `filters` in all three authorization branches —
+-- see supabase/migrations/2026-08-okr-views-collapsed-group-keys.sql. This
+-- is a parameter-list change, not a true in-place replace, so the old
+-- 7-arg signature is explicitly dropped first (Postgres would otherwise
+-- keep both overloads alive side by side).
+-- ══════════════════════════════════════════════════════════════════════
+drop function if exists persist_okr_view(text, text, text, jsonb, text, boolean, double precision);
+
+create or replace function persist_okr_view(
+  p_id text,
+  p_owner_id text,
+  p_name text,
+  p_filters jsonb,
+  p_visibility text,
+  p_editable boolean,
+  p_position double precision,
+  p_collapsed_group_keys jsonb default '[]'::jsonb
+) returns void
+language plpgsql
+security invoker
+as $$
+declare
+  v_existing okr_views%rowtype;
+  v_caller text := current_owner_id();
+begin
+  select * into v_existing from okr_views where id = p_id;
+
+  if not found then
+    -- Creating a brand-new OkrView. Every row is user-owned (no System row
+    -- for this entity), so the caller must be its own owner — mirrors the
+    -- "insert own okr views" RLS policy a direct table insert would also
+    -- enforce.
+    if v_caller is null or p_owner_id is distinct from v_caller then
+      raise exception 'persist_okr_view: cannot create an OkrView owned by someone other than the caller';
+    end if;
+
+    insert into okr_views (id, owner_id, name, filters, visibility, editable, position, collapsed_group_keys)
+    values (p_id, p_owner_id, p_name, p_filters, p_visibility, p_editable, p_position, p_collapsed_group_keys);
+    return;
+  end if;
+
+  if v_existing.owner_id = v_caller then
+    -- Full write, including reassigning owner_id/visibility/editable/name —
+    -- ownership transfer isn't getting a UI this week, but the RPC doesn't
+    -- structurally block it (same deliberate scope note as persist_roadmap,
+    -- ADR 009).
+    update okr_views set
+      owner_id             = p_owner_id,
+      name                 = p_name,
+      filters              = p_filters,
+      visibility           = p_visibility,
+      editable             = p_editable,
+      position             = p_position,
+      collapsed_group_keys = p_collapsed_group_keys
+    where id = p_id;
+    return;
+  end if;
+
+  if v_existing.visibility = 'shared' and v_existing.editable then
+    -- Deliberate silent-ignore, not an error: a shared-editable non-owner
+    -- can only ever change the view-shaping fields an OkrView actually has
+    -- — filters/name/collapsed_group_keys. owner_id/visibility/editable/
+    -- position stay pinned to whatever is already in the DB row regardless
+    -- of what the caller passed for them — sharing settings are always
+    -- owner-only, never delegable to an editor (same reasoning as
+    -- persist_roadmap, ADR 008 decision 1, applied here per ADR 009). A
+    -- shared-editable visitor collapsing/expanding groups is exactly as
+    -- legitimate as them changing filters, so collapsed_group_keys travels
+    -- with filters/name in this branch too.
+    update okr_views set
+      name                 = p_name,
+      filters              = p_filters,
+      collapsed_group_keys = p_collapsed_group_keys
+    where id = p_id;
+    return;
+  end if;
+
+  raise exception 'persist_okr_view: caller is not authorized to update OkrView %', p_id;
+end;
+$$;
+
+revoke execute on function persist_okr_view(
+  text, text, text, jsonb, text, boolean, double precision, jsonb
+) from public;
+
+grant execute on function persist_okr_view(
+  text, text, text, jsonb, text, boolean, double precision, jsonb
 ) to authenticated;

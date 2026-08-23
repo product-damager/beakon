@@ -5,8 +5,9 @@
 --
 -- Safe to re-run: every row upserts, so you can edit a name/email/color below
 -- and run it again to update. Requires the schema.sql columns (email, surname).
--- Note: `team` is intentionally NOT seeded — each person picks it in-app under
--- profile settings, and re-running this file won't clobber that choice.
+-- Note: `team_id` (formerly `team`) is intentionally NOT seeded — each
+-- person picks it in-app under profile settings, and re-running this file
+-- won't clobber that choice.
 
 -- ── Owners ──────────────────────────────────────────────────────────────
 -- The `email` must match each person's product sign-in email exactly.
@@ -64,3 +65,14 @@ insert into strategic_objectives (id, name, description, year, sponsor_id) value
   ('so-internal', 'Internal',                                   '', 2026, null)
 on conflict (id) do update
   set name = excluded.name, description = excluded.description, year = excluded.year;
+
+-- ── System Roadmap (Sprint Heron Week 2) ────────────────────────────────
+-- The one always-present, non-deletable, view-mode-immutable "General
+-- Roadmap" — see docs/decisions/008-roadmap-entity-visibility-model-and-okr-
+-- separation.md decision 2. owner_id stays null (is_system rows have none);
+-- view_mode/filters/etc. are never written by any RLS/RPC path, so this row
+-- only ever needs to exist, not be kept current — no other columns need
+-- re-upserting here.
+insert into roadmaps (id, owner_id, name, is_system, filters) values
+  ('roadmap-general', null, 'General Roadmap', true, '{}'::jsonb)
+on conflict (id) do update set name = excluded.name;

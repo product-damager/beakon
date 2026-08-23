@@ -9,22 +9,32 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { CalendarRange, ChevronRight, Minimize2, Plus } from "lucide-react";
+import {
+  CalendarRange,
+  Group,
+  Minimize2,
+  Plus,
+  Rows2,
+  Rows3,
+  TriangleAlert,
+} from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import { activeFilterCount, applyFilters, groupInitiatives, sortInitiatives } from "@/lib/filters";
 import { barPosition, buildColumns, buildWindow, formatShortEN, shiftISODays, todayMarker } from "@/lib/dates";
 import {
+  HEALTH_META,
   ownerName,
   STATUS_META,
   STATUSES,
-  THEME_COLOR_META,
   ZOOM_SCALE_MAX,
   ZOOM_SCALE_MIN,
+  type GroupBy,
   type Initiative,
   type Zoom,
 } from "@/lib/types";
 import { cn } from "@/lib/cn";
-import { Avatar, Button, Eyebrow } from "./ui";
+import { Avatar, Button, Eyebrow, GroupHeaderContent } from "./ui";
+import { InlineTagSelect } from "./form";
 import { FilterBar } from "./FilterBar";
 import { Logo } from "./Logo";
 
@@ -33,6 +43,11 @@ const LABEL_W = 268;
 // snapshot (false) during SSR + hydration so both renders match, then flips to true.
 const emptySubscribe = () => () => {};
 const UNIT: Record<Zoom, number> = { month: 116, quarter: 220, half: 320 };
+
+const GROUP_BY_LABEL: Record<GroupBy, string> = { theme: "Theme", team: "Team", owner: "Owner" };
+const GROUP_BY_KEYS = Object.keys(GROUP_BY_LABEL) as GroupBy[];
+const ZOOM_LABEL: Record<Zoom, string> = { month: "Month", quarter: "Quarter", half: "Half-year" };
+const ZOOM_KEYS = Object.keys(ZOOM_LABEL) as Zoom[];
 
 // ── Drag-to-replan ──────────────────────────────────────────────────────────
 const DAY_MS = 86_400_000;
@@ -61,17 +76,47 @@ function StatusLegend() {
   );
 }
 
+/** Warning-triangle icon for at_risk/blocked/delayed rows — red for blocked,
+ * orange for at_risk, matching HEALTH_META's own hue split. "delayed" gets
+ * its own amber variant (docs/design/okr-filters-archive-parity-and-delayed-
+ * health.md §4) rather than reusing the orange/red triangle, so a scanning
+ * eye can tell "this one is just late" apart from "this one is failing"
+ * without opening the row. Replaces a plain color dot so the signal reads
+ * even without color (shape + placement, not just hue). */
+function HealthFlagIcon({
+  health,
+  className,
+}: {
+  health: "at_risk" | "blocked" | "delayed";
+  className?: string;
+}) {
+  return (
+    <TriangleAlert
+      size={13}
+      className={cn(
+        health === "blocked" ? "text-red-60" : health === "delayed" ? "text-amber-60" : "text-orange-60",
+        className
+      )}
+      aria-hidden
+    />
+  );
+}
+
 export function Timeline() {
   const {
     initiatives,
     filters,
     themes,
     owners,
+    teams,
     groupBy,
+    setGroupBy,
     zoom,
+    setZoom,
     zoomScale,
     setZoomScale,
     density,
+    setDensity,
     timelineSort,
     presentation,
     selectedId,
@@ -87,8 +132,14 @@ export function Timeline() {
   const editable = !presentation;
 
   const filtered = useMemo(
-    () => applyFilters(initiatives, filters, themes, owners),
-    [initiatives, filters, themes, owners]
+    () => applyFilters(initiatives, filters, themes, owners, teams),
+    [initiatives, filters, themes, owners, teams]
+  );
+  const riskyCount = useMemo(
+    () =>
+      filtered.filter((i) => i.health === "at_risk" || i.health === "blocked" || i.health === "delayed")
+        .length,
+    [filtered]
   );
   const window = useMemo(
     () => buildWindow(filtered.map((i) => ({ start: i.targetStart, end: i.targetEnd }))),
@@ -99,8 +150,8 @@ export function Timeline() {
   // Sort the flat list before grouping so each group inherits the chosen order.
   const sorted = useMemo(() => sortInitiatives(filtered, timelineSort), [filtered, timelineSort]);
   const groups = useMemo(
-    () => groupInitiatives(sorted, groupBy, themes, owners),
-    [sorted, groupBy, themes, owners]
+    () => groupInitiatives(sorted, groupBy, themes, owners, teams),
+    [sorted, groupBy, themes, owners, teams]
   );
 
   const canvasWidth = Math.max(720, columns.length * UNIT[zoom] * zoomScale);
@@ -291,10 +342,19 @@ export function Timeline() {
         </div>
       ) : (
         <>
-          <FilterBar showGrouping showZoom showPresentation flush />
+          <FilterBar pillCap={2} showSort showZoomScale showPresentation flush />
           <div className="flex items-center justify-between border-b border-beige-20 bg-background px-6 py-2">
-            <Eyebrow>
-              {filtered.length} initiative{filtered.length === 1 ? "" : "s"}
+            <Eyebrow className="flex items-center gap-2">
+              <span>
+                {filtered.length} initiative{filtered.length === 1 ? "" : "s"}
+              </span>
+              {riskyCount > 0 && (
+                <span className="flex items-center gap-1.5 text-orange-70">
+                  <span className="text-beige-40">|</span>
+                  <TriangleAlert size={13} />
+                  <span>{riskyCount} risky</span>
+                </span>
+              )}
             </Eyebrow>
             <StatusLegend />
           </div>
@@ -308,10 +368,27 @@ export function Timeline() {
         <div ref={scrollRef} className="calm-scroll h-full overflow-auto">
           <div className="flex min-h-full flex-col" style={{ minWidth: LABEL_W + canvasWidth }}>
             {/* Time-axis header — sticky to the top, scrolls horizontally with the canvas */}
-            <div className="sticky top-0 z-20 flex shrink-0 border-b border-beige-20 bg-background">
-              {/* Corner cell — frozen on both axes */}
+            <div className="sticky top-0 z-20 flex h-12 shrink-0 border-b border-beige-20 bg-background">
+              {/* Corner cell — frozen on both axes. Houses the grouping control (the
+                  row's only control for `groupBy` now that the toolbar's old Group
+                  segmented control is gone). A native <select>'s closed state can be
+                  restyled, but its open options list is OS-rendered and can't match
+                  the app's design — so this uses InlineTagSelect (the same custom
+                  popover pattern List/OkrList use for inline edits) instead, sized to
+                  fit the row's existing h-12/items-end baseline. */}
               <div className="sticky left-0 z-10 flex w-[268px] shrink-0 items-end bg-background px-6 pb-2 pt-3">
-                <span className="mono-label text-beige-60">{groupBy}</span>
+                <div className="flex w-full items-center gap-1.5">
+                  <Group size={14} className="shrink-0 text-beige-60" />
+                  <InlineTagSelect
+                    label="Group timeline by"
+                    value={groupBy}
+                    options={GROUP_BY_KEYS}
+                    render={(g: GroupBy) => (
+                      <span className="text-[13px] font-medium text-green-90">{GROUP_BY_LABEL[g]}</span>
+                    )}
+                    onSelect={setGroupBy}
+                  />
+                </div>
               </div>
               <div className="relative h-12" style={{ width: canvasWidth }}>
                 {columns.map((c) => (
@@ -349,7 +426,17 @@ export function Timeline() {
                       style={{ left: `${c.leftPct}%` }}
                     />
                   ))}
-                  {today !== null && (
+                </div>
+              </div>
+              {/* Own positioned layer, well above the (non-positioned, z-auto)
+               * group-header bands below — those otherwise paint over a z-0
+               * marker despite it being declared later in the DOM. */}
+              {today !== null && (
+                <div
+                  className="pointer-events-none absolute inset-0 z-30"
+                  style={{ marginLeft: LABEL_W }}
+                >
+                  <div className="relative h-full" style={{ width: canvasWidth }}>
                     <div
                       className="absolute bottom-0 top-0 border-l-2 border-dashed border-lime-50"
                       style={{ left: `${today}%` }}
@@ -358,9 +445,9 @@ export function Timeline() {
                         Today
                       </span>
                     </div>
-                  )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {groups.map((g) => {
                 const isCollapsed = collapsed.has(g.key);
@@ -374,27 +461,15 @@ export function Timeline() {
                       onClick={() => toggleGroup(g.key)}
                       aria-expanded={!isCollapsed}
                       aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${g.label}`}
-                      className="sticky left-0 z-10 flex w-[268px] shrink-0 items-center gap-2 bg-beige-20 px-6 py-3 text-left transition-colors hover:bg-beige-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-green-90"
+                      className="sticky left-0 z-10 flex w-[268px] shrink-0 items-center bg-beige-20 px-6 py-3 text-left transition-colors hover:bg-beige-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-green-90"
                     >
-                      <ChevronRight
-                        size={15}
-                        className={cn(
-                          "shrink-0 text-beige-60 transition-transform",
-                          !isCollapsed && "rotate-90"
-                        )}
+                      <GroupHeaderContent
+                        depth={0}
+                        label={g.label}
+                        count={g.items.length}
+                        color={g.color}
+                        isCollapsed={isCollapsed}
                       />
-                      {g.color && (
-                        <span
-                          className={cn(
-                            "h-3.5 w-1 shrink-0 rounded-[2px]",
-                            THEME_COLOR_META[g.color].dot
-                          )}
-                        />
-                      )}
-                      <span className="truncate text-sm font-semibold text-green-90">
-                        {g.label}
-                      </span>
-                      <span className="mono-label-sm text-green-70">{g.items.length}</span>
                     </button>
                     <div className="relative" style={{ width: canvasWidth }} />
                   </div>
@@ -435,6 +510,11 @@ export function Timeline() {
                                 neutral
                               />
                             )}
+                            {(i.health === "at_risk" || i.health === "blocked" || i.health === "delayed") && (
+                              <span title={HEALTH_META[i.health].label}>
+                                <HealthFlagIcon health={i.health} className="shrink-0" />
+                              </span>
+                            )}
                             <button
                               onClick={() => select(i.id)}
                               className="truncate text-left text-[13px] font-medium text-green-90 hover:text-green-60"
@@ -468,6 +548,7 @@ export function Timeline() {
                                 onPointerUp={endDrag}
                                 onPointerCancel={cancelDrag}
                                 title={`${i.title} · ${meta.label}`}
+                                aria-label={`${i.title} · ${meta.label}`}
                                 className={cn(
                                   "flex h-full w-full items-center overflow-hidden rounded-md px-2.5 text-left text-xs font-medium shadow-sm transition-[filter,box-shadow] hover:brightness-105",
                                   meta.bar,
@@ -530,6 +611,49 @@ export function Timeline() {
             </div>
           </div>
         </div>
+        {!presentation && (
+          // Sticky-right region — density + zoom-granularity. A sibling of the
+          // scroll container (`scrollRef`), not a flex child inside the
+          // horizontally-scrolling `canvasWidth` div, so it never scrolls away
+          // with the date columns: it's an absolutely-positioned overlay pinned
+          // to this wrapper's top-right corner, above the scrolling content on
+          // both axes, regardless of scroll position.
+          <div className="absolute right-0 top-0 z-40 flex h-12 items-center gap-2 border-b border-l border-beige-20 bg-background px-3">
+            <div className="flex items-center rounded-lg border border-beige-30 bg-white p-0.5">
+              {(
+                [
+                  { value: "comfortable", icon: Rows2, label: "Comfortable rows" },
+                  { value: "compact", icon: Rows3, label: "Compact rows" },
+                ] as const
+              ).map(({ value, icon: Icon, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setDensity(value)}
+                  title={label}
+                  aria-label={label}
+                  aria-pressed={density === value}
+                  className={cn(
+                    "flex h-7 w-7 items-center justify-center rounded-md transition-colors",
+                    density === value ? "bg-green-90 text-white" : "text-green-70 hover:bg-beige-10"
+                  )}
+                >
+                  <Icon size={15} />
+                </button>
+              ))}
+            </div>
+
+            <InlineTagSelect
+              label="Zoom granularity"
+              value={zoom}
+              options={ZOOM_KEYS}
+              render={(z: Zoom) => (
+                <span className="text-[13px] font-medium text-green-90">{ZOOM_LABEL[z]}</span>
+              )}
+              onSelect={setZoom}
+            />
+          </div>
+        )}
         {filtered.length === 0 && <EmptyState />}
       </div>
     </div>

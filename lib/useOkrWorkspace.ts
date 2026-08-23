@@ -1,30 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import {
-  BUSINESS_UNITS,
-  OKR_INITIATIVES,
-  OKR_OWNERS,
-  OKRS,
-  STRATEGIC_OBJECTIVES,
-  TEAMS_TABLE,
-} from "./seed";
+import { OKR_INITIATIVES, OKR_OWNERS, OKRS } from "./seed";
 import { isSupabaseConfigured } from "./supabase";
 import { useAuth } from "./auth";
 import { fetchOkrWorkspace, persistOkr } from "./data";
-import type {
-  BusinessUnit,
-  Okr,
-  OkrInitiativeLink,
-  OkrOwner,
-  StrategicObjective,
-  Team,
-} from "./types";
+import type { Okr, OkrInitiativeLink, OkrOwner } from "./types";
 
 interface OkrWorkspaceState {
-  businessUnits: BusinessUnit[];
-  teams: Team[];
-  strategicObjectives: StrategicObjective[];
   okrs: Okr[];
   okrOwners: OkrOwner[];
   okrInitiatives: OkrInitiativeLink[];
@@ -47,17 +30,14 @@ interface OkrWorkspaceState {
  * mirroring RoadmapProvider's seed-vs-Supabase branching (lib/store.tsx)
  * without folding OKR data into that global, eagerly-loaded provider. Owns
  * its own loading/error state, independent of useRoadmap().loading.
+ *
+ * `businessUnits`/`teams`/`strategicObjectives` used to be fetched here too,
+ * but Sprint Heron Week 1 moved them into `useRoadmap()`'s eager fetch (ADR
+ * 007 decision 3) — the `/okrs` page reads them from useRoadmap() instead.
  */
 export function useOkrWorkspace(): OkrWorkspaceState {
   const { session } = useAuth();
 
-  const [businessUnits, setBusinessUnits] = useState<BusinessUnit[]>(() =>
-    isSupabaseConfigured ? [] : BUSINESS_UNITS
-  );
-  const [teams, setTeams] = useState<Team[]>(() => (isSupabaseConfigured ? [] : TEAMS_TABLE));
-  const [strategicObjectives, setStrategicObjectives] = useState<StrategicObjective[]>(() =>
-    isSupabaseConfigured ? [] : STRATEGIC_OBJECTIVES
-  );
   const [okrs, setOkrs] = useState<Okr[]>(() => (isSupabaseConfigured ? [] : OKRS));
   const [okrOwners, setOkrOwners] = useState<OkrOwner[]>(() =>
     isSupabaseConfigured ? [] : OKR_OWNERS
@@ -76,9 +56,6 @@ export function useOkrWorkspace(): OkrWorkspaceState {
       .then((w) => {
         if (!active) return;
         setError(null);
-        setBusinessUnits(w.businessUnits);
-        setTeams(w.teams);
-        setStrategicObjectives(w.strategicObjectives);
         setOkrs(w.okrs);
         setOkrOwners(w.okrOwners);
         setOkrInitiatives(w.okrInitiatives);
@@ -156,9 +133,6 @@ export function useOkrWorkspace(): OkrWorkspaceState {
   const dismissError = useCallback(() => setError(null), []);
 
   return {
-    businessUnits,
-    teams,
-    strategicObjectives,
     okrs,
     okrOwners,
     okrInitiatives,

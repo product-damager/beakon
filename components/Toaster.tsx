@@ -22,7 +22,11 @@ function ToastItem({ toast }: { toast: Toast }) {
       className={cn(
         "pointer-events-auto flex items-center gap-3 rounded-xl border bg-white px-4 py-3 shadow-lg",
         "animate-slide-up motion-reduce:animate-none",
-        toast.tone === "error" ? "border-red-30" : "border-beige-20"
+        toast.tone === "error"
+          ? "border-red-30"
+          : toast.tone === "success"
+            ? "border-green-40"
+            : "border-beige-20"
       )}
     >
       <span className="flex-1 text-sm text-green-90">{toast.message}</span>
@@ -40,7 +44,7 @@ function ToastItem({ toast }: { toast: Toast }) {
       <button
         onClick={() => dismissToast(toast.id)}
         aria-label="Dismiss"
-        className="shrink-0 rounded-md p-1 text-beige-60 transition-colors hover:bg-beige-10 hover:text-green-90"
+        className="shrink-0 rounded-md p-1 text-beige-70 transition-colors hover:bg-beige-10 hover:text-green-90"
       >
         <X size={15} />
       </button>

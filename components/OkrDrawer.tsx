@@ -1,16 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import {
-  Archive,
-  ArchiveRestore,
-  Building2,
-  CalendarRange,
-  Flag,
-  Users,
-  X,
-  type LucideIcon,
-} from "lucide-react";
+import { Archive, ArchiveRestore, Building2, CalendarRange, Flag, Users, X } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import { HEALTH_META } from "@/lib/types";
 import type {
@@ -18,6 +9,7 @@ import type {
   Health,
   Okr,
   OkrClass,
+  OkrGovernanceStatus,
   OkrInitiativeLink,
   OkrOwner,
   StrategicObjective,
@@ -28,10 +20,9 @@ import { Drawer } from "./Drawer";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Button, Eyebrow, HealthTag, StatusTag, Tag } from "./ui";
 import { Field, InlineTagSelect, NativeSelect, SearchableSelect, TextArea, TextInput } from "./form";
-import { DependencyPicker } from "./initiative-fields";
+import { DependencyPicker, Prop } from "./initiative-fields";
 import { AchievementInput, OkrOwnersEditor, TeamOrBuPicker } from "./okr-fields";
 import { OKR_GOVERNANCE_META, formatAchievement } from "./OkrList";
-import { OKR_GOVERNANCE_STATUSES } from "./OkrFilterBar";
 
 const OKR_CLASS_LABEL: Record<NonNullable<Okr["okrClass"]>, string> = {
   committed: "Committed",
@@ -40,26 +31,7 @@ const OKR_CLASS_LABEL: Record<NonNullable<Okr["okrClass"]>, string> = {
 };
 const OKR_CLASS_OPTIONS: OkrClass[] = ["committed", "conditional", "optional"];
 const HEALTH_KEYS = Object.keys(HEALTH_META) as Health[];
-
-function Prop({
-  icon: Icon,
-  label,
-  children,
-}: {
-  icon: LucideIcon;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-start gap-2.5">
-      <Icon size={15} strokeWidth={1.75} className="mt-0.5 shrink-0 text-beige-60" />
-      <div className="min-w-0 flex-1">
-        <div className="mono-label-sm text-beige-60">{label}</div>
-        <div className="mt-0.5 text-sm text-green-90">{children}</div>
-      </div>
-    </div>
-  );
-}
+const GOVERNANCE_KEYS = Object.keys(OKR_GOVERNANCE_META) as OkrGovernanceStatus[];
 
 /**
  * One drawer for viewing and editing an OKR. Existing OKRs edit in place and
@@ -156,7 +128,6 @@ function DrawerBody({
   const [objectiveTouched, setObjectiveTouched] = useState(false);
   const [teamBuTouched, setTeamBuTouched] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
 
   // Local edit + autosave. Discrete controls commit immediately via patch(); free
   // text commits on blur via saveNow(). In create mode nothing persists until Create.
@@ -248,8 +219,6 @@ function DrawerBody({
     onClose();
   };
 
-  const governance = OKR_GOVERNANCE_META[d.governanceStatus];
-
   return (
     <Drawer open onClose={attemptClose} width={520}>
       {/* Header */}
@@ -277,11 +246,28 @@ function DrawerBody({
           className="-mx-2 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 py-0.5 font-display text-xl font-semibold leading-snug text-green-90 placeholder:text-beige-40 hover:border-beige-30 hover:bg-beige-5 focus:border-green-90 focus:bg-white focus:outline-none focus:ring-2 focus:ring-green-90/30"
         />
         {titleTouched && titleMissing && <p className="mt-1 text-xs text-red-70">Give the OKR a title.</p>}
+        {/* Governance/Health live once, here — pinned in the sticky header as
+         * the single interactive control (ADR 007 decision 4), not duplicated
+         * as a body Field that scrolls away. */}
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Tag shape="square" className={governance.tag}>
-            {governance.label}
-          </Tag>
-          <HealthTag health={d.health} shape="square" />
+          <InlineTagSelect
+            label="Change governance"
+            value={d.governanceStatus}
+            options={GOVERNANCE_KEYS}
+            render={(g: Okr["governanceStatus"]) => (
+              <Tag shape="square" className={OKR_GOVERNANCE_META[g].tag}>
+                {OKR_GOVERNANCE_META[g].label}
+              </Tag>
+            )}
+            onSelect={(governanceStatus) => patch({ governanceStatus })}
+          />
+          <InlineTagSelect
+            label="Change health"
+            value={d.health}
+            options={HEALTH_KEYS}
+            render={(h: Health) => <HealthTag health={h} shape="square" />}
+            onSelect={(health) => patch({ health })}
+          />
         </div>
       </div>
 
@@ -323,16 +309,6 @@ function DrawerBody({
             </Prop>
           </div>
           <div className="col-span-2">
-            <Prop icon={Flag} label="Target date">
-              <TextInput
-                type="date"
-                value={d.targetDate ?? ""}
-                onChange={(e) => patch({ targetDate: e.target.value || undefined })}
-                aria-label="Target date"
-              />
-            </Prop>
-          </div>
-          <div className="col-span-2">
             <Prop icon={CalendarRange} label="Year / quarter">
               <div className="grid grid-cols-2 gap-2">
                 <TextInput
@@ -358,30 +334,17 @@ function DrawerBody({
               </div>
             </Prop>
           </div>
+          <div className="col-span-2">
+            <Prop icon={Flag} label="Target date">
+              <TextInput
+                type="date"
+                value={d.targetDate ?? ""}
+                onChange={(e) => patch({ targetDate: e.target.value || undefined })}
+                aria-label="Target date"
+              />
+            </Prop>
+          </div>
         </div>
-
-        <Field label="Governance status">
-          <NativeSelect
-            value={d.governanceStatus}
-            onChange={(e) => patch({ governanceStatus: e.target.value as Okr["governanceStatus"] })}
-          >
-            {OKR_GOVERNANCE_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {OKR_GOVERNANCE_META[s].label}
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
-
-        <Field label="Health">
-          <InlineTagSelect
-            label="Change health"
-            value={d.health}
-            options={HEALTH_KEYS}
-            render={(h: Health) => <HealthTag health={h} shape="square" />}
-            onSelect={(health) => patch({ health })}
-          />
-        </Field>
 
         <Field label="Deliverable detail">
           <TextArea
@@ -460,7 +423,9 @@ function DrawerBody({
                         const linked = initiatives.find((i) => i.id === id);
                         return (
                           <tr key={id} className="border-b border-beige-10 last:border-b-0">
-                            <td className="px-3 py-2 text-green-90">{linked?.title ?? id}</td>
+                            <td className="max-w-0 truncate px-3 py-2 text-green-90" title={linked?.title ?? id}>
+                              {linked?.title ?? id}
+                            </td>
                             <td className="w-px whitespace-nowrap px-3 py-2">
                               {/* Round shape, unaffected by T14's OKR-scoped square badges — StatusTag doesn't take a shape prop; initiative status stays round everywhere. */}
                               {linked && <StatusTag status={linked.status} />}
@@ -508,12 +473,23 @@ function DrawerBody({
                 onClick={() => {
                   unarchiveOkr(d.id);
                   notify({ message: `“${d.title}” restored` });
+                  onClose();
                 }}
               >
                 <ArchiveRestore size={15} /> Restore
               </Button>
             ) : (
-              <Button variant="ghost" onClick={() => setArchiveConfirmOpen(true)}>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  archiveOkr(d.id);
+                  notify({
+                    message: `“${d.title}” archived`,
+                    action: { label: "Undo", onClick: () => unarchiveOkr(d.id) },
+                  });
+                  onClose();
+                }}
+              >
                 <Archive size={15} /> Archive
               </Button>
             )}
@@ -533,25 +509,6 @@ function DrawerBody({
           onClose();
         }}
         onCancel={() => setConfirmOpen(false)}
-      />
-
-      <ConfirmDialog
-        open={archiveConfirmOpen}
-        title="Archive this OKR?"
-        body="Archived OKRs are hidden from the default list — you can restore them anytime from Show archived."
-        confirmLabel="Archive"
-        cancelLabel="Cancel"
-        tone="destructive"
-        onConfirm={() => {
-          setArchiveConfirmOpen(false);
-          archiveOkr(d.id);
-          notify({
-            message: `“${d.title}” archived`,
-            action: { label: "Undo", onClick: () => unarchiveOkr(d.id) },
-          });
-          onClose();
-        }}
-        onCancel={() => setArchiveConfirmOpen(false)}
       />
     </Drawer>
   );
