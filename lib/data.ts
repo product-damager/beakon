@@ -7,6 +7,7 @@ import { supabase } from "./supabase";
 import { normalizeThemeColor } from "./types";
 import { normalizeOkrFilters } from "./okrFilters";
 import type { OkrFilters } from "./okrFilters";
+import { normalizeCollapsedGroupKeys } from "./okrGrouping";
 import type {
   BusinessUnit,
   DeliveryLink,
@@ -238,6 +239,7 @@ interface OkrViewRow {
   visibility: OkrView["visibility"];
   editable: boolean;
   position: number | string;
+  collapsed_group_keys: string[];
 }
 
 function rowToOkrView(row: OkrViewRow): OkrView {
@@ -249,6 +251,7 @@ function rowToOkrView(row: OkrViewRow): OkrView {
     visibility: row.visibility,
     editable: row.editable,
     position: Number(row.position),
+    collapsedGroupKeys: normalizeCollapsedGroupKeys(row.collapsed_group_keys ?? []),
   };
 }
 
@@ -265,6 +268,7 @@ function okrViewToRow(v: OkrView) {
     visibility: v.visibility,
     editable: v.editable,
     position: v.position ?? 0,
+    collapsed_group_keys: v.collapsedGroupKeys,
   };
 }
 
@@ -747,6 +751,7 @@ export async function persistOkrView(v: OkrView): Promise<void> {
     p_visibility: row.visibility,
     p_editable: row.editable,
     p_position: row.position,
+    p_collapsed_group_keys: row.collapsed_group_keys,
   });
   if (error) throw error;
 }

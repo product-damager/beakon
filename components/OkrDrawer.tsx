@@ -1,16 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import {
-  Archive,
-  ArchiveRestore,
-  Building2,
-  CalendarRange,
-  Flag,
-  Users,
-  X,
-  type LucideIcon,
-} from "lucide-react";
+import { Archive, ArchiveRestore, Building2, CalendarRange, Flag, Users, X } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import { HEALTH_META } from "@/lib/types";
 import type {
@@ -29,7 +20,7 @@ import { Drawer } from "./Drawer";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Button, Eyebrow, HealthTag, StatusTag, Tag } from "./ui";
 import { Field, InlineTagSelect, NativeSelect, SearchableSelect, TextArea, TextInput } from "./form";
-import { DependencyPicker } from "./initiative-fields";
+import { DependencyPicker, Prop } from "./initiative-fields";
 import { AchievementInput, OkrOwnersEditor, TeamOrBuPicker } from "./okr-fields";
 import { OKR_GOVERNANCE_META, formatAchievement } from "./OkrList";
 
@@ -41,26 +32,6 @@ const OKR_CLASS_LABEL: Record<NonNullable<Okr["okrClass"]>, string> = {
 const OKR_CLASS_OPTIONS: OkrClass[] = ["committed", "conditional", "optional"];
 const HEALTH_KEYS = Object.keys(HEALTH_META) as Health[];
 const GOVERNANCE_KEYS = Object.keys(OKR_GOVERNANCE_META) as OkrGovernanceStatus[];
-
-function Prop({
-  icon: Icon,
-  label,
-  children,
-}: {
-  icon: LucideIcon;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-start gap-2.5">
-      <Icon size={15} strokeWidth={1.75} className="mt-0.5 shrink-0 text-beige-60" />
-      <div className="min-w-0 flex-1">
-        <div className="mono-label-sm text-beige-60">{label}</div>
-        <div className="mt-0.5 text-sm text-green-90">{children}</div>
-      </div>
-    </div>
-  );
-}
 
 /**
  * One drawer for viewing and editing an OKR. Existing OKRs edit in place and

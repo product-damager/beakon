@@ -66,6 +66,19 @@ const config: Config = {
         // clearing the same bar HEALTH_META's tag rendering holds every
         // other status color to.
         amber: { 30: "#fef3c7", 60: "#d97706", 70: "#92400e" },
+        // Added Sprint Vireo, Initiative 2 (docs/plans/vireo-grouped-okr-
+        // view-and-drawer-detail-rework.md) — OKR_GOVERNANCE_META's
+        // `being_reviewed` collided with HEALTH_META.at_risk (both were
+        // bg-orange-30/text-orange-70, two unrelated domains sharing one
+        // hue). `indigo` was floated first but rejected: blue-60 (#7077f6)
+        // already leans purple, so a separate "indigo" token would just
+        // read as a shade of `blue`. `violet` is a genuinely distinct hue
+        // from every family Governance/Health already claim. Verified via
+        // the same WCAG relative-luminance method as amber-70's comment
+        // above, not eyeballed: violet-70 (#5c3785) on violet-30 (#e8dcf7)
+        // = 6.84:1, violet-70 on white = 8.97:1 — both clear AA (4.5:1)
+        // comfortably.
+        violet: { 30: "#e8dcf7", 60: "#7c4fb0", 70: "#5c3785" },
         // ShadCN-compatible semantic tokens (driven by CSS variables in globals.css)
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",

@@ -7,9 +7,11 @@ import { useOkrWorkspace } from "@/lib/useOkrWorkspace";
 import { useRoadmap } from "@/lib/store";
 import { EMPTY_OKR_FILTERS, normalizeOkrFilters, type OkrFilters } from "@/lib/okrFilters";
 import { OkrFilterBar, applyOkrFilters } from "@/components/OkrFilterBar";
-import { OkrList } from "@/components/OkrList";
+import { OkrGroupedList } from "@/components/OkrGroupedList";
 import { OkrDrawer } from "@/components/OkrDrawer";
 import { Logo } from "@/components/Logo";
+import { Button } from "@/components/ui";
+import { groupOkrs } from "@/lib/okrGrouping";
 import type { Okr, StrategicObjective, Team } from "@/lib/types";
 
 /** A fresh, unsaved OKR draft for "New OKR" — mirrors RoadmapProvider's
@@ -97,6 +99,13 @@ function OkrsPageInner() {
   const [selectedOkrId, setSelectedOkrId] = useState<string | null>(null);
   const [creatingDraft, setCreatingDraft] = useState<Okr | null>(null);
 
+  // Grouped OKR view's expand/collapse state (Sprint Vireo, Initiative 1) —
+  // keyed by the same "bu:<id>"/"team:<id>" keys `groupOkrs` produces.
+  // Session-only by default (empty = "nothing collapsed," matching today's
+  // flat list showing everything); projected from `activeOkrView.
+  // collapsedGroupKeys` on load, same transition point as `filters` below.
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
   // Mirrors `activeOkrViewId` for the localStorage-write effect below to
   // read without depending on it directly (Sprint Heron Week 3 fix — see
   // that effect's own comment for why `[filters, activeOkrViewId]` as a
@@ -148,6 +157,7 @@ function OkrsPageInner() {
     previousOkrViewId.current = activeOkrViewId;
     if (activeOkrViewId === null) {
       setFilters(loadStoredOkrFilters());
+      setCollapsedGroups({});
       return;
     }
     const view = getOkrView(activeOkrViewId);
@@ -157,7 +167,15 @@ function OkrsPageInner() {
     // that mapper-layer fix landed (or any other path that reaches this
     // effect without going through `rowToOkrView`) could still carry a
     // malformed/partial `filters` blob.
-    if (view) setFilters(normalizeOkrFilters(view.filters));
+    if (view) {
+      setFilters(normalizeOkrFilters(view.filters));
+      // Denylist-of-collapsed semantics (see lib/types.ts's OkrView.
+      // collapsedGroupKeys doc comment): only keys present in the saved
+      // array become collapsed; every other/newly-appeared group key stays
+      // absent from this Record, i.e. expanded — degrading toward "show
+      // more, not less" when a BU/Team was added after the view was saved.
+      setCollapsedGroups(Object.fromEntries(view.collapsedGroupKeys.map((key) => [key, true])));
+    }
   }, [activeOkrViewId, getOkrView]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -180,6 +198,35 @@ function OkrsPageInner() {
 
   const filtered = useMemo(() => applyOkrFilters(okrs, filters, teams), [okrs, filters, teams]);
   const selectedOkr = selectedOkrId ? okrs.find((o) => o.id === selectedOkrId) : undefined;
+
+  // Same grouping the grouped table itself computes — kept here too (cheap)
+  // so "Collapse all"/"Expand all" know every currently-visible group key,
+  // including ones a caller-scoped filter forced to render empty.
+  const groupsForCollapseControls = useMemo(
+    () => groupOkrs(filtered, teams, businessUnits, filters),
+    [filtered, teams, businessUnits, filters]
+  );
+  const allVisibleGroupKeys = useMemo(() => {
+    const keys: string[] = [];
+    for (const bu of groupsForCollapseControls) {
+      keys.push(bu.key);
+      for (const team of bu.teamGroups) keys.push(team.key);
+    }
+    return keys;
+  }, [groupsForCollapseControls]);
+
+  const toggleGroup = (key: string) =>
+    setCollapsedGroups((prev) => ({ ...prev, [key]: !prev[key] }));
+  const collapseAll = () =>
+    setCollapsedGroups(Object.fromEntries(allVisibleGroupKeys.map((key) => [key, true])));
+  const expandAll = () => setCollapsedGroups({});
+  // Single two-state toggle (product-designer finding, Vireo review) — reads
+  // "Collapse all" whenever any currently-visible group is expanded (the
+  // common case, since a freshly-appeared group is absent from
+  // `collapsedGroups` rather than explicitly `false`), "Expand all" once
+  // every visible group is collapsed.
+  const anyExpanded = allVisibleGroupKeys.some((key) => !collapsedGroups[key]);
+  const toggleAll = () => (anyExpanded ? collapseAll() : expandAll());
 
   const closeDrawer = () => {
     setSelectedOkrId(null);
@@ -247,14 +294,23 @@ function OkrsPageInner() {
             teams={teams}
             businessUnits={businessUnits}
             strategicObjectives={strategicObjectives}
+            collapsedGroups={collapsedGroups}
+            extraControls={
+              <Button variant="ghost" size="sm" onClick={toggleAll}>
+                {anyExpanded ? "Collapse all" : "Expand all"}
+              </Button>
+            }
           />
-          <OkrList
+          <OkrGroupedList
             okrs={filtered}
             teams={teams}
             businessUnits={businessUnits}
             strategicObjectives={strategicObjectives}
             okrOwners={okrOwners}
             okrInitiatives={okrInitiatives}
+            filters={filters}
+            collapsed={collapsedGroups}
+            onToggleGroup={toggleGroup}
             saveOkr={saveOkr}
             onSelect={(id) => {
               setCreatingDraft(null);

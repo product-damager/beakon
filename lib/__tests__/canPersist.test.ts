@@ -46,6 +46,7 @@ function makeOkrView(overrides: Partial<OkrView> = {}): OkrView {
     visibility: "private",
     editable: false,
     position: 0,
+    collapsedGroupKeys: [],
     ...overrides,
   };
 }

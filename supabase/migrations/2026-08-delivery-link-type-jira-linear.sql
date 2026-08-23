@@ -1,0 +1,38 @@
+-- Sprint Vireo, Initiative 2 — widen delivery_link_type for Jira/Linear.
+--
+-- Correction to the plan brief's own risk assessment: delivery_link_type
+-- is a Postgres ENUM (schema.sql: `create type delivery_link_type as enum
+-- ('redmine', 'figma', 'spec', 'notion', 'other')`), not a `text` column,
+-- so this is a real schema change, not a TS-only one — but it's the exact
+-- same low-risk, well-precedented pattern already used for
+-- initiative_health's 'delayed' value (schema.sql, `alter type
+-- initiative_health add value if not exists 'delayed';`), documented as
+-- the correct, re-run-safe way to add an enum value on a populated prod
+-- database in supabase/README.md's "Golden rule for editing schema.sql".
+--
+-- PM-confirmed scope: Jira, Linear, and Redmine. Redmine is already a
+-- member of delivery_link_type (schema.sql's original enum list) and
+-- already appears in lib/types.ts's DELIVERY_TYPE_LABEL, so no action
+-- needed there — only Jira and Linear are net-new.
+--
+-- Additive only, no existing rows affected. Safe to fold directly into
+-- schema.sql (see the "Widen delivery_link_type for Jira/Linear" comment
+-- there) — kept as its own dated file too, per this project's migration
+-- convention, so the change has its own reviewable diff and historical
+-- record.
+alter type delivery_link_type add value if not exists 'jira';
+alter type delivery_link_type add value if not exists 'linear';
+
+-- Manual test plan (no live DB access in this session — someone with
+-- beakon-preview/beakon-prod access needs to run this):
+--   1. Apply this file (or re-run all of schema.sql, which now includes
+--      the same statements) in the beakon-preview SQL editor first.
+--   2. Confirm the enum now includes 'jira'/'linear':
+--      `select enum_range(null::delivery_link_type);`
+--   3. Insert (or edit via the app's Links editor) a delivery_links row
+--      with type = 'jira' and one with type = 'linear'; confirm both save
+--      and render with the correct label ("Jira"/"Linear") once
+--      lib/types.ts's DELIVERY_TYPE_LABEL update ships alongside this.
+--   4. Repeat step 1-3 in beakon-prod once this lands there — additive
+--      enum values carry negligible risk, but back up first anyway per
+--      supabase/README.md's standard workflow.

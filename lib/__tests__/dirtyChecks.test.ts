@@ -17,7 +17,7 @@
 // `OkrFilters` at all (archived OKRs are now always excluded, no toggle),
 // so its own comparison and test case are removed rather than repurposed.
 import { describe, expect, it } from "vitest";
-import { okrFiltersEqual, roadmapFieldsEqual } from "../store";
+import { okrCollapsedGroupKeysEqual, okrFiltersEqual, roadmapFieldsEqual } from "../store";
 import { EMPTY_FILTERS, type Filters } from "../filters";
 import type { OkrFilters } from "../okrFilters";
 import type { GroupBy, Roadmap, TimelineSort } from "../types";
@@ -129,5 +129,28 @@ describe("okrFiltersEqual", () => {
     const a = { ...base, teamIds: ["team-a", "team-b"] };
     const b = { ...base, teamIds: ["team-b", "team-a"] };
     expect(okrFiltersEqual(a, b)).toBe(true);
+  });
+});
+
+describe("okrCollapsedGroupKeysEqual", () => {
+  it("is true when the live collapsed set matches the saved array, regardless of order", () => {
+    const live = { "bu:bu-a": true, "team:team-a1": true, "bu:bu-b": false };
+    expect(okrCollapsedGroupKeysEqual(live, ["team:team-a1", "bu:bu-a"])).toBe(true);
+  });
+
+  it("only counts keys whose live value is truthy", () => {
+    const live = { "bu:bu-a": true, "team:team-a1": false };
+    expect(okrCollapsedGroupKeysEqual(live, ["bu:bu-a"])).toBe(true);
+    expect(okrCollapsedGroupKeysEqual(live, ["bu:bu-a", "team:team-a1"])).toBe(false);
+  });
+
+  it("is false when the sets differ in length or content", () => {
+    expect(okrCollapsedGroupKeysEqual({ "bu:bu-a": true }, [])).toBe(false);
+    expect(okrCollapsedGroupKeysEqual({}, ["bu:bu-a"])).toBe(false);
+    expect(okrCollapsedGroupKeysEqual({ "bu:bu-a": true }, ["bu:bu-b"])).toBe(false);
+  });
+
+  it("is true for two empty sets", () => {
+    expect(okrCollapsedGroupKeysEqual({}, [])).toBe(true);
   });
 });

@@ -704,5 +704,6 @@ export const OKR_VIEWS: OkrView[] = [
     visibility: "private",
     editable: false,
     position: 0,
+    collapsedGroupKeys: [],
   },
 ];

@@ -11,7 +11,6 @@ import {
 } from "react";
 import {
   CalendarRange,
-  ChevronRight,
   Group,
   Minimize2,
   Plus,
@@ -27,7 +26,6 @@ import {
   ownerName,
   STATUS_META,
   STATUSES,
-  THEME_COLOR_META,
   ZOOM_SCALE_MAX,
   ZOOM_SCALE_MIN,
   type GroupBy,
@@ -35,7 +33,7 @@ import {
   type Zoom,
 } from "@/lib/types";
 import { cn } from "@/lib/cn";
-import { Avatar, Button, Eyebrow } from "./ui";
+import { Avatar, Button, Eyebrow, GroupHeaderContent } from "./ui";
 import { InlineTagSelect } from "./form";
 import { FilterBar } from "./FilterBar";
 import { Logo } from "./Logo";
@@ -463,27 +461,15 @@ export function Timeline() {
                       onClick={() => toggleGroup(g.key)}
                       aria-expanded={!isCollapsed}
                       aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${g.label}`}
-                      className="sticky left-0 z-10 flex w-[268px] shrink-0 items-center gap-2 bg-beige-20 px-6 py-3 text-left transition-colors hover:bg-beige-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-green-90"
+                      className="sticky left-0 z-10 flex w-[268px] shrink-0 items-center bg-beige-20 px-6 py-3 text-left transition-colors hover:bg-beige-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-green-90"
                     >
-                      <ChevronRight
-                        size={15}
-                        className={cn(
-                          "shrink-0 text-beige-60 transition-transform",
-                          !isCollapsed && "rotate-90"
-                        )}
+                      <GroupHeaderContent
+                        depth={0}
+                        label={g.label}
+                        count={g.items.length}
+                        color={g.color}
+                        isCollapsed={isCollapsed}
                       />
-                      {g.color && (
-                        <span
-                          className={cn(
-                            "h-3.5 w-1 shrink-0 rounded-[2px]",
-                            THEME_COLOR_META[g.color].dot
-                          )}
-                        />
-                      )}
-                      <span className="truncate text-sm font-semibold text-green-90">
-                        {g.label}
-                      </span>
-                      <span className="mono-label-sm text-green-70">{g.items.length}</span>
                     </button>
                     <div className="relative" style={{ width: canvasWidth }} />
                   </div>

@@ -1,10 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { RotateCcw, X } from "lucide-react";
 import type { BusinessUnit, Okr, StrategicObjective, Team } from "@/lib/types";
 import { EMPTY_OKR_FILTERS, normalizeOkrFilters, type OkrFilters } from "@/lib/okrFilters";
-import { isOkrViewOwner, okrFiltersEqual, useRoadmap } from "@/lib/store";
+import { isOkrViewOwner, okrCollapsedGroupKeysEqual, okrFiltersEqual, useRoadmap } from "@/lib/store";
 import { useOutsideClose } from "./hooks";
 import { MultiSelect, TextInput } from "./form";
 import { Button, Tag } from "./ui";
@@ -110,27 +110,43 @@ function SaveOkrViewButton({
 // dirty → "Update '<name>'" (primary) + "Save as new…" (secondary). A
 // Shared+View-only visitor sees only the "View only" tag (§3.5), nothing
 // that would just error server-side. ───────────────────────────────────────
-function OkrViewSaveCluster({ filters }: { filters: OkrFilters }) {
+function OkrViewSaveCluster({
+  filters,
+  collapsedGroups,
+}: {
+  filters: OkrFilters;
+  collapsedGroups: Record<string, boolean>;
+}) {
   const { activeOkrView, currentOwner, canPersistOkrView, createOkrView, updateOkrView, applyOkrView } =
     useRoadmap();
 
   if (!activeOkrView) {
     if (!currentOwner) return null; // nobody to attribute a new view to
-    return <SaveOkrViewButton label="Save as view…" onSave={(name) => createOkrView(name, filters)} />;
+    return (
+      <SaveOkrViewButton
+        label="Save as view…"
+        onSave={(name) => createOkrView(name, filters, collapsedGroups)}
+      />
+    );
   }
 
   const isOwner = isOkrViewOwner(activeOkrView, currentOwner);
   const viewOnly = !isOwner && activeOkrView.visibility === "shared" && !activeOkrView.editable;
   const canPersist = canPersistOkrView(activeOkrView);
-  const dirty = !okrFiltersEqual(filters, normalizeOkrFilters(activeOkrView.filters));
+  const dirty =
+    !okrFiltersEqual(filters, normalizeOkrFilters(activeOkrView.filters)) ||
+    !okrCollapsedGroupKeysEqual(collapsedGroups, activeOkrView.collapsedGroupKeys);
 
   if (canPersist && dirty) {
     return (
       <>
-        <Button size="sm" onClick={() => updateOkrView(filters)}>
+        <Button size="sm" onClick={() => updateOkrView(filters, collapsedGroups)}>
           Update &quot;{activeOkrView.name}&quot;
         </Button>
-        <SaveOkrViewButton label="Save as new…" onSave={(name) => createOkrView(name, filters)} />
+        <SaveOkrViewButton
+          label="Save as new…"
+          onSave={(name) => createOkrView(name, filters, collapsedGroups)}
+        />
       </>
     );
   }
@@ -163,12 +179,23 @@ export function OkrFilterBar({
   teams,
   businessUnits,
   strategicObjectives,
+  collapsedGroups,
+  extraControls,
 }: {
   filters: OkrFilters;
   onChange: (patch: Partial<OkrFilters>) => void;
   teams: Team[];
   businessUnits: BusinessUnit[];
   strategicObjectives: StrategicObjective[];
+  /** Live grouped-view collapse-state Record (Sprint Vireo) — threaded
+   * through only so `OkrViewSaveCluster`'s dirty-check can compare it
+   * against the active OkrView's `collapsedGroupKeys`; this bar has no
+   * grouping UI of its own. */
+  collapsedGroups: Record<string, boolean>;
+  /** Extra controls rendered in this same sticky header row, before the
+   * save cluster — used by `/okrs` for its "Expand all"/"Collapse all"
+   * buttons so they sit next to the filters rather than in a second row. */
+  extraControls?: ReactNode;
 }) {
   const activeCount = okrFilterCount(filters);
 
@@ -218,7 +245,8 @@ export function OkrFilterBar({
       )}
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
-        <OkrViewSaveCluster filters={filters} />
+        {extraControls}
+        <OkrViewSaveCluster filters={filters} collapsedGroups={collapsedGroups} />
       </div>
     </div>
   );
