@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
@@ -19,7 +19,7 @@ import { cn } from "@/lib/cn";
 import { isOkrViewOwner, isRoadmapOwner, useRoadmap } from "@/lib/store";
 import { ownerName } from "@/lib/types";
 import type { OkrView, Roadmap } from "@/lib/types";
-import { useOutsideClose } from "./hooks";
+import { useClampedPopover } from "./hooks";
 import { TextInput } from "./form";
 import { Button, Tag } from "./ui";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -362,12 +362,27 @@ function RoadmapRow({
   const { renameRoadmap } = useRoadmap();
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(roadmap.name);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const shareRef = useRef<HTMLDivElement>(null);
-  useOutsideClose(menuRef, menuOpen, () => setMenuOpen(false));
-  useOutsideClose(shareRef, shareOpen, () => setShareOpen(false));
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  // Both popovers below share `triggerRef` (the "⋮" button) — they're
+  // mutually exclusive (Share… closes the menu on click) but each needs its
+  // own open state and its own estimated size for the two-pass placement.
+  // Destructured immediately (not kept as `menuPopover.foo`/`sharePopover.foo`
+  // member expressions) — `react-hooks/refs` flags any later property access
+  // on an object that carries a ref as if it were the ref itself.
+  const {
+    open: menuOpen,
+    setOpen: setMenuOpen,
+    coords: menuCoords,
+    popoverRef: menuPopoverRef,
+    close: closeMenu,
+  } = useClampedPopover(triggerRef, { estimatedWidth: 160, estimatedHeight: 140, align: "right" });
+  const {
+    open: shareOpen,
+    setOpen: setShareOpen,
+    coords: shareCoords,
+    popoverRef: sharePopoverRef,
+    close: closeShare,
+  } = useClampedPopover(triggerRef, { estimatedWidth: 288, estimatedHeight: 260, align: "right" });
 
   const viewOnly = !isOwner && roadmap.visibility === "shared" && !roadmap.editable;
 
@@ -428,8 +443,9 @@ function RoadmapRow({
       </button>
 
       {isOwner && (
-        <div className="relative shrink-0" ref={menuRef}>
+        <div className="relative shrink-0">
           <button
+            ref={triggerRef}
             onClick={(e) => {
               e.stopPropagation();
               setMenuOpen((o) => !o);
@@ -439,46 +455,57 @@ function RoadmapRow({
           >
             <MoreVertical size={16} />
           </button>
-          {menuOpen && (
-            <div className="absolute right-0 top-full z-50 mt-1 w-40 rounded-xl border border-beige-20 bg-white p-1.5 shadow-lg">
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  setShareOpen(true);
-                }}
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-green-90 hover:bg-beige-10"
+          {menuOpen &&
+            menuCoords &&
+            createPortal(
+              <div
+                ref={menuPopoverRef}
+                style={{ position: "fixed", top: menuCoords.top, left: menuCoords.left }}
+                className="z-50 w-40 rounded-xl border border-beige-20 bg-white p-1.5 shadow-lg"
               >
-                <Share2 size={14} /> Share…
-              </button>
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  setRenaming(true);
-                }}
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-green-90 hover:bg-beige-10"
-              >
-                <Pencil size={14} /> Rename
-              </button>
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  onDelete();
-                }}
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-red-60 hover:bg-red-5"
-              >
-                <Trash2 size={14} /> Delete
-              </button>
-            </div>
-          )}
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    setShareOpen(true);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-green-90 hover:bg-beige-10"
+                >
+                  <Share2 size={14} /> Share…
+                </button>
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    setRenaming(true);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-green-90 hover:bg-beige-10"
+                >
+                  <Pencil size={14} /> Rename
+                </button>
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    onDelete();
+                  }}
+                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-red-60 hover:bg-red-5"
+                >
+                  <Trash2 size={14} /> Delete
+                </button>
+              </div>,
+              document.body
+            )}
 
-          {shareOpen && (
-            <div
-              ref={shareRef}
-              className="absolute right-0 top-full z-50 mt-1 rounded-xl border border-beige-20 bg-white shadow-lg"
-            >
-              <RoadmapSharePanel roadmap={roadmap} onClose={() => setShareOpen(false)} />
-            </div>
-          )}
+          {shareOpen &&
+            shareCoords &&
+            createPortal(
+              <div
+                ref={sharePopoverRef}
+                style={{ position: "fixed", top: shareCoords.top, left: shareCoords.left }}
+                className="z-50 rounded-xl border border-beige-20 bg-white shadow-lg"
+              >
+                <RoadmapSharePanel roadmap={roadmap} onClose={closeShare} />
+              </div>,
+              document.body
+            )}
         </div>
       )}
     </div>
@@ -515,13 +542,28 @@ function OkrViewRow({
   const { renameOkrView, deleteOkrView } = useRoadmap();
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(view.name);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const shareRef = useRef<HTMLDivElement>(null);
-  useOutsideClose(menuRef, menuOpen, () => setMenuOpen(false));
-  useOutsideClose(shareRef, shareOpen, () => setShareOpen(false));
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  // Both popovers below share `triggerRef` (the "⋮" button) — they're
+  // mutually exclusive (Share… closes the menu on click) but each needs its
+  // own open state and its own estimated size for the two-pass placement.
+  // Destructured immediately (not kept as `menuPopover.foo`/`sharePopover.foo`
+  // member expressions) — `react-hooks/refs` flags any later property access
+  // on an object that carries a ref as if it were the ref itself.
+  const {
+    open: menuOpen,
+    setOpen: setMenuOpen,
+    coords: menuCoords,
+    popoverRef: menuPopoverRef,
+    close: closeMenu,
+  } = useClampedPopover(triggerRef, { estimatedWidth: 160, estimatedHeight: 140, align: "right" });
+  const {
+    open: shareOpen,
+    setOpen: setShareOpen,
+    coords: shareCoords,
+    popoverRef: sharePopoverRef,
+    close: closeShare,
+  } = useClampedPopover(triggerRef, { estimatedWidth: 288, estimatedHeight: 260, align: "right" });
 
   const viewOnly = !isOwner && view.visibility === "shared" && !view.editable;
 
@@ -580,8 +622,9 @@ function OkrViewRow({
       </button>
 
       {isOwner && (
-        <div className="relative shrink-0" ref={menuRef}>
+        <div className="relative shrink-0">
           <button
+            ref={triggerRef}
             onClick={(e) => {
               e.stopPropagation();
               setMenuOpen((o) => !o);
@@ -591,46 +634,57 @@ function OkrViewRow({
           >
             <MoreVertical size={16} />
           </button>
-          {menuOpen && (
-            <div className="absolute right-0 top-full z-50 mt-1 w-40 rounded-xl border border-beige-20 bg-white p-1.5 shadow-lg">
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  setShareOpen(true);
-                }}
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-green-90 hover:bg-beige-10"
+          {menuOpen &&
+            menuCoords &&
+            createPortal(
+              <div
+                ref={menuPopoverRef}
+                style={{ position: "fixed", top: menuCoords.top, left: menuCoords.left }}
+                className="z-50 w-40 rounded-xl border border-beige-20 bg-white p-1.5 shadow-lg"
               >
-                <Share2 size={14} /> Share…
-              </button>
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  setRenaming(true);
-                }}
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-green-90 hover:bg-beige-10"
-              >
-                <Pencil size={14} /> Rename
-              </button>
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  setDeleteOpen(true);
-                }}
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-red-60 hover:bg-red-5"
-              >
-                <Trash2 size={14} /> Delete
-              </button>
-            </div>
-          )}
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    setShareOpen(true);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-green-90 hover:bg-beige-10"
+                >
+                  <Share2 size={14} /> Share…
+                </button>
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    setRenaming(true);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-green-90 hover:bg-beige-10"
+                >
+                  <Pencil size={14} /> Rename
+                </button>
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    setDeleteOpen(true);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-red-60 hover:bg-red-5"
+                >
+                  <Trash2 size={14} /> Delete
+                </button>
+              </div>,
+              document.body
+            )}
 
-          {shareOpen && (
-            <div
-              ref={shareRef}
-              className="absolute right-0 top-full z-50 mt-1 rounded-xl border border-beige-20 bg-white shadow-lg"
-            >
-              <OkrViewShareMenu view={view} onClose={() => setShareOpen(false)} />
-            </div>
-          )}
+          {shareOpen &&
+            shareCoords &&
+            createPortal(
+              <div
+                ref={sharePopoverRef}
+                style={{ position: "fixed", top: shareCoords.top, left: shareCoords.left }}
+                className="z-50 rounded-xl border border-beige-20 bg-white shadow-lg"
+              >
+                <OkrViewShareMenu view={view} onClose={closeShare} />
+              </div>,
+              document.body
+            )}
         </div>
       )}
 
@@ -659,177 +713,22 @@ function OkrViewRow({
  * parent already wrapped in `guardedSwitch`, matching the existing
  * `onCreated`-style prop pattern this row used before.
  *
- * The naming popover is rendered via a `document.body` portal, `fixed`-
- * positioned from the trigger button's own `getBoundingClientRect()`
- * (finding #2) rather than as an `absolute` child of this row. This row
- * lives inside the sidebar's `calm-scroll max-h-[280px] overflow-y-auto`
- * region once "My views" crosses 8 combined rows; an `absolute` popover
- * there gets clipped on both axes by that ancestor's overflow, and
- * `RoadmapRow`/`OkrViewRow`'s own `absolute right-0 top-full` menu/share
- * popovers were checked and clip the exact same way for rows near the
- * bottom of a long list (QA's finding #2 already corrected the assumption
- * that `.group.relative` or `z-50` makes them escape the scroll container —
- * it doesn't; nothing about their placement is structurally different from
- * this one). So there's no existing in-file pattern to mirror; a portal is
- * the general fix here, verified against the same 13-row repro QA used.
+ * The naming popover is rendered via `useClampedPopover` (relocated from
+ * this component into `hooks.ts` — see that file's doc comment for the full
+ * QA history behind the positioning logic) rather than as an `absolute`
+ * child of this row. This row lives inside the sidebar's `calm-scroll
+ * max-h-[280px] overflow-y-auto` region once "My views" crosses 8 combined
+ * rows; an `absolute` popover there gets clipped on both axes by that
+ * ancestor's overflow, which is exactly what the hook's scroll-ancestor
+ * containment check exists to catch.
  */
 function NewRoadmapRow({ onSubmit }: { onSubmit: (name: string) => void }) {
-  const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
-
-  // True while `el`'s own rect is still *fully* contained within every
-  // scrollable ancestor's visible box — i.e. `el` hasn't started scrolling
-  // out of view within one of its containers (QA-REPORT-HERON-W3F.md finding
-  // N20). `getBoundingClientRect` reports layout position, not visibility,
-  // so an element clipped by an `overflow: auto` ancestor still reports
-  // coordinates outside that ancestor's box — this walks the ancestor chain
-  // to catch that directly, rather than inferring it from the viewport alone
-  // (the trigger can be "visible" in the `window` sense while still clipped
-  // by the sidebar's own scroll region, which is exactly N20's failure).
-  //
-  // Deliberately a *containment* check, not a mere *intersection* one
-  // (QA-REPORT-HERON-W3G.md finding N27) — the popover is anchored off the
-  // trigger's bottom edge (`triggerRect.bottom + 4` below), so a trigger that
-  // is only partially clipped (a sliver still overlapping the ancestor) is
-  // already enough to place the popover's whole body outside the ancestor's
-  // box. An intersection test ("do the two rects overlap at all") only turns
-  // false once the trigger is *entirely* outside, which left a scroll window
-  // of several trigger-heights where the check still said "visible" but the
-  // popover had already detached and floated over unrelated sidebar rows.
-  function isVisibleWithinScrollAncestors(el: HTMLElement): boolean {
-    // Absorbs sub-pixel rounding noise between two independently-measured
-    // rects (seen under non-integer browser zoom) without meaningfully
-    // widening the containment check itself.
-    const EPSILON = 0.5;
-    const rect = el.getBoundingClientRect();
-    for (let node = el.parentElement; node; node = node.parentElement) {
-      const style = getComputedStyle(node);
-      const scrollsY = style.overflowY === "auto" || style.overflowY === "scroll";
-      const scrollsX = style.overflowX === "auto" || style.overflowX === "scroll";
-      if (!scrollsY && !scrollsX) continue;
-      const ancestorRect = node.getBoundingClientRect();
-      const clippedY =
-        scrollsY && (rect.top < ancestorRect.top - EPSILON || rect.bottom > ancestorRect.bottom + EPSILON);
-      const clippedX =
-        scrollsX && (rect.left < ancestorRect.left - EPSILON || rect.right > ancestorRect.right + EPSILON);
-      if (clippedY || clippedX) return false;
-    }
-    return true;
-  }
-
-  // Recompute the popover's position from the trigger's current rect,
-  // clamped/flipped against the viewport on all four edges (QA-REPORT-
-  // HERON-W3C.md finding N1 / QA-REPORT-HERON-W3F.md finding N21 — an
-  // unclamped position can render the whole popover off the fold in any
-  // direction, unreachable by mouse or keyboard since it's a `position:
-  // fixed` portal that nothing scrolls). Before the popover has mounted (no
-  // measurable size yet) this falls back to the portal's own fixed
-  // `w-64`/estimated height so the first paint is already close to correct;
-  // the effect below re-runs it once mounted to pick up the real measured
-  // size.
-  //
-  // Closes instead of repositioning when the trigger itself has scrolled
-  // out of view within one of its own scrollable ancestors (N20) — this is
-  // a check of current DOM state, not of *which event* fired, so it doesn't
-  // reintroduce the class of bug the note below describes.
-  //
-  // History worth knowing before touching this again: an earlier version
-  // of this component *closed* the popover on every scroll/resize event
-  // instead of repositioning it (QA-REPORT-HERON-W3C.md finding N3's
-  // original fix). That approach went through two follow-up bug passes
-  // (QA-REPORT-HERON-W3D.md N10/N11, then QA-REPORT-HERON-W3E.md N15/N16)
-  // because "should this particular scroll/resize event close the popover"
-  // is a genuinely hard heuristic — it has to somehow distinguish the
-  // popover's own input scrolling itself (N10), a scroll already in flight
-  // before the click (N11), inertial/momentum scrolling that keeps going
-  // well past any fixed arming delay (N16), and `resize` events whose
-  // `target` isn't even a `Node` (N15). Repositioning by default sidesteps
-  // that whole class — there's no "was this the right event" decision left
-  // to get wrong — and the one close condition that remains (N20, above) is
-  // a state check recomputed fresh on every call, not an event-type guess.
-  // Returns focus to the trigger on a programmatic/keyboard close
-  // (QA-REPORT-HERON-W3G.md finding N28) — without this, a keyboard or
-  // screen-reader user who triggers the auto-close (by scrolling), `Escape`,
-  // or `Cancel` loses their place entirely and lands back on `<body>`.
-  // `preventScroll: true` because `reposition`'s own auto-close already runs
-  // in response to a scroll the user is mid-gesture on; re-focusing the
-  // (possibly still-being-scrolled) trigger must not fight that scroll.
-  // Deliberately NOT used for outside-click — the browser is already moving
-  // focus to whatever the user just clicked, and pulling it back to this
-  // trigger would fight that, not restore it.
-  const closeAndRefocus = useCallback(() => {
-    setOpen(false);
-    triggerRef.current?.focus({ preventScroll: true });
-  }, []);
-
-  const reposition = useCallback(() => {
-    if (!triggerRef.current) return;
-    if (!isVisibleWithinScrollAncestors(triggerRef.current)) {
-      closeAndRefocus();
-      return;
-    }
-    const triggerRect = triggerRef.current.getBoundingClientRect();
-    const popoverRect = popoverRef.current?.getBoundingClientRect();
-    const height = popoverRect?.height ?? 134;
-    const width = popoverRect?.width ?? 256;
-    const top = Math.max(
-      8,
-      Math.min(
-        triggerRect.bottom + height + 4 > window.innerHeight
-          ? triggerRect.top - height - 4
-          : triggerRect.bottom + 4,
-        window.innerHeight - height - 8
-      )
-    );
-    const left = Math.max(8, Math.min(triggerRect.left, window.innerWidth - width - 8));
-    setCoords((prev) => (prev && prev.top === top && prev.left === left ? prev : { top, left }));
-  }, [closeAndRefocus]);
-
-  // Initial placement on open, and a second pass once the popover has
-  // mounted so `reposition` can measure its real size instead of the
-  // estimate above (this second run is what makes the clamp/flip land on
-  // the popover's true height rather than a guess) — `isMeasured` flips
-  // false→true exactly once per open, which is what triggers that second
-  // run; JSX below only renders the portal while `open`, so a stale
-  // `coords` value sitting around after close is harmless and doesn't need
-  // resetting here.
-  const isMeasured = coords !== null;
-  useLayoutEffect(() => {
-    if (!open) return;
-    reposition();
-  }, [open, isMeasured, reposition]);
-
-  // Keep tracking the trigger as the page scrolls or resizes, rather than
-  // closing (see the doc comment on `reposition` above for why). `capture:
-  // true` so this also catches the sidebar's own `overflow-y-auto` region
-  // scrolling, not just the window; `passive: true` since this never calls
-  // `preventDefault`.
-  useEffect(() => {
-    if (!open) return;
-    document.addEventListener("scroll", reposition, { capture: true, passive: true });
-    window.addEventListener("resize", reposition);
-    return () => {
-      document.removeEventListener("scroll", reposition, { capture: true });
-      window.removeEventListener("resize", reposition);
-    };
-  }, [open, reposition]);
-
-  // Custom outside-close (not the shared `useOutsideClose` hook) because the
-  // popover now lives in a portal outside this row's own DOM subtree — a
-  // single ref can't cover both the trigger button and the portaled panel.
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (triggerRef.current?.contains(target) || popoverRef.current?.contains(target)) return;
-      setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
+  const { open, setOpen, coords, popoverRef, close } = useClampedPopover(triggerRef, {
+    estimatedWidth: 256,
+    estimatedHeight: 134,
+  });
 
   const submit = () => {
     const trimmed = name.trim();
@@ -865,12 +764,12 @@ function NewRoadmapRow({ onSubmit }: { onSubmit: (name: string) => void }) {
               placeholder="Q3 planning"
               onKeyDown={(e) => {
                 if (e.key === "Enter") submit();
-                if (e.key === "Escape") closeAndRefocus();
+                if (e.key === "Escape") close();
               }}
               className="mb-2"
             />
             <div className="flex justify-end gap-2">
-              <Button variant="secondary" size="sm" onClick={closeAndRefocus}>
+              <Button variant="secondary" size="sm" onClick={close}>
                 Cancel
               </Button>
               <Button size="sm" disabled={!name.trim()} onClick={submit}>
