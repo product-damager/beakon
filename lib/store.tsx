@@ -231,6 +231,19 @@ export function okrFiltersEqual(a: OkrFilters, b: OkrFilters): boolean {
   );
 }
 
+/**
+ * Order-insensitive compare between the page's live collapse-state
+ * `Record<string, boolean>` (Sprint Vireo, Initiative 1 — see
+ * lib/okrGrouping.ts) and a saved OkrView's persisted `collapsedGroupKeys`
+ * array — reuses the same `sameValues` set-compare `okrFiltersEqual` uses,
+ * so `OkrFilterBar.tsx`'s dirty-check can treat "collapse state changed"
+ * the same way it treats "filters changed."
+ */
+export function okrCollapsedGroupKeysEqual(live: Record<string, boolean>, saved: string[]): boolean {
+  const liveCollapsed = Object.keys(live).filter((k) => live[k]);
+  return sameValues(liveCollapsed, saved);
+}
+
 interface RoadmapState {
   initiatives: Initiative[];
   themes: Theme[];
@@ -326,17 +339,19 @@ interface RoadmapState {
    * callers (the `/okrs` page) react to the id change and load
    * `getOkrView(id)?.filters` into their own local filter state. */
   applyOkrView: (id: string | null) => void;
-  /** Create a new, owned OkrView from `filters`; makes it active. */
-  createOkrView: (name: string, filters: OkrFilters) => void;
+  /** Create a new, owned OkrView from `filters` + the live collapse-state
+   * Record (converted to an array of the keys currently `true`); makes it
+   * active. */
+  createOkrView: (name: string, filters: OkrFilters, collapsedGroups: Record<string, boolean>) => void;
   renameOkrView: (id: string, name: string) => void;
   setOkrViewVisibility: (
     id: string,
     v: { visibility: OkrViewVisibility; editable: boolean }
   ) => void;
-  /** Persist `filters` onto the active OkrView's row — the explicit "Update
-   * '<name>'" action. No-op if there's no active view or the caller can't
-   * persist to it. */
-  updateOkrView: (filters: OkrFilters) => void;
+  /** Persist `filters` + the live collapse-state Record onto the active
+   * OkrView's row — the explicit "Update '<name>'" action. No-op if there's
+   * no active view or the caller can't persist to it. */
+  updateOkrView: (filters: OkrFilters, collapsedGroups: Record<string, boolean>) => void;
   deleteOkrView: (id: string) => void;
   /** Whether the signed-in caller may persist filters/name to `target` —
    * owner, or Shared+editable. */
@@ -881,7 +896,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const createOkrView = useCallback(
-    (name: string, filters: OkrFilters) => {
+    (name: string, filters: OkrFilters, collapsedGroups: Record<string, boolean>) => {
       const trimmed = name.trim();
       if (!trimmed) return;
       const ownerId = currentOwner?.id ?? null;
@@ -897,6 +912,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
         visibility: "private",
         editable: false,
         position: myPositions.length ? Math.min(...myPositions) - 1 : 0,
+        collapsedGroupKeys: Object.keys(collapsedGroups).filter((k) => collapsedGroups[k]),
       };
       setOkrViews((prev) => [...prev, next]);
       if (isSupabaseConfigured) {
@@ -946,11 +962,15 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
   );
 
   const updateOkrView = useCallback(
-    (filters: OkrFilters) => {
+    (filters: OkrFilters, collapsedGroups: Record<string, boolean>) => {
       setOkrViews((prev) => {
         const target = prev.find((v) => v.id === activeOkrViewId);
         if (!target || !canPersistOkrView(target, currentOwner)) return prev;
-        const updated: OkrView = { ...target, filters };
+        const updated: OkrView = {
+          ...target,
+          filters,
+          collapsedGroupKeys: Object.keys(collapsedGroups).filter((k) => collapsedGroups[k]),
+        };
         if (isSupabaseConfigured) {
           queueMicrotask(() => persistOkrView(updated).catch((e) => reportError(e, "update view")));
         }

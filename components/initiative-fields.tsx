@@ -32,6 +32,34 @@ export function withScheme(url: string): string {
   return /^[a-z][a-z0-9+.-]*:\/\//i.test(t) ? t : `https://${t}`;
 }
 
+/**
+ * A stacked "icon · label above value" property row — the OKR drawer's own
+ * property shape, promoted here (Sprint Vireo, Initiative 2) so
+ * InitiativeDrawer can reuse it for fields whose label doesn't fit
+ * `PropRow`'s fixed 104px label column (e.g. "Strategic objective") without
+ * either drawer reinventing this shape a second time. Was a private
+ * function local to OkrDrawer.tsx; OkrDrawer now imports it from here.
+ */
+export function Prop({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: LucideIcon;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-start gap-2.5">
+      <Icon size={15} strokeWidth={1.75} className="mt-0.5 shrink-0 text-beige-60" />
+      <div className="min-w-0 flex-1">
+        <div className="mono-label-sm text-beige-60">{label}</div>
+        <div className="mt-0.5 text-sm text-green-90">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 /** A compact "icon · label · value" property row (Notion-style), label on the left. */
 export function PropRow({
   icon: Icon,
@@ -43,8 +71,8 @@ export function PropRow({
   children: ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-[104px_1fr] items-start gap-3 rounded-lg px-2 py-1.5">
-      <span className="flex items-center gap-2 pt-1.5 text-sm text-beige-60">
+    <div className="grid grid-cols-[104px_1fr] items-start gap-3 rounded-lg px-2 py-1">
+      <span className="flex items-center gap-2 pt-1 text-sm text-beige-60">
         <Icon size={15} strokeWidth={1.75} className="shrink-0" />
         {label}
       </span>
@@ -160,7 +188,7 @@ export function CollapsibleSection({
   children: ReactNode;
 }) {
   return (
-    <div className="border-t border-beige-20 pt-4">
+    <div className="border-t border-beige-20 pt-3">
       <button
         type="button"
         onClick={onToggle}
@@ -174,7 +202,7 @@ export function CollapsibleSection({
         <span className="mono-label text-beige-60">{label}</span>
         {!open && hint && <span className="ml-1 truncate text-xs text-beige-60">{hint}</span>}
       </button>
-      {open && <div className="mt-4 flex flex-col gap-4">{children}</div>}
+      {open && <div className="mt-3 flex flex-col gap-3">{children}</div>}
     </div>
   );
 }

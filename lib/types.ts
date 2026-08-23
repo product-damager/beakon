@@ -35,7 +35,7 @@ export const ZOOM_SCALE_STEP = 0.2;
 /** Product friendly palette family used to color a theme. */
 export type ThemeColor = "green" | "blue" | "lime" | "pink" | "orange" | "beige";
 
-export type DeliveryLinkType = "redmine" | "figma" | "spec" | "notion" | "other";
+export type DeliveryLinkType = "redmine" | "figma" | "spec" | "notion" | "jira" | "linear" | "other";
 
 export interface Owner {
   id: string;
@@ -283,6 +283,8 @@ export const DELIVERY_TYPE_LABEL: Record<DeliveryLinkType, string> = {
   figma: "Figma",
   spec: "Spec",
   notion: "Notion",
+  jira: "Jira",
+  linear: "Linear",
   other: "Other",
 };
 
@@ -374,6 +376,11 @@ export interface OkrView {
   editable: boolean;
   /** Sidebar sort order among a user's own saved OKR views. */
   position?: number;
+  /** Group keys ("bu:<id>" / "team:<id>", same shape lib/okrGrouping.ts
+   *  produces) that were collapsed when this view was last saved. Absence
+   *  from this array means expanded — including for any BU/Team that
+   *  didn't exist yet when the view was saved. */
+  collapsedGroupKeys: string[];
 }
 
 // ── Roadmap (Sprint Heron Week 2 — unified List/Board/Timeline saved view) ──

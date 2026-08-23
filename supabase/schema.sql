@@ -30,6 +30,13 @@ do $$ begin
   create type delivery_link_type as enum ('redmine', 'figma', 'spec', 'notion', 'other');
 exception when duplicate_object then null; end $$;
 
+-- Widen delivery_link_type for Jira/Linear (Sprint Vireo, Initiative 2).
+-- Redmine already exists above; additive-only, no existing rows affected —
+-- same "alter type ... add value if not exists" pattern already used for
+-- initiative_health's 'delayed' value.
+alter type delivery_link_type add value if not exists 'jira';
+alter type delivery_link_type add value if not exists 'linear';
+
 do $$ begin
   create type okr_governance_status as enum
     ('draft', 'to_validate', 'being_reviewed', 'to_refine', 'validated', 'rejected');
@@ -782,6 +789,17 @@ create table if not exists okr_views (
   updated_at timestamptz not null default now()
 );
 
+-- Group collapse-state for the grouped OKR view (Sprint Vireo, Initiative 1)
+-- — a denylist of collapsed "bu:<id>"/"team:<id>" group keys, absence means
+-- expanded. Additive column, safe on a populated table: existing rows
+-- backfill to '[]' ("nothing collapsed"), the correct default for every
+-- view saved before this sprint. Reverses ADR 009's "filters-only" OkrView
+-- scoping (see docs/decisions/ for the ADR recording this reversal) —
+-- PM-confirmed: saved views become grouping-aware, not just filter
+-- snapshots. See
+-- supabase/migrations/2026-08-okr-views-collapsed-group-keys.sql.
+alter table okr_views add column if not exists collapsed_group_keys jsonb not null default '[]'::jsonb;
+
 drop trigger if exists okr_views_touch_updated_at on okr_views;
 create trigger okr_views_touch_updated_at
   before update on okr_views
@@ -820,7 +838,17 @@ exception when duplicate_object then null; end $$;
 -- convention, and the manual test plan. No System-row branch (unlike
 -- persist_roadmap) — there is no immutable row to special-case for this
 -- entity.
+--
+-- Sprint Vireo, Initiative 1: gained a trailing p_collapsed_group_keys
+-- parameter (default '[]'::jsonb) so a saved view's collapsed BU/Team
+-- group keys travel with `filters` in all three authorization branches —
+-- see supabase/migrations/2026-08-okr-views-collapsed-group-keys.sql. This
+-- is a parameter-list change, not a true in-place replace, so the old
+-- 7-arg signature is explicitly dropped first (Postgres would otherwise
+-- keep both overloads alive side by side).
 -- ══════════════════════════════════════════════════════════════════════
+drop function if exists persist_okr_view(text, text, text, jsonb, text, boolean, double precision);
+
 create or replace function persist_okr_view(
   p_id text,
   p_owner_id text,
@@ -828,7 +856,8 @@ create or replace function persist_okr_view(
   p_filters jsonb,
   p_visibility text,
   p_editable boolean,
-  p_position double precision
+  p_position double precision,
+  p_collapsed_group_keys jsonb default '[]'::jsonb
 ) returns void
 language plpgsql
 security invoker
@@ -848,8 +877,8 @@ begin
       raise exception 'persist_okr_view: cannot create an OkrView owned by someone other than the caller';
     end if;
 
-    insert into okr_views (id, owner_id, name, filters, visibility, editable, position)
-    values (p_id, p_owner_id, p_name, p_filters, p_visibility, p_editable, p_position);
+    insert into okr_views (id, owner_id, name, filters, visibility, editable, position, collapsed_group_keys)
+    values (p_id, p_owner_id, p_name, p_filters, p_visibility, p_editable, p_position, p_collapsed_group_keys);
     return;
   end if;
 
@@ -859,27 +888,32 @@ begin
     -- structurally block it (same deliberate scope note as persist_roadmap,
     -- ADR 009).
     update okr_views set
-      owner_id   = p_owner_id,
-      name       = p_name,
-      filters    = p_filters,
-      visibility = p_visibility,
-      editable   = p_editable,
-      position   = p_position
+      owner_id             = p_owner_id,
+      name                 = p_name,
+      filters              = p_filters,
+      visibility           = p_visibility,
+      editable             = p_editable,
+      position             = p_position,
+      collapsed_group_keys = p_collapsed_group_keys
     where id = p_id;
     return;
   end if;
 
   if v_existing.visibility = 'shared' and v_existing.editable then
     -- Deliberate silent-ignore, not an error: a shared-editable non-owner
-    -- can only ever change the two view-shaping fields an OkrView actually
-    -- has — filters/name. owner_id/visibility/editable/position stay
-    -- pinned to whatever is already in the DB row regardless of what the
-    -- caller passed for them — sharing settings are always owner-only,
-    -- never delegable to an editor (same reasoning as persist_roadmap,
-    -- ADR 008 decision 1, applied here per ADR 009).
+    -- can only ever change the view-shaping fields an OkrView actually has
+    -- — filters/name/collapsed_group_keys. owner_id/visibility/editable/
+    -- position stay pinned to whatever is already in the DB row regardless
+    -- of what the caller passed for them — sharing settings are always
+    -- owner-only, never delegable to an editor (same reasoning as
+    -- persist_roadmap, ADR 008 decision 1, applied here per ADR 009). A
+    -- shared-editable visitor collapsing/expanding groups is exactly as
+    -- legitimate as them changing filters, so collapsed_group_keys travels
+    -- with filters/name in this branch too.
     update okr_views set
-      name    = p_name,
-      filters = p_filters
+      name                 = p_name,
+      filters              = p_filters,
+      collapsed_group_keys = p_collapsed_group_keys
     where id = p_id;
     return;
   end if;
@@ -889,9 +923,9 @@ end;
 $$;
 
 revoke execute on function persist_okr_view(
-  text, text, text, jsonb, text, boolean, double precision
+  text, text, text, jsonb, text, boolean, double precision, jsonb
 ) from public;
 
 grant execute on function persist_okr_view(
-  text, text, text, jsonb, text, boolean, double precision
+  text, text, text, jsonb, text, boolean, double precision, jsonb
 ) to authenticated;

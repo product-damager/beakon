@@ -1,6 +1,7 @@
 "use client";
 
 import { type ButtonHTMLAttributes, type ComponentType, type ReactNode } from "react";
+import { ChevronRight } from "lucide-react";
 import { cn, initials } from "@/lib/cn";
 import {
   HEALTH_META,
@@ -83,6 +84,71 @@ export function Tag({
       )}
     >
       {children}
+    </span>
+  );
+}
+
+// ── Collapsible group-header content (Sprint Vireo, Initiative 1) ──
+/**
+ * Shared visual content for a collapsible group-header band — chevron,
+ * optional theme-color dot, label, count badge, depth-based weight/indent.
+ * Extracted from `Timeline.tsx`'s group band (`:454-489`) so both `Timeline`
+ * (a sticky-flex row) and `OkrGroupedList` (a `<table>` spanning row) render
+ * identical group-header language while each still owns its own outer
+ * wrapper — a flex row and a `<td colSpan>` aren't shareable at that level,
+ * only the content inside them is. See the Vireo plan's "Component
+ * structure" section for the full reasoning.
+ *
+ * Deliberately excludes the `<button>` itself: `aria-expanded`/`aria-label`
+ * and the `focus-visible:ring-2 focus-visible:ring-inset
+ * focus-visible:ring-green-90` focus style stay on each caller's own button
+ * wrapper (copied over verbatim, not dropped) since the `collapsible={false}`
+ * case below has no button at all.
+ */
+export function GroupHeaderContent({
+  depth,
+  label,
+  count,
+  color,
+  collapsible = true,
+  isCollapsed = false,
+}: {
+  /** 0 = top-level band (e.g. a Business Unit); 1 = nested band (a Team, or
+   * the non-collapsible "Direct to <BU>" caption row). */
+  depth: 0 | 1;
+  label: string;
+  /** Omit for the non-collapsible caption row, which has no count to show. */
+  count?: number;
+  color?: ThemeColor;
+  /** `false` renders a quiet, non-toggleable caption row (the direct-to-BU
+   * case) — no chevron, no count badge, no bold weight, just muted label
+   * text — instead of the normal chevron/label/count band. */
+  collapsible?: boolean;
+  isCollapsed?: boolean;
+}) {
+  if (!collapsible) {
+    return (
+      <span className={cn("flex min-w-0 items-center gap-2", depth === 1 && "pl-5")}>
+        <span className="truncate text-xs text-beige-60">{label}</span>
+      </span>
+    );
+  }
+  return (
+    <span className={cn("flex min-w-0 items-center gap-2", depth === 1 && "pl-5")}>
+      <ChevronRight
+        size={15}
+        className={cn("shrink-0 text-beige-60 transition-transform", !isCollapsed && "rotate-90")}
+      />
+      {color && <span className={cn("h-3.5 w-1 shrink-0 rounded-[2px]", THEME_COLOR_META[color].dot)} />}
+      <span
+        className={cn(
+          "truncate text-sm text-green-90",
+          depth === 0 ? "font-semibold" : "font-medium"
+        )}
+      >
+        {label}
+      </span>
+      {count !== undefined && <span className="mono-label-sm text-green-70">{count}</span>}
     </span>
   );
 }
