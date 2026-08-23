@@ -73,7 +73,7 @@ export function SharePanel({
             name={groupName}
             checked={!shared}
             onChange={() => onChange({ visibility: "private", editable: false })}
-            className="h-3.5 w-3.5 border-beige-30 text-green-90 focus:ring-2 focus:ring-green-90"
+            className="h-3.5 w-3.5 shrink-0 appearance-none rounded-full border border-beige-30 bg-white checked:border-[4px] checked:border-green-90 focus:outline-none focus:ring-2 focus:ring-green-90/40"
           />
           Private
         </label>
@@ -83,7 +83,7 @@ export function SharePanel({
             name={groupName}
             checked={shared}
             onChange={() => onChange({ visibility: "shared", editable })}
-            className="h-3.5 w-3.5 border-beige-30 text-green-90 focus:ring-2 focus:ring-green-90"
+            className="h-3.5 w-3.5 shrink-0 appearance-none rounded-full border border-beige-30 bg-white checked:border-[4px] checked:border-green-90 focus:outline-none focus:ring-2 focus:ring-green-90/40"
           />
           Shared
         </label>
@@ -97,7 +97,7 @@ export function SharePanel({
               name={`${groupName}-editable`}
               checked={editable}
               onChange={() => onChange({ visibility: "shared", editable: true })}
-              className="h-3.5 w-3.5 border-beige-30 text-green-90 focus:ring-2 focus:ring-green-90"
+              className="h-3.5 w-3.5 shrink-0 appearance-none rounded-full border border-beige-30 bg-white checked:border-[4px] checked:border-green-90 focus:outline-none focus:ring-2 focus:ring-green-90/40"
             />
             Can edit
           </label>
@@ -107,7 +107,7 @@ export function SharePanel({
               name={`${groupName}-editable`}
               checked={!editable}
               onChange={() => onChange({ visibility: "shared", editable: false })}
-              className="h-3.5 w-3.5 border-beige-30 text-green-90 focus:ring-2 focus:ring-green-90"
+              className="h-3.5 w-3.5 shrink-0 appearance-none rounded-full border border-beige-30 bg-white checked:border-[4px] checked:border-green-90 focus:outline-none focus:ring-2 focus:ring-green-90/40"
             />
             View only
           </label>
