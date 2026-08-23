@@ -12,7 +12,7 @@ import { Tag } from "./ui";
 
 // External-facing statuses use friendlier, audience-ready language.
 const PUBLIC_STATUS: Record<string, string> = {
-  planned: "Planned",
+  planned: "Backlog",
   opportunity_framing: "Exploring",
   solution_framing: "Designing",
   in_development: "In progress",

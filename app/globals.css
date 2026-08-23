@@ -63,6 +63,13 @@ body {
   letter-spacing: 0.08em;
 }
 
+.mono-label-xs {
+  font-family: var(--font-noto-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
 .font-display {
   font-family: var(--font-jakarta), var(--font-inter), sans-serif;
 }

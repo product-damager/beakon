@@ -7,7 +7,7 @@ import { applyFilters } from "@/lib/filters";
 import { quarterLabelFromISO } from "@/lib/dates";
 import { ownerName, STATUS_META, STATUSES, THEME_COLOR_META, type Initiative, type Status } from "@/lib/types";
 import { cn } from "@/lib/cn";
-import { Avatar, Eyebrow, HealthTag } from "./ui";
+import { Avatar, Eyebrow, HealthTag, Tag } from "./ui";
 import { FilterBar } from "./FilterBar";
 
 /**
@@ -62,8 +62,18 @@ function Card({
           {theme && <span className={cn("h-3 w-1 shrink-0 rounded-[2px]", THEME_COLOR_META[theme.color].dot)} />}
           <span className="mono-label-sm min-w-0 flex-1 truncate text-beige-60">{theme?.name}</span>
         </div>
-        <div className="line-clamp-2 min-h-[2.4rem] text-sm font-medium leading-snug text-green-90 group-hover:text-green-60">
-          {initiative.title || "Untitled initiative"}
+        <div className="flex min-w-0 items-start gap-1.5">
+          <div
+            className={cn(
+              "line-clamp-2 min-h-[2.4rem] flex-1 text-sm font-medium leading-snug group-hover:text-green-60",
+              initiative.archived ? "text-beige-70" : "text-green-90"
+            )}
+          >
+            {initiative.title || "Untitled initiative"}
+          </div>
+          {initiative.archived && (
+            <Tag className="shrink-0 bg-beige-20 text-beige-70">Archived</Tag>
+          )}
         </div>
       </button>
       <div className="mt-3 flex items-center justify-between gap-2">

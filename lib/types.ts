@@ -1,5 +1,7 @@
 // ── Core domain types for Beakon ──
 
+import type { OkrFilters } from "./okrFilters";
+
 export type Status =
   | "planned"
   | "opportunity_framing"
@@ -7,7 +9,7 @@ export type Status =
   | "in_development"
   | "released";
 export type Visibility = "internal" | "external";
-export type Health = "on_track" | "at_risk" | "blocked";
+export type Health = "on_track" | "at_risk" | "blocked" | "delayed";
 export type GroupBy = "theme" | "team" | "owner";
 export type Zoom = "month" | "quarter" | "half";
 /** Sort dimension for timeline rows within each group. */
@@ -204,7 +206,7 @@ export interface StatusMeta {
 /** Status is the meaning-bearing color on the timeline. Lime is reserved for UI accents. */
 export const STATUS_META: Record<Status, StatusMeta> = {
   planned: {
-    label: "Planned",
+    label: "Backlog",
     bar: "bg-blue-40 text-blue-80",
     dot: "bg-blue-50",
     tag: "bg-blue-30 text-blue-70",
@@ -235,11 +237,23 @@ export const STATUS_META: Record<Status, StatusMeta> = {
   },
 };
 
-/** Delivery health — a live signal, distinct from the RICE estimate. */
+/**
+ * Delivery health — a live signal, distinct from the RICE estimate.
+ * `delayed` (added docs/plans/okr-filters-archive-parity-and-delayed-health.md
+ * item 6) uses its own `amber` hue — distinct from the green/orange/red
+ * severity gradient the other three values use, and from Governance's
+ * blue/pink (see that plan's adjacency-clash analysis) — so it doesn't read
+ * as either a worse `at_risk` or a governance state at a glance. Sort order
+ * (`HEALTH_ORDER` in components/List.tsx / OkrList.tsx, frontend-owned) is
+ * `{ on_track: 0, at_risk: 1, blocked: 2, delayed: 3 }` per the PM's explicit
+ * decision — Delayed sorts last, overriding the design brief's proposed
+ * on_track→delayed→at_risk→blocked severity placement. Don't "fix" this back.
+ */
 export const HEALTH_META: Record<Health, { label: string; tag: string; dot: string }> = {
   on_track: { label: "On track", tag: "bg-green-30 text-green-70", dot: "bg-green-60" },
   at_risk: { label: "At risk", tag: "bg-orange-30 text-orange-70", dot: "bg-orange-60" },
   blocked: { label: "Blocked", tag: "bg-red-30 text-red-70", dot: "bg-red-60" },
+  delayed: { label: "Delayed", tag: "bg-amber-30 text-amber-70", dot: "bg-amber-60" },
 };
 
 export const THEME_COLOR_META: Record<ThemeColor, { dot: string; soft: string; text: string }> = {
@@ -334,6 +348,32 @@ export interface OkrOwner {
 export interface OkrInitiativeLink {
   okrId: string;
   initiativeId: string;
+}
+
+// ── OkrView (Sprint Heron Week 3 — saved/shareable "My OKRs" filter view) ──
+
+export type OkrViewVisibility = "private" | "shared";
+
+/**
+ * A saved, named `OkrFilters` snapshot, structurally parallel to `Roadmap`'s
+ * owner/private/shared-view/shared-edit sharing model but deliberately
+ * narrower — see
+ * docs/decisions/009-okr-saved-views-reverse-adr-008-deferral.md. There is
+ * no System OkrView: `ownerId` is never null (the existing unfiltered
+ * "OKRs" nav entry already covers that role, unchanged), and there is no
+ * `viewMode`/`groupBy`/`zoom`/`density`/`timelineSort` equivalent — an OKR
+ * saved view is only a named filter snapshot plus sharing metadata.
+ */
+export interface OkrView {
+  id: string;
+  ownerId: string;
+  name: string;
+  filters: OkrFilters;
+  visibility: OkrViewVisibility;
+  /** Meaningful only when `visibility === "shared"` — ignored while private. */
+  editable: boolean;
+  /** Sidebar sort order among a user's own saved OKR views. */
+  position?: number;
 }
 
 // ── Roadmap (Sprint Heron Week 2 — unified List/Board/Timeline saved view) ──

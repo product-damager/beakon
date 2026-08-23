@@ -78,15 +78,27 @@ function StatusLegend() {
   );
 }
 
-/** Warning-triangle icon for at_risk/blocked rows — red for blocked, orange
- * for at_risk, matching HEALTH_META's own hue split. Replaces a plain color
- * dot so the signal reads even without color (shape + placement, not just
- * hue). */
-function HealthFlagIcon({ health, className }: { health: "at_risk" | "blocked"; className?: string }) {
+/** Warning-triangle icon for at_risk/blocked/delayed rows — red for blocked,
+ * orange for at_risk, matching HEALTH_META's own hue split. "delayed" gets
+ * its own amber variant (docs/design/okr-filters-archive-parity-and-delayed-
+ * health.md §4) rather than reusing the orange/red triangle, so a scanning
+ * eye can tell "this one is just late" apart from "this one is failing"
+ * without opening the row. Replaces a plain color dot so the signal reads
+ * even without color (shape + placement, not just hue). */
+function HealthFlagIcon({
+  health,
+  className,
+}: {
+  health: "at_risk" | "blocked" | "delayed";
+  className?: string;
+}) {
   return (
     <TriangleAlert
       size={13}
-      className={cn(health === "blocked" ? "text-red-60" : "text-orange-60", className)}
+      className={cn(
+        health === "blocked" ? "text-red-60" : health === "delayed" ? "text-amber-60" : "text-orange-60",
+        className
+      )}
       aria-hidden
     />
   );
@@ -126,7 +138,9 @@ export function Timeline() {
     [initiatives, filters, themes, owners, teams]
   );
   const riskyCount = useMemo(
-    () => filtered.filter((i) => i.health === "at_risk" || i.health === "blocked").length,
+    () =>
+      filtered.filter((i) => i.health === "at_risk" || i.health === "blocked" || i.health === "delayed")
+        .length,
     [filtered]
   );
   const window = useMemo(
@@ -510,7 +524,7 @@ export function Timeline() {
                                 neutral
                               />
                             )}
-                            {(i.health === "at_risk" || i.health === "blocked") && (
+                            {(i.health === "at_risk" || i.health === "blocked" || i.health === "delayed") && (
                               <span title={HEALTH_META[i.health].label}>
                                 <HealthFlagIcon health={i.health} className="shrink-0" />
                               </span>

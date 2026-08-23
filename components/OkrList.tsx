@@ -22,7 +22,7 @@ import { InlineTagSelect } from "./form";
 type SortKey = "title" | "team" | "objective" | "quarter" | "governance" | "health" | "achievement" | "updated";
 type SortState = { key: SortKey; dir: 1 | -1 };
 
-const HEALTH_ORDER: Record<Health, number> = { on_track: 0, at_risk: 1, blocked: 2 };
+const HEALTH_ORDER: Record<Health, number> = { on_track: 0, at_risk: 1, blocked: 2, delayed: 3 };
 /** Health values in severity order, for the inline picker options. */
 const HEALTH_KEYS = Object.keys(HEALTH_META) as Health[];
 
@@ -218,8 +218,19 @@ export function OkrList({
                     className="cursor-pointer border-b border-beige-10 hover:bg-beige-10"
                   >
                     <td className="w-80 max-w-0 px-3 py-2.5">
-                      <span className="block truncate font-medium text-green-90" title={o.title || "Untitled OKR"}>
-                        {o.title || "Untitled OKR"}
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span
+                          className={cn(
+                            "truncate font-medium",
+                            o.archived ? "text-beige-70" : "text-green-90"
+                          )}
+                          title={o.title || "Untitled OKR"}
+                        >
+                          {o.title || "Untitled OKR"}
+                        </span>
+                        {o.archived && (
+                          <Tag className="shrink-0 bg-beige-20 text-beige-70">Archived</Tag>
+                        )}
                       </span>
                     </td>
                     <td className="w-20 max-w-0 truncate px-3 py-2.5 text-green-70" title={objective?.name}>

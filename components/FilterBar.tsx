@@ -52,7 +52,7 @@ interface FieldDef {
   searchable: boolean;
 }
 
-function Segmented<T extends string>({
+export function Segmented<T extends string>({
   options,
   value,
   onChange,
@@ -507,13 +507,13 @@ export function FilterBar({
         {showZoomScale && (
           // Continuous zoom — magnifies within the chosen granularity. Click the
           // percentage to snap back to 100%. ⌘/Ctrl + scroll over the canvas also zooms.
-          <div className="flex items-center rounded-lg border border-beige-30 bg-white">
+          <div className="flex h-9 items-center rounded-lg border border-beige-30 bg-white">
             <button
               type="button"
               onClick={() => setZoomScale(zoomScale - ZOOM_SCALE_STEP)}
               disabled={zoomScale <= ZOOM_SCALE_MIN + 0.001}
               aria-label="Zoom out"
-              className="flex h-9 w-8 items-center justify-center rounded-l-lg text-green-70 transition-colors hover:bg-beige-10 disabled:opacity-40 disabled:hover:bg-transparent"
+              className="flex h-full w-8 items-center justify-center rounded-l-lg text-green-70 transition-colors hover:bg-beige-10 disabled:opacity-40 disabled:hover:bg-transparent"
             >
               <Minus size={14} />
             </button>
@@ -521,7 +521,7 @@ export function FilterBar({
               type="button"
               onClick={() => setZoomScale(1)}
               title="Reset zoom to 100%"
-              className="mono-label-sm h-9 w-12 tabular-nums text-green-70 transition-colors hover:bg-beige-10"
+              className="mono-label-sm h-full w-12 tabular-nums text-green-70 transition-colors hover:bg-beige-10"
             >
               {Math.round(zoomScale * 100)}%
             </button>
@@ -530,7 +530,7 @@ export function FilterBar({
               onClick={() => setZoomScale(zoomScale + ZOOM_SCALE_STEP)}
               disabled={zoomScale >= ZOOM_SCALE_MAX - 0.001}
               aria-label="Zoom in"
-              className="flex h-9 w-8 items-center justify-center rounded-r-lg text-green-70 transition-colors hover:bg-beige-10 disabled:opacity-40 disabled:hover:bg-transparent"
+              className="flex h-full w-8 items-center justify-center rounded-r-lg text-green-70 transition-colors hover:bg-beige-10 disabled:opacity-40 disabled:hover:bg-transparent"
             >
               <Plus size={14} />
             </button>

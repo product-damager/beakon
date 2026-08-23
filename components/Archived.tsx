@@ -23,6 +23,13 @@ import type { Column, SortState } from "./List";
  * (Updated) matter; a stale DIVE score or target date on a shelved
  * initiative isn't information worth a column (docs/design/archived-view.md
  * finding 4).
+ *
+ * Restored (docs/plans/roadmap-dialog-viewmode-and-archive-reversal.md T25)
+ * after a brief unification onto OKRs' inline "Show archived" toggle model —
+ * the PM reversed that call; this dedicated page is back and OKRs are being
+ * rebuilt to match it. Navigation between this page and `/archived_okrs` is
+ * a header-level `ArchivedSwitcher` (`AppShell.tsx`, next to the page title)
+ * rather than an in-page sub-link — the PM asked to move it there.
  */
 type SortKey = "title" | "owner" | "team" | "status" | "updated";
 
@@ -81,10 +88,6 @@ export function Archived() {
       <FilterBar />
       <div className="min-h-0 flex-1 overflow-hidden p-6">
         <div className="flex h-full flex-col overflow-hidden rounded-xl border border-beige-20 bg-white">
-          <p className="border-b border-beige-20 bg-beige-5/60 px-4 py-2.5 text-xs text-beige-60">
-            Archived initiatives are hidden from Timeline, Board and List. Restore one to bring it
-            back wherever it was.
-          </p>
           <div className="calm-scroll min-h-0 flex-1 overflow-auto">
             <table className="w-full border-collapse text-sm">
               <thead className="sticky top-0 z-10">

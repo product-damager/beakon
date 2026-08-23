@@ -13,54 +13,133 @@ import {
   CalendarRange,
   Settings,
   Share2,
-  Target,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { useRoadmap } from "@/lib/store";
+import { isRoadmapOwner, useRoadmap } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { ownerName, type ViewKey } from "@/lib/types";
 import { Avatar, Button, IconSegmented, Tag } from "./ui";
+import { TextInput } from "./form";
 import { Logo } from "./Logo";
 import { InitiativeDrawer } from "./InitiativeDrawer";
 import { SettingsDialog } from "./SettingsDialog";
 import { Toaster } from "./Toaster";
 import { RoadmapNav } from "./RoadmapNav";
 import { RoadmapSharePanel } from "./RoadmapShareMenu";
+import { Segmented } from "./FilterBar";
 import { useOutsideClose } from "./hooks";
 
 const TITLES: Record<string, string> = {
-  "/archived": "Archived",
   "/okrs": "OKRs",
+  "/archived": "Archived",
+  "/archived_okrs": "Archived OKRs",
 };
 
 const VIEW_MODE_OPTIONS: { value: ViewKey; label: string; icon: typeof Rows3 }[] = [
-  { value: "list", label: "List view", icon: Rows3 },
   { value: "board", label: "Board view", icon: Columns3 },
   { value: "timeline", label: "Timeline view", icon: CalendarRange },
+  { value: "list", label: "List view", icon: Rows3 },
 ];
+
+// ── "Save as new Roadmap…" naming popover (Sprint Heron Week 3, ADR 010) —
+// mirrors NewRoadmapRow's TextInput + Cancel/Create pattern (RoadmapNav.tsx),
+// not a new shared component: this is the one other place that pattern is
+// needed, so a small local duplicate is cheaper than an extraction for a
+// second caller. Moved in from FilterBar.tsx (docs/plans/roadmap-dialog-
+// viewmode-and-archive-reversal.md T24) alongside the rest of the save
+// cluster's relocation into the header. ────────────────────────────────────
+function SaveAsNewRoadmapButton() {
+  const { saveRoadmapAsNew } = useRoadmap();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  useOutsideClose(ref, open, () => setOpen(false));
+
+  const submit = () => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    saveRoadmapAsNew(trimmed);
+    setName("");
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <Button variant="secondary" size="sm" onClick={() => setOpen((o) => !o)}>
+        Save as new Roadmap
+      </Button>
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1 w-64 rounded-xl border border-beige-20 bg-white p-3 shadow-lg">
+          <div className="mb-2 text-sm font-medium text-green-90">Save as new Roadmap</div>
+          <TextInput
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Q3 planning"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit();
+              if (e.key === "Escape") setOpen(false);
+            }}
+            className="mb-2"
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" disabled={!name.trim()} onClick={submit}>
+              Create
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** Header icon-only view-mode switcher + owner-only Share icon + non-owner
  * "View only" flag, rendered only on `/roadmap` (§2.1-§2.3, §3.1, §3.4 of
  * docs/design/roadmap-sidebar-header-sharing.md). */
 function RoadmapHeaderControls() {
-  const { activeRoadmap, currentOwner, setRoadmapViewMode } = useRoadmap();
+  const {
+    activeRoadmap,
+    currentOwner,
+    viewMode,
+    setRoadmapViewMode,
+    roadmapDirty,
+    canPersistRoadmap,
+    updateRoadmap,
+  } = useRoadmap();
   const [shareOpen, setShareOpen] = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
   useOutsideClose(shareRef, shareOpen, () => setShareOpen(false));
 
-  const isOwner = !activeRoadmap.isSystem && activeRoadmap.ownerId === (currentOwner?.id ?? null);
+  const isOwner = isRoadmapOwner(activeRoadmap, currentOwner);
   const viewOnly =
     !isOwner && activeRoadmap.visibility === "shared" && !activeRoadmap.editable && !activeRoadmap.isSystem;
 
   return (
     <div className="flex items-center gap-3">
       <IconSegmented
-        value={activeRoadmap.viewMode}
+        value={viewMode}
         onChange={setRoadmapViewMode}
         options={VIEW_MODE_OPTIONS}
         disabled={viewOnly}
       />
+      {/* Roadmap save cluster (Sprint Heron Week 3, ADR 010; relocated here
+       * per docs/plans/roadmap-dialog-viewmode-and-archive-reversal.md T24) —
+       * only fires on filters/groupBy/timelineSort edits now that viewMode is
+       * autosaved, so an `animate-fade-in` mount transition makes its rarer
+       * appearance register as a state change rather than blending into the
+       * otherwise icon-only chrome around it. */}
+      {roadmapDirty && canPersistRoadmap(activeRoadmap) && (
+        <div className="flex items-center gap-2 animate-fade-in">
+          <Button size="sm" onClick={updateRoadmap}>
+            Update Roadmap
+          </Button>
+          <SaveAsNewRoadmapButton />
+        </div>
+      )}
       {isOwner && (
         <div className="relative" ref={shareRef}>
           <button
@@ -82,6 +161,28 @@ function RoadmapHeaderControls() {
   );
 }
 
+/** Header switcher between the two archive pages (Initiatives/OKRs) — the
+ * PM asked to replace the "Archived OKRs →" in-page sub-link with this
+ * title-adjacent toggle instead, mirroring `RoadmapHeaderControls`'
+ * placement pattern (a page-identity control living next to the `<h1>`,
+ * not buried in page content). Rendered on `/archived` and
+ * `/archived_okrs` only. */
+function ArchivedSwitcher() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const value = pathname === "/archived_okrs" ? "okrs" : "initiatives";
+  return (
+    <Segmented
+      value={value}
+      onChange={(v) => router.push(v === "okrs" ? "/archived_okrs" : "/archived")}
+      options={[
+        { value: "initiatives", label: "Initiatives" },
+        { value: "okrs", label: "OKRs" },
+      ]}
+    />
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -96,6 +197,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       .filter(Boolean)
       .join(" · ") || "Product team";
   const onRoadmapPage = pathname === "/roadmap";
+  const onArchivedFamilyPage = pathname === "/archived" || pathname === "/archived_okrs";
   const title = onRoadmapPage ? activeRoadmap.name : TITLES[pathname] ?? "Roadmap";
 
   if (presentation) {
@@ -121,24 +223,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        <nav className="mt-2 flex-1 px-3">
-          <div className="mono-label-sm px-3 pb-2 text-green-40">Views</div>
-          <Link
-            href="/okrs"
-            className={cn(
-              "relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-              pathname === "/okrs"
-                ? "bg-green-80 text-white"
-                : "text-green-20 hover:bg-green-80/60 hover:text-white"
-            )}
-          >
-            {pathname === "/okrs" && (
-              <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-lime-40" />
-            )}
-            <Target size={18} strokeWidth={1.75} />
-            OKRs
-          </Link>
-
+        <nav className="calm-scroll mt-2 min-h-0 flex-1 overflow-y-auto px-3">
           <RoadmapNav activePathname={pathname} />
 
           <div className="mono-label-sm px-3 pb-2 pt-6 text-green-40">Manage</div>
@@ -206,13 +291,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex min-w-0 items-center gap-3">
             <h1 className="min-w-0 truncate font-display text-xl font-semibold text-green-90">{title}</h1>
             {onRoadmapPage && <RoadmapHeaderControls />}
+            {onArchivedFamilyPage && <ArchivedSwitcher />}
           </div>
           {pathname === "/okrs" ? (
             <Button size="sm" onClick={() => router.push("/okrs?new=1")}>
               <Plus size={16} strokeWidth={2} />
               New OKR
             </Button>
-          ) : pathname === "/archived" ? null : onRoadmapPage ? (
+          ) : onRoadmapPage ? (
             <Button size="sm" onClick={openCreate}>
               <Plus size={16} strokeWidth={2} />
               New initiative

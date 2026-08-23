@@ -18,13 +18,13 @@ import {
   type Status,
 } from "@/lib/types";
 import { cn } from "@/lib/cn";
-import { Avatar, HealthTag, StatusTag } from "./ui";
+import { Avatar, HealthTag, StatusTag, Tag } from "./ui";
 import { InlineTagSelect } from "./form";
 import { FilterBar } from "./FilterBar";
 
 type SortKey = "title" | "owner" | "team" | "theme" | "status" | "target" | "priority" | "health" | "updated";
 
-const HEALTH_ORDER: Record<Health, number> = { on_track: 0, at_risk: 1, blocked: 2 };
+const HEALTH_ORDER: Record<Health, number> = { on_track: 0, at_risk: 1, blocked: 2, delayed: 3 };
 /** Health values in severity order, for the inline picker options. */
 const HEALTH_KEYS = Object.keys(HEALTH_META) as Health[];
 
@@ -175,13 +175,22 @@ export function List() {
                       className="cursor-pointer border-b border-beige-10 hover:bg-beige-10"
                     >
                       <td className="w-72 max-w-0 px-3 py-2.5">
-                        <div className="flex items-center gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
                           {theme && (
                             <span className={cn("h-3 w-1 shrink-0 rounded-[2px]", THEME_COLOR_META[theme.color].dot)} />
                           )}
-                          <span className="truncate font-medium text-green-90" title={i.title || "Untitled initiative"}>
+                          <span
+                            className={cn(
+                              "truncate font-medium",
+                              i.archived ? "text-beige-70" : "text-green-90"
+                            )}
+                            title={i.title || "Untitled initiative"}
+                          >
                             {i.title || "Untitled initiative"}
                           </span>
+                          {i.archived && (
+                            <Tag className="shrink-0 bg-beige-20 text-beige-70">Archived</Tag>
+                          )}
                           {i.visibility === "external" && (
                             <span className="mono-label-sm shrink-0 rounded bg-beige-20 px-1.5 py-0.5 text-beige-60">
                               Ext

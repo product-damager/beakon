@@ -3,12 +3,14 @@ import type {
   Initiative,
   Okr,
   OkrOwner,
+  OkrView,
   Owner,
   Roadmap,
   StrategicObjective,
   Team,
   Theme,
 } from "./types";
+import { EMPTY_OKR_FILTERS } from "./okrFilters";
 
 export const OWNERS: Owner[] = [
   { id: "u-magali", name: "Magali", surname: "Roux", role: "Head of Product", email: "mroux@example.com", teamId: "team-app-system" },
@@ -308,7 +310,7 @@ export const INITIATIVES: Initiative[] = [
     themeId: "t-ai",
     strategicObjectiveId: "so-ai",
     scores: { demand: 1000, impact: 3, viability: 0.5, effort: 6 },
-    health: "at_risk",
+    health: "delayed",
     targetStart: "2026-05-15",
     targetEnd: "2026-08-31",
     deliveryLinks: [
@@ -571,7 +573,7 @@ export const OKRS: Okr[] = [
     okrClass: "committed",
     targetDate: "2026-06-30",
     achievement: null,
-    health: "at_risk",
+    health: "delayed",
     notes: "Waiting on legal sign-off for the audit trail retention policy.",
     archived: false,
     position: 2000,
@@ -673,7 +675,7 @@ export const ROADMAPS: Roadmap[] = [
     id: "roadmap-general",
     ownerId: null,
     name: "General Roadmap",
-    viewMode: "list",
+    viewMode: "board",
     filters: {},
     groupBy: "theme",
     zoom: "month",
@@ -683,6 +685,24 @@ export const ROADMAPS: Roadmap[] = [
     visibility: "private",
     editable: false,
     isSystem: true,
+    position: 0,
+  },
+];
+
+// ── OKR views (Sprint Heron Week 3) — demo/local-mode fallback so a
+// no-Supabase preview has one real example in the new "My OKRs" sidebar
+// list, mirroring ROADMAPS' one-row fallback above. Owned by OWNERS[0]
+// (u-magali), the same owner `currentOwner` falls back to in demo mode
+// (lib/store.tsx), so it shows up under "My OKRs," not "Shared with me,"
+// on first load. ──
+export const OKR_VIEWS: OkrView[] = [
+  {
+    id: "okr-view-committed-q1",
+    ownerId: "u-magali",
+    name: "Q1 committed OKRs",
+    filters: { ...EMPTY_OKR_FILTERS, quarters: [1] },
+    visibility: "private",
+    editable: false,
     position: 0,
   },
 ];

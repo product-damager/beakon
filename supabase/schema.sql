@@ -18,6 +18,14 @@ do $$ begin
   create type initiative_health as enum ('on_track', 'at_risk', 'blocked');
 exception when duplicate_object then null; end $$;
 
+-- "Delayed" added (docs/plans/okr-filters-archive-parity-and-delayed-health.md
+-- item 6) — additive-only, used by both initiatives.health and okrs.health.
+-- `add value if not exists` is the README's documented pattern for new enum
+-- values (supabase/README.md's "Golden rule for editing schema.sql"); no
+-- `do $$ ... exception` guard needed/possible for enum values themselves,
+-- `if not exists` already makes this a no-op on re-run.
+alter type initiative_health add value if not exists 'delayed';
+
 do $$ begin
   create type delivery_link_type as enum ('redmine', 'figma', 'spec', 'notion', 'other');
 exception when duplicate_object then null; end $$;
@@ -577,7 +585,7 @@ create table if not exists roadmaps (
   id text primary key,
   owner_id text references owners (id),        -- null only for the system row
   name text not null,
-  view_mode text not null default 'list' check (view_mode in ('list', 'board', 'timeline')),
+  view_mode text not null default 'board' check (view_mode in ('list', 'board', 'timeline')),
   filters jsonb not null default '{}'::jsonb,
   group_by text not null default 'theme' check (group_by in ('theme', 'team', 'owner')),
   zoom text not null default 'month' check (zoom in ('month', 'quarter', 'half')),
@@ -593,6 +601,19 @@ create table if not exists roadmaps (
   constraint roadmaps_system_owner_check
     check ((is_system and owner_id is null) or (not is_system and owner_id is not null))
 );
+
+-- The `create table if not exists` above only sets `view_mode`'s new
+-- 'board' default for a genuinely fresh install — on a populated database
+-- (beakon-preview/beakon-prod already have this table), `create table` is a
+-- no-op on re-run, so the column's *actual* stored default doesn't change
+-- without an explicit `alter column ... set default`, same pattern as
+-- `owners.name`'s default above. Idempotent (re-running `set default` to
+-- the same value is always safe) and, per the Golden rule, additive/
+-- low-risk: it only changes what a *future* insert with no explicit
+-- `view_mode` gets, not any existing row's already-stored value (the
+-- System Roadmap row's existing stored value needs the separate migration
+-- in supabase/migrations/, scoped to that one row).
+alter table roadmaps alter column view_mode set default 'board';
 
 drop trigger if exists roadmaps_touch_updated_at on roadmaps;
 create trigger roadmaps_touch_updated_at
@@ -735,4 +756,142 @@ revoke execute on function persist_roadmap(
 
 grant execute on function persist_roadmap(
   text, text, text, text, jsonb, text, text, numeric, text, jsonb, text, boolean, double precision
+) to authenticated;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- okr_views (Sprint Heron Week 3) — saved/shareable "My OKRs" filter
+-- views. Structurally parallel to `roadmaps`' owner/private/shared-view/
+-- shared-edit sharing model, but deliberately narrower: no view_mode/
+-- group_by/zoom/zoom_scale/density/timeline_sort/is_system columns, and
+-- owner_id is NEVER null — there is no OKR-view equivalent of the System
+-- Roadmap; the existing unfiltered "OKRs" nav entry already covers that
+-- role, unchanged. See
+-- docs/decisions/009-okr-saved-views-reverse-adr-008-deferral.md for the
+-- full rationale (including why this reverses, rather than extends, ADR
+-- 008 decision 3's deferral).
+-- ══════════════════════════════════════════════════════════════════════
+create table if not exists okr_views (
+  id text primary key,
+  owner_id text not null references owners (id),   -- never null, no System row for this entity
+  name text not null,
+  filters jsonb not null default '{}'::jsonb,        -- OkrFilters shape, see lib/okrFilters.ts
+  visibility text not null default 'private' check (visibility in ('private', 'shared')),
+  editable boolean not null default false,           -- meaningful only when visibility = 'shared'
+  position double precision not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists okr_views_touch_updated_at on okr_views;
+create trigger okr_views_touch_updated_at
+  before update on okr_views
+  for each row execute function touch_updated_at();
+
+alter table okr_views enable row level security;
+
+-- SELECT/DELETE/INSERT only — deliberately no UPDATE policy, mirroring
+-- `roadmaps` exactly. All writes to name/filters/visibility/editable/
+-- position route through persist_okr_view() below, which keeps the real
+-- owner vs. shared-editable authorization logic in the function body
+-- rather than a using/with check boolean (ADR 008 decision 1's reasoning,
+-- applied to this entity per ADR 009).
+do $$ begin
+  create policy "select own or shared okr views" on okr_views
+    for select to authenticated
+    using (owner_id = current_owner_id() or visibility = 'shared');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "delete own okr views" on okr_views
+    for delete to authenticated
+    using (owner_id = current_owner_id());
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "insert own okr views" on okr_views
+    for insert to authenticated
+    with check (owner_id = current_owner_id());
+exception when duplicate_object then null; end $$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- persist_okr_view(): the only path that updates an existing OkrView's
+-- fields. See supabase/migrations/2026-08-persist-okr-view-rpc.sql for
+-- the full rationale, matching persist_roadmap()'s documentation
+-- convention, and the manual test plan. No System-row branch (unlike
+-- persist_roadmap) — there is no immutable row to special-case for this
+-- entity.
+-- ══════════════════════════════════════════════════════════════════════
+create or replace function persist_okr_view(
+  p_id text,
+  p_owner_id text,
+  p_name text,
+  p_filters jsonb,
+  p_visibility text,
+  p_editable boolean,
+  p_position double precision
+) returns void
+language plpgsql
+security invoker
+as $$
+declare
+  v_existing okr_views%rowtype;
+  v_caller text := current_owner_id();
+begin
+  select * into v_existing from okr_views where id = p_id;
+
+  if not found then
+    -- Creating a brand-new OkrView. Every row is user-owned (no System row
+    -- for this entity), so the caller must be its own owner — mirrors the
+    -- "insert own okr views" RLS policy a direct table insert would also
+    -- enforce.
+    if v_caller is null or p_owner_id is distinct from v_caller then
+      raise exception 'persist_okr_view: cannot create an OkrView owned by someone other than the caller';
+    end if;
+
+    insert into okr_views (id, owner_id, name, filters, visibility, editable, position)
+    values (p_id, p_owner_id, p_name, p_filters, p_visibility, p_editable, p_position);
+    return;
+  end if;
+
+  if v_existing.owner_id = v_caller then
+    -- Full write, including reassigning owner_id/visibility/editable/name —
+    -- ownership transfer isn't getting a UI this week, but the RPC doesn't
+    -- structurally block it (same deliberate scope note as persist_roadmap,
+    -- ADR 009).
+    update okr_views set
+      owner_id   = p_owner_id,
+      name       = p_name,
+      filters    = p_filters,
+      visibility = p_visibility,
+      editable   = p_editable,
+      position   = p_position
+    where id = p_id;
+    return;
+  end if;
+
+  if v_existing.visibility = 'shared' and v_existing.editable then
+    -- Deliberate silent-ignore, not an error: a shared-editable non-owner
+    -- can only ever change the two view-shaping fields an OkrView actually
+    -- has — filters/name. owner_id/visibility/editable/position stay
+    -- pinned to whatever is already in the DB row regardless of what the
+    -- caller passed for them — sharing settings are always owner-only,
+    -- never delegable to an editor (same reasoning as persist_roadmap,
+    -- ADR 008 decision 1, applied here per ADR 009).
+    update okr_views set
+      name    = p_name,
+      filters = p_filters
+    where id = p_id;
+    return;
+  end if;
+
+  raise exception 'persist_okr_view: caller is not authorized to update OkrView %', p_id;
+end;
+$$;
+
+revoke execute on function persist_okr_view(
+  text, text, text, jsonb, text, boolean, double precision
+) from public;
+
+grant execute on function persist_okr_view(
+  text, text, text, jsonb, text, boolean, double precision
 ) to authenticated;

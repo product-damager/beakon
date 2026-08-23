@@ -13,6 +13,7 @@ import {
 import {
   BUSINESS_UNITS,
   INITIATIVES,
+  OKR_VIEWS,
   OWNERS,
   ROADMAPS,
   STRATEGIC_OBJECTIVES,
@@ -20,12 +21,15 @@ import {
   THEMES,
 } from "./seed";
 import { EMPTY_FILTERS, normalizeFilters, type Filters } from "./filters";
+import type { OkrFilters } from "./okrFilters";
 import { ZOOM_SCALE_MAX, ZOOM_SCALE_MIN } from "./types";
 import type {
   BusinessUnit,
   Density,
   GroupBy,
   Initiative,
+  OkrView,
+  OkrViewVisibility,
   Owner,
   Roadmap,
   RoadmapVisibility,
@@ -42,11 +46,13 @@ import { isSupabaseConfigured } from "./supabase";
 import { useAuth } from "./auth";
 import {
   createTheme,
+  deleteOkrView as deleteOkrViewRow,
   deleteRoadmap as deleteRoadmapRow,
   fetchWorkspace,
   persistArchive,
   persistInitiative,
   persistMove,
+  persistOkrView,
   persistOwner,
   persistRoadmap,
   persistSchedule,
@@ -56,11 +62,15 @@ import {
 /** The one always-present, non-deletable Roadmap row (see ADR 008 decision 2). */
 const GENERAL_ROADMAP_ID = "roadmap-general";
 
-/** Debounce window for autosaving live filter/view-mode edits to the active
- * Roadmap — long enough that a burst of clicks (or fast typing in the search
- * box) collapses into one write, short enough that switching away/reloading
- * soon after an edit still reliably persists it. */
-const ROADMAP_AUTOSAVE_DEBOUNCE_MS = 500;
+/**
+ * Gates the `beforeunload` "unsaved changes" browser prompt for a dirty
+ * Roadmap (Sprint Heron Week 3, ADR 010 §5.4 / plan open question 2,
+ * resolved by the PM: build it, ship disabled). The handler, the dirty-
+ * check it reads (`roadmapDirty` below), and the listener/cleanup are all
+ * live — flipping this to `true` is the entire re-enable path, no further
+ * build work. Must be `false` when this ships.
+ */
+export const ROADMAP_WARN_ON_UNLOAD = false;
 
 /** An ephemeral, auto-dismissing notification (success confirmations, Undo). */
 export interface Toast {
@@ -82,6 +92,143 @@ function between(left: number | null, right: number | null): number {
   if (left === null) return (right as number) - 1000;
   if (right === null) return left + 1000;
   return (left + right) / 2;
+}
+
+// ── Authorization guards (pure, exported for unit tests — plan §7.5) ───────
+// Mirrors persist_roadmap()'s / persist_okr_view()'s own RPC authorization
+// shape: the owner always wins; a Shared+editable non-owner may write the
+// "view-shaping" fields the RPC actually lets them touch (Roadmap: filters/
+// groupBy/viewMode/timelineSort/zoom/zoomScale/density; OkrView: filters/
+// name) but never rename-adjacent/sharing/delete fields — those stay
+// owner-only even when `editable` is true, regardless of what a client sends
+// (both RPCs silently pin owner_id/visibility/editable/position to their
+// current DB values for a non-owner caller). `canPersistRoadmap`/
+// `canPersistOkrView` cover the first group; `isRoadmapOwner`/
+// `isOkrViewOwner` cover the second — see QA-REPORT-HERON-W2-T47.md finding
+// #1, which is what these owner-only guards close for Roadmap (and avoid
+// reproducing for OkrView from day one, per plan §3.1).
+
+/** True when `currentOwner` may write Roadmap's filters/groupBy/viewMode/
+ * timelineSort/zoom/zoomScale/density — owner, or Shared+editable. Never
+ * true for the System Roadmap (ADR 008 decision 2). */
+export function canPersistRoadmap(target: Roadmap, currentOwner: Owner | undefined): boolean {
+  if (target.isSystem) return false;
+  // An `undefined` currentOwner never matches, regardless of `target.ownerId`
+  // (Sprint Heron Week 3c, QA-REPORT-HERON-W3.md finding #6). Previously
+  // `target.ownerId === (currentOwner?.id ?? null)` let an `ownerId: null`
+  // Roadmap (a caller with no matched `owners` row created one, pre-#79's
+  // guard) collapse-match an `undefined` currentOwner — both sides read as
+  // `null` — which is exactly what rendered a dead-end "Update Roadmap" for
+  // that caller: every write it triggers is rejected server-side.
+  const isOwner = currentOwner !== undefined && target.ownerId === currentOwner.id;
+  return isOwner || (target.visibility === "shared" && target.editable);
+}
+
+/** Owner-only — rename/visibility/delete are never delegable to a
+ * Shared+editable participant (persist_roadmap()'s own doc comment; the
+ * System row has no owner at all, so it's never true either). Requires
+ * `currentOwner !== undefined`, same shape as `canPersistRoadmap` above —
+ * this guard had the same `ownerId: null` collapse-match bug until
+ * QA-REPORT-HERON-W3C.md finding N2 (a second QA pass caught that #6 only
+ * tightened `canPersistRoadmap` and missed this sibling, even though it
+ * gates the exact rename/visibility/delete/share affordances #6 was about). */
+export function isRoadmapOwner(target: Roadmap, currentOwner: Owner | undefined): boolean {
+  return !target.isSystem && currentOwner !== undefined && target.ownerId === currentOwner.id;
+}
+
+/** True when `currentOwner` may write an OkrView's `filters`/`name` — owner,
+ * or Shared+editable (persist_okr_view()'s own doc comment). */
+export function canPersistOkrView(target: OkrView, currentOwner: Owner | undefined): boolean {
+  const isOwner = target.ownerId === (currentOwner?.id ?? null);
+  return isOwner || (target.visibility === "shared" && target.editable);
+}
+
+/** Owner-only — visibility/delete are never delegable to a Shared+editable
+ * participant (persist_okr_view()'s own doc comment). Unlike
+ * `isRoadmapOwner`, this is NOT given the `currentOwner !== undefined`
+ * tightening — `okr_views.owner_id` is `not null` by schema, so an
+ * `ownerId: null` + `currentOwner: undefined` collapse-match can never
+ * happen here. Don't "fix" this for symmetry alone. */
+export function isOkrViewOwner(target: OkrView, currentOwner: Owner | undefined): boolean {
+  return target.ownerId === (currentOwner?.id ?? null);
+}
+
+// ── Dirty-check comparisons (pure, exported for unit tests — plan §7.5) ─────
+// Structural compares over a small, bounded field set — deliberately not a
+// generic deep-equal utility (ADR 010 / plan §5.2, §3.1).
+
+/** Order-independent compare for a multi-select filter array (e.g. `owners`,
+ * `statuses`) — two selections with the same members in a different order
+ * (an artifact of click order, not a real edit) should read as equal. */
+function sameStringSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const as = [...a].sort();
+  const bs = [...b].sort();
+  return as.every((v, i) => v === bs[i]);
+}
+
+function filtersEqual(a: Filters, b: Filters): boolean {
+  return (
+    a.search === b.search &&
+    a.showDone === b.showDone &&
+    a.ownersMode === b.ownersMode &&
+    a.teamsMode === b.teamsMode &&
+    a.themesMode === b.themesMode &&
+    a.statusesMode === b.statusesMode &&
+    a.visibilityMode === b.visibilityMode &&
+    sameStringSet(a.owners, b.owners) &&
+    sameStringSet(a.teams, b.teams) &&
+    sameStringSet(a.themes, b.themes) &&
+    sameStringSet(a.statuses, b.statuses) &&
+    sameStringSet(a.visibility, b.visibility)
+  );
+}
+
+/**
+ * Structural compare, Roadmap's three remaining definitional fields
+ * (originally ADR 010's four; `viewMode` moved to the personal-rendering-
+ * preference/autosave bucket alongside zoom/zoomScale/density — see the
+ * viewMode-autosave `useEffect` below): live in-memory values vs. the active
+ * Roadmap's own persisted row. `filters` is normalized on both sides first
+ * (mirrors how it's loaded/applied elsewhere) so a malformed/legacy stored
+ * shape doesn't read as spuriously "dirty."
+ */
+export function roadmapFieldsEqual(
+  live: { filters: Filters; groupBy: GroupBy; timelineSort: TimelineSort },
+  target: Roadmap
+): boolean {
+  if (live.groupBy !== target.groupBy) return false;
+  const targetSort = target.timelineSort ?? { key: "start", dir: 1 };
+  if (live.timelineSort.key !== targetSort.key || live.timelineSort.dir !== targetSort.dir) {
+    return false;
+  }
+  return filtersEqual(normalizeFilters(live.filters), normalizeFilters(target.filters));
+}
+
+/** Order-insensitive array equality for OkrFilters' five multi-select fields (below). */
+function sameValues<T>(a: T[], b: T[]): boolean {
+  if (a.length !== b.length) return false;
+  const bSorted = [...b].sort();
+  return [...a].sort().every((v, i) => v === bSorted[i]);
+}
+
+/**
+ * Structural compare, OkrView's filter fields (ADR 009). These became arrays
+ * (docs/plans/okr-filters-archive-parity-and-delayed-health.md T8 —
+ * multi-select), so this is no longer a plain primitive compare; order
+ * shouldn't matter for "is this the same filter set" (a MultiSelect's
+ * internal selection order is an implementation detail, not a meaningful
+ * difference), hence `sameValues` rather than `===`/array-identity.
+ * `governanceStatuses` was dropped entirely as a filter dimension (PM
+ * request, docs/plans/qa-followup-f1-f2-fp1.md "FP1") — no longer compared.
+ */
+export function okrFiltersEqual(a: OkrFilters, b: OkrFilters): boolean {
+  return (
+    sameValues(a.quarters, b.quarters) &&
+    sameValues(a.teamIds, b.teamIds) &&
+    sameValues(a.businessUnitIds, b.businessUnitIds) &&
+    sameValues(a.strategicObjectiveIds, b.strategicObjectiveIds)
+  );
 }
 
 interface RoadmapState {
@@ -109,13 +256,21 @@ interface RoadmapState {
   /** The active Roadmap object, derived from `roadmaps`/`activeRoadmapId`. */
   activeRoadmap: Roadmap;
   /**
-   * Switch the active Roadmap: loads its filters/groupBy/zoom/zoomScale/
-   * density/timelineSort/viewMode into this provider's live state (the same
+   * Switch the active Roadmap: loads its filters/groupBy/viewMode/zoom/
+   * zoomScale/density/timelineSort into this provider's live state (the same
    * "apply a saved config via existing setters" mechanism used everywhere
-   * else in this provider).
+   * else in this provider). Does not itself guard against discarding a
+   * dirty outgoing Roadmap — callers that can swap `activeRoadmapId` while
+   * the outgoing Roadmap may be dirty (sidebar row clicks) are responsible
+   * for checking `roadmapDirty`/`canPersistRoadmap` first and offering the
+   * discard-confirmation dialog (plan §5.4, `RoadmapNav.tsx`).
    */
   setActiveRoadmap: (id: string) => void;
-  /** Switch the active Roadmap's view mode (List/Board/Timeline). */
+  /** Switch the *live* view mode only (List/Board/Timeline) — a personal
+   * rendering preference (like zoom/zoomScale/density), not one of the
+   * definitional fields; autosaves silently via the zoom/density effect
+   * below rather than requiring an explicit `updateRoadmap()`/
+   * `saveRoadmapAsNew()` save. */
   setRoadmapViewMode: (mode: ViewKey) => void;
   /** Create a new, owned Roadmap; makes it active. */
   createRoadmap: (name: string) => void;
@@ -127,6 +282,65 @@ interface RoadmapState {
   /** Delete a user-created Roadmap. Falls back to the System Roadmap if it was active. */
   deleteRoadmap: (id: string) => void;
   getRoadmap: (id: string) => Roadmap | undefined;
+  /**
+   * True when the live filters/groupBy/timelineSort differ from
+   * the active Roadmap's own persisted row (ADR 010; `viewMode` no longer
+   * part of this compare — it autosaves like zoom/zoomScale/density) —
+   * drives FilterBar's three-state save cluster and the discard-confirmation
+   * dialog. Always `false` for the System Roadmap's own fields in practice
+   * (nothing ever persists them, so nothing to be "dirty" against in a way
+   * that matters, though the raw compare still runs the same way).
+   */
+  roadmapDirty: boolean;
+  /** Whether the signed-in caller may persist to `target` — owner, or
+   * Shared+editable. Never true for the System Roadmap. */
+  canPersistRoadmap: (target: Roadmap) => boolean;
+  /** Persist the active Roadmap's live filters/groupBy/timelineSort
+   * onto its own row — the explicit "Update Roadmap" action (ADR 010).
+   * `viewMode` is included in the payload too (harmless — it's the same live
+   * value the autosave effect would also write) but isn't part of what makes
+   * this a no-op-vs-needed decision. No-op if the caller can't persist to the
+   * active Roadmap. */
+  updateRoadmap: () => void;
+  /** Create a new, owned Roadmap seeded from the *live* filters/groupBy/
+   * timelineSort (not fresh defaults) — the explicit "Save as new
+   * Roadmap…" action (ADR 010). `viewMode` is carried over too, same
+   * harmless-inclusion note as `updateRoadmap`. Makes the new Roadmap
+   * active. */
+  saveRoadmapAsNew: (name: string) => void;
+
+  /**
+   * Saved/shareable "My OKRs" filter views (Sprint Heron Week 3, ADR 009).
+   * Explicit-save, sticky-identity/non-sticky-content model (plan §3.1):
+   * `activeOkrViewId` tracks *which* view is loaded; it does not auto-write
+   * back live filter edits.
+   */
+  okrViews: OkrView[];
+  /** Which OkrView (if any) is currently "loaded" on `/okrs`; `null` = plain browsing. */
+  activeOkrViewId: string | null;
+  /** The active OkrView object, or `undefined` if none is loaded. */
+  activeOkrView: OkrView | undefined;
+  getOkrView: (id: string) => OkrView | undefined;
+  /** Sets which OkrView's filters are "loaded" — `null` clears back to plain
+   * browsing. Does not itself apply the view's filters into any live state;
+   * callers (the `/okrs` page) react to the id change and load
+   * `getOkrView(id)?.filters` into their own local filter state. */
+  applyOkrView: (id: string | null) => void;
+  /** Create a new, owned OkrView from `filters`; makes it active. */
+  createOkrView: (name: string, filters: OkrFilters) => void;
+  renameOkrView: (id: string, name: string) => void;
+  setOkrViewVisibility: (
+    id: string,
+    v: { visibility: OkrViewVisibility; editable: boolean }
+  ) => void;
+  /** Persist `filters` onto the active OkrView's row — the explicit "Update
+   * '<name>'" action. No-op if there's no active view or the caller can't
+   * persist to it. */
+  updateOkrView: (filters: OkrFilters) => void;
+  deleteOkrView: (id: string) => void;
+  /** Whether the signed-in caller may persist filters/name to `target` —
+   * owner, or Shared+editable. */
+  canPersistOkrView: (target: OkrView) => boolean;
 
   /** True while the initial Supabase load is in flight. */
   loading: boolean;
@@ -144,6 +358,8 @@ interface RoadmapState {
 
   filters: Filters;
   groupBy: GroupBy;
+  /** Live view mode (List/Board/Timeline) — see `setRoadmapViewMode` above. */
+  viewMode: ViewKey;
   zoom: Zoom;
   /** Continuous zoom multiplier on top of `zoom` (clamped to ZOOM_SCALE_MIN..MAX). */
   zoomScale: number;
@@ -210,20 +426,27 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
     isSupabaseConfigured ? [] : STRATEGIC_OBJECTIVES
   );
   const [roadmaps, setRoadmaps] = useState<Roadmap[]>(() => (isSupabaseConfigured ? [] : ROADMAPS));
+  const [okrViews, setOkrViews] = useState<OkrView[]>(() => (isSupabaseConfigured ? [] : OKR_VIEWS));
   const [activeRoadmapId, setActiveRoadmapId] = useState<string>(GENERAL_ROADMAP_ID);
+  const [activeOkrViewId, setActiveOkrViewId] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(isSupabaseConfigured);
   const [error, setError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  // filters/groupBy/zoom/zoomScale/density/timelineSort are the *live*
-  // in-memory state of whichever Roadmap is active (Sprint Heron Week 2) —
-  // switching `activeRoadmapId` loads that Roadmap's saved fields into these
-  // via the same setters below; editing them while a non-system Roadmap is
-  // active autosaves back to it (see the debounced effect below). Their
-  // initial values intentionally match the seeded System Roadmap's own
-  // defaults, so the very first render needs no separate "load" step.
+  // filters/groupBy/viewMode/zoom/zoomScale/density/timelineSort are the
+  // *live* in-memory state of whichever Roadmap is active (Sprint Heron Week
+  // 2) — switching `activeRoadmapId` loads that Roadmap's saved fields into
+  // these via the same setters below. Per ADR 010 (Sprint Heron Week 3):
+  // filters/groupBy/timelineSort are explicit-save (local-only until
+  // `updateRoadmap()`/`saveRoadmapAsNew()` commits them); `viewMode` was
+  // originally in that group too but has since moved to the
+  // personal-rendering-preference bucket alongside zoom/zoomScale/density —
+  // all four of those now autosave, unconditionally, below. Initial values
+  // intentionally match the seeded System Roadmap's own defaults, so the
+  // very first render needs no separate "load" step.
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [groupBy, setGroupBy] = useState<GroupBy>("theme");
+  const [viewMode, setViewModeRaw] = useState<ViewKey>("board");
   const [zoom, setZoom] = useState<Zoom>("month");
   const [zoomScale, setZoomScaleRaw] = useState(1);
   const [density, setDensity] = useState<Density>("comfortable");
@@ -250,6 +473,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
         setBusinessUnits(w.businessUnits);
         setStrategicObjectives(w.strategicObjectives);
         setRoadmaps(w.roadmaps);
+        setOkrViews(w.okrViews);
       })
       .catch((e: unknown) => {
         if (!active) return;
@@ -310,6 +534,14 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
     roadmapsRef.current = roadmaps;
   }, [roadmaps]);
 
+  // Same pattern for `okrViews` — createOkrView's position calc reads the
+  // latest list without needing to depend on (and re-create on every
+  // change of) the array itself.
+  const okrViewsRef = useRef<OkrView[]>(okrViews);
+  useEffect(() => {
+    okrViewsRef.current = okrViews;
+  }, [okrViews]);
+
   // ── Roadmaps (Sprint Heron Week 2) ──────────────────────────────────────
   const getRoadmap = useCallback((id: string) => roadmaps.find((r) => r.id === id), [roadmaps]);
 
@@ -323,7 +555,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
         id: GENERAL_ROADMAP_ID,
         ownerId: null,
         name: "General Roadmap",
-        viewMode: "list",
+        viewMode: "board",
         filters: {},
         groupBy: "theme",
         zoom: "month",
@@ -338,161 +570,129 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
     );
   }, [roadmaps, activeRoadmapId, getRoadmap]);
 
-  // Whether the current signed-in caller is allowed to persist changes to a
-  // given Roadmap — mirrors persist_roadmap()'s own authorization shape
-  // (ADR 008 decision 1) and generalizes the System-roadmap-never-persists
-  // rule (decision 2) to the Shared+View-only case: neither the owner nor a
-  // Shared+editable participant, so any write would be a no-op locally and
-  // a rejection server-side (QA-REPORT-HERON-W2.md finding #2 / sprint T47).
-  const canPersistRoadmap = useCallback(
-    (target: Roadmap) => {
-      if (target.isSystem) return false;
-      const isOwner = target.ownerId === (currentOwner?.id ?? null);
-      return isOwner || (target.visibility === "shared" && target.editable);
-    },
-    [currentOwner]
+  // True when the live definitional fields (filters/groupBy/timelineSort;
+  // `viewMode` no longer counted here — see the autosave effect below)
+  // diverge from the active Roadmap's own persisted row (ADR 010) — drives
+  // FilterBar's three-state save cluster and the discard-confirmation
+  // dialog (RoadmapNav.tsx).
+  const roadmapDirty = useMemo(
+    () => !roadmapFieldsEqual({ filters, groupBy, timelineSort }, activeRoadmap),
+    [filters, groupBy, timelineSort, activeRoadmap]
   );
 
-  // Skips the very next autosave-effect run — set right before we load a
-  // Roadmap's saved fields into live state (switching active Roadmap,
-  // creating one, or falling back after a delete), so re-applying that same
-  // Roadmap's own values back onto itself doesn't trigger a redundant write.
-  const skipNextAutosaveRef = useRef(false);
-
-  // Holds the id of the debounced autosave effect's currently pending
-  // `setTimeout`, if any — lives outside the effect itself so a Roadmap
-  // switch (`setActiveRoadmap`/`createRoadmap`, both of which call
-  // `applyRoadmapState` and so overwrite the exact fields the debounce is
-  // about to save) can flush it synchronously first instead of losing the
-  // edit when the effect's own cleanup cancels it (QA-REPORT-HERON-W2.md
-  // finding #1 / sprint T47).
-  const pendingAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   // Load a Roadmap's saved fields into this provider's live state — the
-  // mechanism `activeRoadmapId` switches drive. `viewMode` isn't part of the
-  // live filters/groupBy/etc. bundle above (it's read directly off
-  // `activeRoadmap.viewMode` by consumers), so it's not applied here.
+  // mechanism `activeRoadmapId` switches drive.
   const applyRoadmapState = useCallback((r: Roadmap) => {
-    skipNextAutosaveRef.current = true;
     setFilters(normalizeFilters(r.filters));
     setGroupBy(r.groupBy);
+    setViewModeRaw(r.viewMode);
     setZoom(r.zoom);
     setZoomScaleRaw(r.zoomScale);
     setDensity(r.density);
     setTimelineSort(r.timelineSort ?? { key: "start", dir: 1 });
   }, []);
 
-  // Synchronously commits whatever the debounced autosave effect has
-  // pending (if anything) for the *currently* active Roadmap, right before
-  // that Roadmap gets swapped out from under it. Safe/no-op to call when
-  // nothing is pending (a plain Roadmap switch with no unsaved edit) — it
-  // only acts when `pendingAutosaveTimerRef` is actually set, so switching
-  // Roadmaps never fires an extra write beyond what the debounce would have
-  // sent anyway.
-  const flushPendingRoadmapAutosave = useCallback(() => {
-    if (pendingAutosaveTimerRef.current === null) return;
-    clearTimeout(pendingAutosaveTimerRef.current);
-    pendingAutosaveTimerRef.current = null;
-    setRoadmaps((prev) => {
-      const target = prev.find((r) => r.id === activeRoadmapId);
-      if (!target) return prev;
-      // Same guard as the debounce callback below (and generalized the same
-      // way — not just System, but any Roadmap this caller can't persist
-      // to): the live edit is real and stays visible locally for the rest
-      // of this session, it just never reaches `roadmaps` state or the RPC.
-      if (!canPersistRoadmap(target)) return prev;
-      const updated: Roadmap = {
-        ...target,
-        filters: filters as unknown as Record<string, unknown>,
-        groupBy,
-        zoom,
-        zoomScale,
-        density,
-        timelineSort,
-      };
-      if (isSupabaseConfigured) {
-        queueMicrotask(() =>
-          persistRoadmap(updated).catch((e) => reportError(e, "save roadmap"))
-        );
-      }
-      return prev.map((r) => (r.id === target.id ? updated : r));
-    });
-  }, [activeRoadmapId, filters, groupBy, zoom, zoomScale, density, timelineSort, canPersistRoadmap, reportError]);
-
+  // Plain, immediate switch — no discard-confirmation of its own (ADR 010 /
+  // plan §5.4): callers that can swap `activeRoadmapId` while the outgoing
+  // Roadmap may be dirty (sidebar row clicks, RoadmapNav.tsx) check
+  // `roadmapDirty`/`canPersistRoadmap` themselves first and offer the
+  // discard-confirmation dialog before calling this.
   const setActiveRoadmap = useCallback(
     (id: string) => {
-      // Flush the outgoing Roadmap's pending edit (if any) before
-      // `applyRoadmapState` overwrites the exact same live fields — see
-      // `flushPendingRoadmapAutosave`'s comment and QA-REPORT-HERON-W2.md
-      // finding #1 / sprint T47.
-      flushPendingRoadmapAutosave();
       const target = getRoadmap(id);
       setActiveRoadmapId(id);
       if (target) applyRoadmapState(target);
     },
-    [getRoadmap, applyRoadmapState, flushPendingRoadmapAutosave]
+    [getRoadmap, applyRoadmapState]
   );
 
-  const setRoadmapViewMode = useCallback(
-    (mode: ViewKey) => {
-      setRoadmaps((prev) => {
-        const target = prev.find((r) => r.id === activeRoadmapId);
-        if (!target) return prev;
-        const updated: Roadmap = { ...target, viewMode: mode };
-        // ADR 008 decision 2 (System Roadmap) generalized to any Roadmap
-        // this caller can't persist to — not owner, and not Shared+editable
-        // (`canPersistRoadmap`; QA-REPORT-HERON-W2.md finding #2 / sprint
-        // T47). One person clicking "Board" on a Roadmap they don't own/
-        // can't edit would otherwise flip the view for everyone else, since
-        // it's someone else's row. `viewMode` has no separate live state the
-        // way filters/zoom/etc. do (activeRoadmap.viewMode, derived from
-        // this array, is the only source of truth consumers read) — so
-        // local state must still update here for the click to have any
-        // visible effect this session; only the persistRoadmap call is
-        // skipped for this row.
-        if (canPersistRoadmap(updated) && isSupabaseConfigured) {
-          queueMicrotask(() => persistRoadmap(updated).catch((e) => reportError(e, "save view")));
-        }
-        return prev.map((r) => (r.id === target.id ? updated : r));
-      });
-    },
-    [activeRoadmapId, reportError, canPersistRoadmap]
-  );
+  // Sets the *live* view mode only — a personal rendering preference (like
+  // zoom/zoomScale/density), not one of the definitional fields. This no
+  // longer touches `roadmaps` state or calls `persistRoadmap()` directly;
+  // the autosave effect below (which now includes `viewMode`) reacts to the
+  // live state change and persists it silently, same as zoom/density.
+  const setRoadmapViewMode = useCallback((mode: ViewKey) => {
+    setViewModeRaw(mode);
+  }, []);
 
-  // Debounced autosave: whenever the live filters/groupBy/zoom/zoomScale/
-  // density/timelineSort bundle changes, write it back to whichever Roadmap
-  // is active — mirroring saveInitiative/saveOkr's optimistic-update-then-
-  // persist shape, batched behind a short debounce so a burst of edits (or
-  // fast typing in the search box) collapses into one write. The pending
-  // timer is tracked in `pendingAutosaveTimerRef` (not just a local `timer`
-  // const) specifically so `flushPendingRoadmapAutosave` can commit it early
-  // — from `setActiveRoadmap`/`createRoadmap` — instead of this effect's own
-  // cleanup silently cancelling it out from under an in-flight Roadmap
-  // switch (QA-REPORT-HERON-W2.md finding #1 / sprint T47). The actual
-  // commit logic itself lives in `flushPendingRoadmapAutosave` so both call
-  // sites (this timeout and an early flush) share one guard.
+  // Narrowed autosave (originally ADR 010's zoom/zoomScale/density-only
+  // effect; `viewMode` was moved in here from the definitional-field/
+  // explicit-save group, since it's really the same kind of "personal
+  // rendering preference" as the other three): these four persist on
+  // change, unconditionally, as personal rendering prefs — no timer/skip-ref
+  // dance needed (unlike the old six-field debounce this replaces), since
+  // there's nothing time-sensitive to lose on a Roadmap switch once the
+  // remaining definitional fields (filters/groupBy/timelineSort) aren't part
+  // of this effect: switching just reads the new Roadmap's own fresh zoom/
+  // zoomScale/density/viewMode via `applyRoadmapState`, and the equality
+  // guard below means re-applying a Roadmap's own values back onto itself is
+  // a no-op, not a redundant write. Known, accepted consequence (same as
+  // zoom/density already had): `viewMode` lives on the Roadmap *row*, not
+  // per-viewer, so on a Shared+editable Roadmap one editor's view-mode
+  // switch autosaves onto the shared row and becomes the next viewer's
+  // landing view too — not a new risk, the same tradeoff ADR 010 already
+  // accepted for zoom. This effect genuinely syncs local rendering-pref
+  // state out to `roadmaps` state + Supabase (an external system), not
+  // derivable render state, so the setState-in-effect rule is suppressed
+  // here the same way app/(workspace)/okrs/page.tsx's own external-sync
+  // effects do.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (skipNextAutosaveRef.current) {
-      skipNextAutosaveRef.current = false;
+    setRoadmaps((prev) => {
+      const target = prev.find((r) => r.id === activeRoadmapId);
+      if (!target) return prev;
+      if (
+        target.zoom === zoom &&
+        target.zoomScale === zoomScale &&
+        target.density === density &&
+        target.viewMode === viewMode
+      ) {
+        return prev;
+      }
+      if (!canPersistRoadmap(target, currentOwner)) return prev;
+      const updated: Roadmap = { ...target, zoom, zoomScale, density, viewMode };
+      if (isSupabaseConfigured) {
+        queueMicrotask(() => persistRoadmap(updated).catch((e) => reportError(e, "save view")));
+      }
+      return prev.map((r) => (r.id === target.id ? updated : r));
+    });
+  }, [activeRoadmapId, zoom, zoomScale, density, viewMode, currentOwner, reportError]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // Gated behind ROADMAP_WARN_ON_UNLOAD (default false, see its own doc
+  // comment above) — fires the native browser "unsaved changes" prompt only
+  // while a definitional field is genuinely dirty *and* this caller could
+  // actually do something about it. The `canPersistRoadmap` check (added
+  // Sprint Heron Week 3c, QA-REPORT-HERON-W3.md finding #5) matches §5.4's
+  // own "never triggers for a caller who can't persist" principle for the
+  // in-app discard dialog — without it, the System Roadmap (every user's
+  // default landing spot) and a Shared+View-only visitor could both be
+  // "dirty" with no save affordance at all, and this would be the only
+  // warning, about something the user has no way to act on.
+  useEffect(() => {
+    if (!ROADMAP_WARN_ON_UNLOAD || !roadmapDirty || !canPersistRoadmap(activeRoadmap, currentOwner)) {
       return;
     }
-    pendingAutosaveTimerRef.current = setTimeout(
-      flushPendingRoadmapAutosave,
-      ROADMAP_AUTOSAVE_DEBOUNCE_MS
-    );
-    return () => {
-      if (pendingAutosaveTimerRef.current !== null) {
-        clearTimeout(pendingAutosaveTimerRef.current);
-        pendingAutosaveTimerRef.current = null;
-      }
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
     };
-  }, [filters, groupBy, zoom, zoomScale, density, timelineSort, flushPendingRoadmapAutosave]);
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [roadmapDirty, activeRoadmap, currentOwner]);
 
   const createRoadmap = useCallback(
     (name: string) => {
       const trimmed = name.trim();
       if (!trimmed) return;
       const ownerId = currentOwner?.id ?? null;
+      // No matched `owners` row to attribute this Roadmap to — mirrors
+      // createOkrView's existing guard (Sprint Heron Week 3c,
+      // QA-REPORT-HERON-W3.md finding #6). Without this, an `ownerId: null`
+      // Roadmap gets created that (pre-#79's canPersistRoadmap tightening
+      // too) rendered a dead-end "Update Roadmap" cluster for a caller whose
+      // every server write is rejected.
+      if (!ownerId) return;
       const myPositions = roadmapsRef.current
         .filter((r) => !r.isSystem && r.ownerId === ownerId)
         .map((r) => r.position ?? 0);
@@ -500,7 +700,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
         id: `roadmap-${Math.random().toString(36).slice(2, 9)}`,
         ownerId,
         name: trimmed,
-        viewMode: "list",
+        viewMode: "board",
         filters: {},
         groupBy: "theme",
         zoom: "month",
@@ -514,13 +714,6 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
         // sidebar ordering) — one step below the lowest existing position.
         position: myPositions.length ? Math.min(...myPositions) - 1 : 0,
       };
-      // Flush the *previous* active Roadmap's pending edit (if any) before
-      // switching away from it below — same race as setActiveRoadmap (QA-
-      // REPORT-HERON-W2.md finding #1 / sprint T47): this function also
-      // calls applyRoadmapState, which would otherwise overwrite the live
-      // fields the debounced autosave is about to save for the outgoing
-      // Roadmap.
-      flushPendingRoadmapAutosave();
       setRoadmaps((prev) => [...prev, next]);
       if (isSupabaseConfigured) {
         queueMicrotask(() => persistRoadmap(next).catch((e) => reportError(e, "create roadmap")));
@@ -531,11 +724,79 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       // point (setRoadmaps above is async) — looking it up here would find
       // nothing and silently skip loading the new Roadmap's fields, leaving
       // whatever filters were live on the *previous* Roadmap to leak onto
-      // this brand-new one once the autosave effect fires.
+      // this brand-new one.
       setActiveRoadmapId(next.id);
       applyRoadmapState(next);
     },
-    [reportError, applyRoadmapState, currentOwner, flushPendingRoadmapAutosave]
+    [reportError, applyRoadmapState, currentOwner]
+  );
+
+  // Persist the active Roadmap's live filters/groupBy/timelineSort onto its
+  // own row — "Update Roadmap" (ADR 010). `viewMode` is included in the
+  // payload too (harmless — it's the same live value the autosave effect
+  // would also write) but, like zoom/zoomScale/density, isn't touched here
+  // as a *dirty-tracked* field; it already autosaves on its own.
+  const updateRoadmap = useCallback(() => {
+    setRoadmaps((prev) => {
+      const target = prev.find((r) => r.id === activeRoadmapId);
+      if (!target || !canPersistRoadmap(target, currentOwner)) return prev;
+      const updated: Roadmap = {
+        ...target,
+        filters: filters as unknown as Record<string, unknown>,
+        groupBy,
+        viewMode,
+        timelineSort,
+      };
+      if (isSupabaseConfigured) {
+        queueMicrotask(() =>
+          persistRoadmap(updated).catch((e) => reportError(e, "update roadmap"))
+        );
+      }
+      return prev.map((r) => (r.id === target.id ? updated : r));
+    });
+  }, [activeRoadmapId, filters, groupBy, viewMode, timelineSort, currentOwner, reportError]);
+
+  // Create a new, owned Roadmap seeded from the *live* filters/groupBy/
+  // timelineSort/viewMode values — "Save as new Roadmap…" (ADR 010). Mirrors
+  // createRoadmap, but zoom/zoomScale/density still start at fresh defaults
+  // (personal rendering prefs, not part of what's being "saved as new"
+  // here) — `viewMode` carries over from live state anyway since it's the
+  // same value the autosave effect would write moments later.
+  const saveRoadmapAsNew = useCallback(
+    (name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      const ownerId = currentOwner?.id ?? null;
+      // Same guard as createRoadmap above (finding #6) — no matched owner,
+      // no Roadmap.
+      if (!ownerId) return;
+      const myPositions = roadmapsRef.current
+        .filter((r) => !r.isSystem && r.ownerId === ownerId)
+        .map((r) => r.position ?? 0);
+      const next: Roadmap = {
+        id: `roadmap-${Math.random().toString(36).slice(2, 9)}`,
+        ownerId,
+        name: trimmed,
+        viewMode,
+        filters: filters as unknown as Record<string, unknown>,
+        groupBy,
+        zoom: "month",
+        zoomScale: 1,
+        density: "comfortable",
+        timelineSort,
+        visibility: "private",
+        editable: false,
+        isSystem: false,
+        position: myPositions.length ? Math.min(...myPositions) - 1 : 0,
+      };
+      setRoadmaps((prev) => [...prev, next]);
+      if (isSupabaseConfigured) {
+        queueMicrotask(() => persistRoadmap(next).catch((e) => reportError(e, "create roadmap")));
+      }
+      setActiveRoadmapId(next.id);
+      applyRoadmapState(next);
+    },
+    [currentOwner, filters, groupBy, viewMode, timelineSort, applyRoadmapState, reportError]
   );
 
   const renameRoadmap = useCallback(
@@ -544,7 +805,11 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       if (!trimmed) return;
       setRoadmaps((prev) => {
         const target = prev.find((r) => r.id === id);
-        if (!target || target.isSystem) return prev; // System row has no rename affordance.
+        // Owner-only (QA-REPORT-HERON-W2-T47.md finding #1) — not
+        // `canPersistRoadmap`, since a Shared+editable non-owner may write
+        // filters/groupBy/etc. but never rename (persist_roadmap()'s own
+        // doc comment pins `name` to its current DB value for that caller).
+        if (!target || !isRoadmapOwner(target, currentOwner)) return prev;
         const updated: Roadmap = { ...target, name: trimmed };
         if (isSupabaseConfigured) {
           queueMicrotask(() => persistRoadmap(updated).catch((e) => reportError(e, "rename roadmap")));
@@ -552,17 +817,17 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
         return prev.map((r) => (r.id === id ? updated : r));
       });
     },
-    [reportError]
+    [currentOwner, reportError]
   );
 
   const setRoadmapVisibility = useCallback(
     (id: string, v: { visibility: RoadmapVisibility; editable: boolean }) => {
       setRoadmaps((prev) => {
         const target = prev.find((r) => r.id === id);
-        // Owner-only in the UI (the sharing control simply doesn't render for
-        // a non-owner or the System row) — mirrored here defensively so this
-        // setter agrees with persist_roadmap()'s own refusal either way.
-        if (!target || target.isSystem) return prev;
+        // Owner-only (same reasoning as renameRoadmap above) — mirrored
+        // defensively so this setter agrees with persist_roadmap()'s own
+        // refusal either way.
+        if (!target || !isRoadmapOwner(target, currentOwner)) return prev;
         const updated: Roadmap = { ...target, ...v };
         if (isSupabaseConfigured) {
           queueMicrotask(() => persistRoadmap(updated).catch((e) => reportError(e, "update sharing")));
@@ -570,14 +835,16 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
         return prev.map((r) => (r.id === id ? updated : r));
       });
     },
-    [reportError]
+    [currentOwner, reportError]
   );
 
   const deleteRoadmap = useCallback(
     (id: string) => {
       setRoadmaps((prev) => {
         const target = prev.find((r) => r.id === id);
-        if (!target || target.isSystem) return prev; // System row can never be deleted (matches the DELETE RLS policy).
+        // Owner-only (same reasoning as renameRoadmap above; also matches
+        // the `roadmaps` table's plain owner-only DELETE RLS policy).
+        if (!target || !isRoadmapOwner(target, currentOwner)) return prev;
         if (isSupabaseConfigured) {
           queueMicrotask(() => deleteRoadmapRow(id).catch((e) => reportError(e, "delete roadmap")));
         }
@@ -591,7 +858,121 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
         return GENERAL_ROADMAP_ID;
       });
     },
-    [reportError, applyRoadmapState]
+    [currentOwner, reportError, applyRoadmapState]
+  );
+
+  // ── OkrViews (Sprint Heron Week 3, ADR 009) ─────────────────────────────
+  const getOkrView = useCallback(
+    (id: string) => okrViews.find((v) => v.id === id),
+    [okrViews]
+  );
+
+  const activeOkrView = useMemo(
+    () => (activeOkrViewId ? getOkrView(activeOkrViewId) : undefined),
+    [activeOkrViewId, getOkrView]
+  );
+
+  // Sets *which* OkrView is loaded — sticky identity, non-sticky content
+  // (design review's "Question 1"): does not itself copy `filters` into any
+  // live state, since that state is owned by the `/okrs` page, not this
+  // provider. `null` clears back to plain browsing.
+  const applyOkrView = useCallback((id: string | null) => {
+    setActiveOkrViewId(id);
+  }, []);
+
+  const createOkrView = useCallback(
+    (name: string, filters: OkrFilters) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      const ownerId = currentOwner?.id ?? null;
+      if (!ownerId) return; // no signed-in/matched owner to attribute this view to
+      const myPositions = okrViewsRef.current
+        .filter((v) => v.ownerId === ownerId)
+        .map((v) => v.position ?? 0);
+      const next: OkrView = {
+        id: `okr-view-${Math.random().toString(36).slice(2, 9)}`,
+        ownerId,
+        name: trimmed,
+        filters,
+        visibility: "private",
+        editable: false,
+        position: myPositions.length ? Math.min(...myPositions) - 1 : 0,
+      };
+      setOkrViews((prev) => [...prev, next]);
+      if (isSupabaseConfigured) {
+        queueMicrotask(() => persistOkrView(next).catch((e) => reportError(e, "save view")));
+      }
+      setActiveOkrViewId(next.id);
+    },
+    [currentOwner, reportError]
+  );
+
+  const renameOkrView = useCallback(
+    (id: string, name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      setOkrViews((prev) => {
+        const target = prev.find((v) => v.id === id);
+        // Owner, or Shared+editable (persist_okr_view()'s doc comment: a
+        // shared-editable non-owner may write name/filters).
+        if (!target || !canPersistOkrView(target, currentOwner)) return prev;
+        const updated: OkrView = { ...target, name: trimmed };
+        if (isSupabaseConfigured) {
+          queueMicrotask(() => persistOkrView(updated).catch((e) => reportError(e, "rename view")));
+        }
+        return prev.map((v) => (v.id === id ? updated : v));
+      });
+    },
+    [currentOwner, reportError]
+  );
+
+  const setOkrViewVisibility = useCallback(
+    (id: string, v: { visibility: OkrViewVisibility; editable: boolean }) => {
+      setOkrViews((prev) => {
+        const target = prev.find((x) => x.id === id);
+        // Owner-only — visibility/editable are never delegable, same
+        // reasoning as Roadmap's own sharing setter.
+        if (!target || !isOkrViewOwner(target, currentOwner)) return prev;
+        const updated: OkrView = { ...target, ...v };
+        if (isSupabaseConfigured) {
+          queueMicrotask(() =>
+            persistOkrView(updated).catch((e) => reportError(e, "update sharing"))
+          );
+        }
+        return prev.map((x) => (x.id === id ? updated : x));
+      });
+    },
+    [currentOwner, reportError]
+  );
+
+  const updateOkrView = useCallback(
+    (filters: OkrFilters) => {
+      setOkrViews((prev) => {
+        const target = prev.find((v) => v.id === activeOkrViewId);
+        if (!target || !canPersistOkrView(target, currentOwner)) return prev;
+        const updated: OkrView = { ...target, filters };
+        if (isSupabaseConfigured) {
+          queueMicrotask(() => persistOkrView(updated).catch((e) => reportError(e, "update view")));
+        }
+        return prev.map((v) => (v.id === target.id ? updated : v));
+      });
+    },
+    [activeOkrViewId, currentOwner, reportError]
+  );
+
+  const deleteOkrView = useCallback(
+    (id: string) => {
+      setOkrViews((prev) => {
+        const target = prev.find((v) => v.id === id);
+        if (!target || !isOkrViewOwner(target, currentOwner)) return prev;
+        if (isSupabaseConfigured) {
+          queueMicrotask(() => deleteOkrViewRow(id).catch((e) => reportError(e, "delete view")));
+        }
+        return prev.filter((v) => v.id !== id);
+      });
+      setActiveOkrViewId((cur) => (cur === id ? null : cur));
+    },
+    [currentOwner, reportError]
   );
 
   const saveInitiative = useCallback(
@@ -825,6 +1206,21 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       setRoadmapVisibility,
       deleteRoadmap,
       getRoadmap,
+      roadmapDirty,
+      canPersistRoadmap: (target: Roadmap) => canPersistRoadmap(target, currentOwner),
+      updateRoadmap,
+      saveRoadmapAsNew,
+      okrViews,
+      activeOkrViewId,
+      activeOkrView,
+      getOkrView,
+      applyOkrView,
+      createOkrView,
+      renameOkrView,
+      setOkrViewVisibility,
+      updateOkrView,
+      deleteOkrView,
+      canPersistOkrView: (target: OkrView) => canPersistOkrView(target, currentOwner),
       currentOwner,
       loading,
       error,
@@ -834,6 +1230,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       dismissToast,
       filters,
       groupBy,
+      viewMode,
       zoom,
       zoomScale,
       density,
@@ -884,6 +1281,19 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       setRoadmapVisibility,
       deleteRoadmap,
       getRoadmap,
+      roadmapDirty,
+      updateRoadmap,
+      saveRoadmapAsNew,
+      okrViews,
+      activeOkrViewId,
+      activeOkrView,
+      getOkrView,
+      applyOkrView,
+      createOkrView,
+      renameOkrView,
+      setOkrViewVisibility,
+      updateOkrView,
+      deleteOkrView,
       currentOwner,
       loading,
       error,
@@ -893,6 +1303,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       dismissToast,
       filters,
       groupBy,
+      viewMode,
       zoom,
       zoomScale,
       density,

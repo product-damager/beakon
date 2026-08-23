@@ -5,7 +5,7 @@
 -- Owner emails are demo values — set one to your own sign-in email if you want
 -- the profile/identity features to match you when testing against preview.
 
-truncate delivery_links, okr_checkins, okr_flags, okr_owners, okr_initiatives, okrs, roadmaps, teams, business_units, strategic_objectives, initiatives, themes, owners restart identity cascade;
+truncate delivery_links, okr_checkins, okr_flags, okr_owners, okr_initiatives, okrs, okr_views, roadmaps, teams, business_units, strategic_objectives, initiatives, themes, owners restart identity cascade;
 
 -- ── Business units ──────────────────────────────────────────────────────
 -- Inserted before `owners`/`initiatives` since both now carry a `team_id`
@@ -164,7 +164,7 @@ values
    'Teams run out of test ideas and repeat low-impact experiments.',
    'A steady stream of ranked, evidence-backed test ideas.',
    'in_development', 'u-magali', 'team-tech-perso-builders', 't-ai', 'so-ai',
-   1000, 3, 0.5, 6, 'at_risk', '2026-05-15', '2026-08-31', '{i-stats}', 'internal',
+   1000, 3, 0.5, 6, 'delayed', '2026-05-15', '2026-08-31', '{i-stats}', 'internal',
    'Quality of suggestions inconsistent; may narrow beta scope.',
    11000, '2026-07-04T15:30:00Z'),
 
@@ -269,7 +269,7 @@ values
   ('okr-app-flags-approvals', 'Ship flag change approvals to GA',
    'so-core', 'team-app-system', null, 2026, 2,
    'Approval workflow, audit trail, and rollout to all enterprise accounts.',
-   'being_reviewed', 'committed', '2026-06-30', null, 'at_risk',
+   'being_reviewed', 'committed', '2026-06-30', null, 'delayed',
    'Waiting on legal sign-off for the audit trail retention policy.', 2000),
 
   ('okr-pbx-adoption-q1', 'Grow PBX-targeted campaigns 3x',

@@ -494,6 +494,7 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
                 onClick={() => {
                   unarchiveInitiative(d.id);
                   notify({ message: `“${d.title}” restored` });
+                  select(null);
                 }}
               >
                 <ArchiveRestore size={15} /> Restore
@@ -507,6 +508,7 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
                     message: `“${d.title}” archived`,
                     action: { label: "Undo", onClick: () => unarchiveInitiative(d.id) },
                   });
+                  select(null);
                 }}
               >
                 <Archive size={15} /> Archive

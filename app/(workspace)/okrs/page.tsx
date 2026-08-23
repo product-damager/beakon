@@ -1,11 +1,12 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, X } from "lucide-react";
 import { useOkrWorkspace } from "@/lib/useOkrWorkspace";
 import { useRoadmap } from "@/lib/store";
-import { EMPTY_OKR_FILTERS, OkrFilterBar, applyOkrFilters, type OkrFilters } from "@/components/OkrFilterBar";
+import { EMPTY_OKR_FILTERS, normalizeOkrFilters, type OkrFilters } from "@/lib/okrFilters";
+import { OkrFilterBar, applyOkrFilters } from "@/components/OkrFilterBar";
 import { OkrList } from "@/components/OkrList";
 import { OkrDrawer } from "@/components/OkrDrawer";
 import { Logo } from "@/components/Logo";
@@ -38,8 +39,8 @@ function newOkrDraft(teams: Team[], strategicObjectives: StrategicObjective[]): 
 }
 
 /** localStorage key for the full OkrFilters object (Sprint Heron Week 2,
- * ADR 008 decision 3) — persists team/BU/quarter/objective/governance-
- * status/showArchived across reloads, the reload-reset papercut the PM
+ * ADR 008 decision 3) — persists quarters/teamIds/businessUnitIds/
+ * strategicObjectiveIds across reloads, the reload-reset papercut the PM
  * named. Deliberately the full object, not a partial pin. */
 const OKR_FILTERS_STORAGE_KEY = "beakon:okrFilters";
 
@@ -73,7 +74,7 @@ function OkrsPageInner() {
   // teams/businessUnits/strategicObjectives moved to useRoadmap()'s eager
   // fetch in Sprint Heron Week 1 (ADR 007 decision 3) — this page reads
   // them from there instead of useOkrWorkspace, which stays OKR-write-only.
-  const { teams, businessUnits, strategicObjectives } = useRoadmap();
+  const { teams, businessUnits, strategicObjectives, activeOkrViewId, getOkrView } = useRoadmap();
   const {
     okrs,
     okrOwners,
@@ -96,7 +97,29 @@ function OkrsPageInner() {
   const [selectedOkrId, setSelectedOkrId] = useState<string | null>(null);
   const [creatingDraft, setCreatingDraft] = useState<Okr | null>(null);
 
+  // Mirrors `activeOkrViewId` for the localStorage-write effect below to
+  // read without depending on it directly (Sprint Heron Week 3 fix — see
+  // that effect's own comment for why `[filters, activeOkrViewId]` as a
+  // combined dep array is the wrong shape here: on the exact render where
+  // `activeOkrViewId` flips to `null`, `filters` hasn't been reset yet,
+  // so a write effect keyed to *both* would fire once with the still-dirty
+  // value before the reset effect below catches up).
+  const activeOkrViewIdRef = useRef<string | null>(activeOkrViewId);
   useEffect(() => {
+    activeOkrViewIdRef.current = activeOkrViewId;
+  }, [activeOkrViewId]);
+
+  useEffect(() => {
+    // Only remember plain-browsing filters (Sprint Heron Week 3 fix): while
+    // an OkrView is loaded, `filters` reflects that view's own (possibly
+    // dirty, uncommitted) state, not the user's general "plain /okrs"
+    // default — writing it here regardless would let a mid-edit tweak on a
+    // loaded view silently redefine what plain browsing resets to the next
+    // time the view is cleared, contradicting explicit-save's promise that
+    // an unsaved edit doesn't persist anywhere until a deliberate action.
+    // Deliberately keyed to `[filters]` only (not `activeOkrViewId` too) —
+    // see `activeOkrViewIdRef`'s own comment above.
+    if (activeOkrViewIdRef.current !== null) return;
     try {
       window.localStorage.setItem(OKR_FILTERS_STORAGE_KEY, JSON.stringify(filters));
     } catch {
@@ -105,6 +128,38 @@ function OkrsPageInner() {
       // as an app-level error for a papercut-fix feature.
     }
   }, [filters]);
+
+  // Sticky identity, non-sticky content (Sprint Heron Week 3, ADR 009):
+  // loading/clearing an OkrView copies its filters into this page's own
+  // live `filters` state *once*, on the transition — it does not keep them
+  // in lockstep afterward (that's the whole point of explicit-save; further
+  // edits are compared against, not written back to, the view). Guarded by
+  // a ref (not just an `[activeOkrViewId]` dep) so mount with the default
+  // `activeOkrViewId === null` doesn't redundantly re-run
+  // `loadStoredOkrFilters()` over the just-initialized state. Genuinely
+  // syncing from an external system (lib/store.tsx's `activeOkrViewId`, set
+  // by sidebar row clicks outside this component), not derivable state, so
+  // the setState-in-effect rule is suppressed here the same way the
+  // `?new=1` effect below already does.
+  const previousOkrViewId = useRef<string | null>(null);
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (previousOkrViewId.current === activeOkrViewId) return;
+    previousOkrViewId.current = activeOkrViewId;
+    if (activeOkrViewId === null) {
+      setFilters(loadStoredOkrFilters());
+      return;
+    }
+    const view = getOkrView(activeOkrViewId);
+    // Defensive on this read side too (QA-REPORT-HERON-W3.md finding #4) —
+    // not just belt-and-suspenders for `rowToOkrView`'s own normalization:
+    // a view already sitting in this in-memory `okrViews` array from before
+    // that mapper-layer fix landed (or any other path that reaches this
+    // effect without going through `rowToOkrView`) could still carry a
+    // malformed/partial `filters` blob.
+    if (view) setFilters(normalizeOkrFilters(view.filters));
+  }, [activeOkrViewId, getOkrView]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // AppShell's "New OKR" button navigates to /okrs?new=1 (no second global
   // provider for OKR state — see lib/useOkrWorkspace.ts's own doc comment).

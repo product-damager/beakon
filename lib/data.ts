@@ -5,6 +5,8 @@
 
 import { supabase } from "./supabase";
 import { normalizeThemeColor } from "./types";
+import { normalizeOkrFilters } from "./okrFilters";
+import type { OkrFilters } from "./okrFilters";
 import type {
   BusinessUnit,
   DeliveryLink,
@@ -12,6 +14,7 @@ import type {
   Okr,
   OkrInitiativeLink,
   OkrOwner,
+  OkrView,
   Owner,
   Roadmap,
   StrategicObjective,
@@ -227,6 +230,44 @@ function roadmapToRow(r: Roadmap) {
   };
 }
 
+interface OkrViewRow {
+  id: string;
+  owner_id: string;
+  name: string;
+  filters: OkrFilters;
+  visibility: OkrView["visibility"];
+  editable: boolean;
+  position: number | string;
+}
+
+function rowToOkrView(row: OkrViewRow): OkrView {
+  return {
+    id: row.id,
+    ownerId: row.owner_id,
+    name: row.name,
+    filters: normalizeOkrFilters(row.filters),
+    visibility: row.visibility,
+    editable: row.editable,
+    position: Number(row.position),
+  };
+}
+
+/**
+ * DB row for insert/update. `created_at`/`updated_at` are omitted —
+ * `updated_at` is trigger-maintained (`okr_views_touch_updated_at`).
+ */
+function okrViewToRow(v: OkrView) {
+  return {
+    id: v.id,
+    owner_id: v.ownerId,
+    name: v.name,
+    filters: v.filters,
+    visibility: v.visibility,
+    editable: v.editable,
+    position: v.position ?? 0,
+  };
+}
+
 export interface Workspace {
   initiatives: Initiative[];
   themes: Theme[];
@@ -251,6 +292,14 @@ export interface Workspace {
    * `activeRoadmap`, so this is eager rather than lazy.
    */
   roadmaps: Roadmap[];
+  /**
+   * Saved/shareable "My OKRs" filter views (Sprint Heron Week 3, ADR 009).
+   * Fetched eagerly alongside `roadmaps`, not lazily via OkrWorkspace —
+   * despite being conceptually "about OKRs," this is sidebar-shaped data
+   * (the "My views" nav section needs the list on every render), the same
+   * classification call that already put `roadmaps` in this eager bucket.
+   */
+  okrViews: OkrView[];
 }
 
 // ── Reads ──
@@ -258,17 +307,19 @@ export interface Workspace {
 /** Load the full authenticated workspace (all initiatives incl. archived). */
 export async function fetchWorkspace(): Promise<Workspace> {
   const sb = client();
-  const [iniRes, linkRes, themeRes, ownerRes, buRes, teamRes, soRes, roadmapRes] = await Promise.all([
-    sb.from("initiatives").select("*").order("position", { ascending: true }),
-    sb.from("delivery_links").select("*").order("position", { ascending: true }),
-    sb.from("themes").select("*"),
-    sb.from("owners").select("*"),
-    sb.from("business_units").select("*"),
-    sb.from("teams").select("*"),
-    sb.from("strategic_objectives").select("*"),
-    sb.from("roadmaps").select("*").order("position", { ascending: true }),
-  ]);
-  for (const r of [iniRes, linkRes, themeRes, ownerRes, buRes, teamRes, soRes, roadmapRes]) {
+  const [iniRes, linkRes, themeRes, ownerRes, buRes, teamRes, soRes, roadmapRes, okrViewRes] =
+    await Promise.all([
+      sb.from("initiatives").select("*").order("position", { ascending: true }),
+      sb.from("delivery_links").select("*").order("position", { ascending: true }),
+      sb.from("themes").select("*"),
+      sb.from("owners").select("*"),
+      sb.from("business_units").select("*"),
+      sb.from("teams").select("*"),
+      sb.from("strategic_objectives").select("*"),
+      sb.from("roadmaps").select("*").order("position", { ascending: true }),
+      sb.from("okr_views").select("*").order("position", { ascending: true }),
+    ]);
+  for (const r of [iniRes, linkRes, themeRes, ownerRes, buRes, teamRes, soRes, roadmapRes, okrViewRes]) {
     if (r.error) throw r.error;
   }
 
@@ -288,8 +339,9 @@ export async function fetchWorkspace(): Promise<Workspace> {
   const teams = ((teamRes.data ?? []) as TeamRow[]).map(rowToTeam);
   const strategicObjectives = ((soRes.data ?? []) as StrategicObjectiveRow[]).map(rowToStrategicObjective);
   const roadmaps = ((roadmapRes.data ?? []) as RoadmapRow[]).map(rowToRoadmap);
+  const okrViews = ((okrViewRes.data ?? []) as OkrViewRow[]).map(rowToOkrView);
 
-  return { initiatives, themes, owners, teams, businessUnits, strategicObjectives, roadmaps };
+  return { initiatives, themes, owners, teams, businessUnits, strategicObjectives, roadmaps, okrViews };
 }
 
 // ── Writes ──
@@ -670,5 +722,44 @@ export async function persistRoadmap(r: Roadmap): Promise<void> {
 export async function deleteRoadmap(id: string): Promise<void> {
   const sb = client();
   const { error } = await sb.from("roadmaps").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/**
+ * Upsert an OkrView through `persist_okr_view()` — mirrors `persistRoadmap`
+ * exactly, minus the fields OkrView doesn't have (viewMode/groupBy/zoom/
+ * density/timelineSort). See supabase/migrations/2026-08-persist-okr-view-
+ * rpc.sql for the RPC's full authorization shape: owner gets a full write;
+ * a shared+editable non-owner's write is silently narrowed to name/filters
+ * only, with owner_id/visibility/editable/position pinned to their current
+ * DB values regardless of what's sent here — that's a documented,
+ * deliberate choice in the function itself, not a bug in this call site.
+ */
+export async function persistOkrView(v: OkrView): Promise<void> {
+  const sb = client();
+  const row = okrViewToRow(v);
+
+  const { error } = await sb.rpc("persist_okr_view", {
+    p_id: row.id,
+    p_owner_id: row.owner_id,
+    p_name: row.name,
+    p_filters: row.filters,
+    p_visibility: row.visibility,
+    p_editable: row.editable,
+    p_position: row.position,
+  });
+  if (error) throw error;
+}
+
+/**
+ * Delete an OkrView. No RPC needed here (unlike persistOkrView) — the
+ * `okr_views` table's plain `DELETE` RLS policy (owner-only) is a single
+ * boolean check, exactly the case ADR 008 decision 1 (and ADR 009, for this
+ * entity) says plain RLS is fine for; only the write-side authorization
+ * (owner vs. shared-editable) needed the RPC's conditional logic.
+ */
+export async function deleteOkrView(id: string): Promise<void> {
+  const sb = client();
+  const { error } = await sb.from("okr_views").delete().eq("id", id);
   if (error) throw error;
 }

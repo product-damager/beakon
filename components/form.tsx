@@ -84,6 +84,146 @@ export interface SelectOption {
 }
 
 /**
+ * Multi-select popover — checkbox list + optional search + select-all/clear,
+ * behind a trigger that shares `NativeSelect`/`FilterPill`'s base chrome
+ * (`h-9 rounded-lg border-beige-30 bg-white`, `FilterPill`'s `border-green-90`
+ * open-state convention) per docs/design/okr-filters-archive-parity-and-
+ * delayed-health.md §1. Generalized from `FilterBar.tsx`'s `FieldEditor`/
+ * `FilterPill` minus the is/is-not `Segmented` mode toggle — this is for a
+ * fixed, always-present field (reset to "all", not removable), so unlike
+ * `FilterPill` there is no field-name prefix and no `X` remove button on the
+ * trigger; clearing is "Select all"/"Clear" inside the popover, or the
+ * bar's own "Clear all".
+ */
+export function MultiSelect({
+  options,
+  values,
+  onChange,
+  placeholder = "All",
+  searchable = false,
+  ariaLabel,
+  className,
+}: {
+  options: SelectOption[];
+  values: string[];
+  onChange: (values: string[]) => void;
+  placeholder?: string;
+  searchable?: boolean;
+  ariaLabel?: string;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  const close = () => {
+    setOpen(false);
+    setQuery("");
+  };
+  useOutsideClose(ref, open, close);
+
+  const q = query.trim().toLowerCase();
+  const shown = q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options;
+  const allValues = options.map((o) => o.value);
+  const allSelected = allValues.length > 0 && allValues.every((v) => values.includes(v));
+
+  const toggle = (v: string) =>
+    onChange(values.includes(v) ? values.filter((x) => x !== v) : [...values, v]);
+
+  const summary =
+    values.length === 0
+      ? placeholder
+      : values.length === 1
+        ? options.find((o) => o.value === values[0])?.label ?? placeholder
+        : `${values.length} selected`;
+
+  return (
+    <div className={cn("relative", className)} ref={ref}>
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          baseInput,
+          "flex h-9 items-center gap-2 pr-9 text-left transition-colors",
+          open ? "border-green-90" : "border-beige-30"
+        )}
+      >
+        <span className={cn("truncate", values.length > 0 ? "text-green-90" : "text-beige-60")}>
+          {summary}
+        </span>
+        <ChevronDown
+          size={16}
+          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-beige-60"
+        />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-1 w-64 rounded-xl border border-beige-20 bg-white p-2 shadow-lg">
+          {searchable && (
+            <div className="relative mb-2">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-beige-60" />
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    close();
+                  }
+                }}
+                placeholder="Search…"
+                className="h-8 w-full rounded-lg border border-beige-30 bg-white pl-8 pr-3 text-sm text-green-90 placeholder:text-beige-60 focus:outline-none focus:ring-2 focus:ring-green-90"
+              />
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => onChange(allSelected ? [] : allValues)}
+            className="mb-1 w-full rounded-md px-2.5 py-1.5 text-left text-[13px] font-medium text-green-70 hover:bg-beige-10"
+          >
+            {allSelected ? "Clear all" : "Select all"}
+          </button>
+
+          <div className="calm-scroll max-h-56 space-y-0.5 overflow-auto" role="listbox">
+            {shown.map((o) => {
+              const on = values.includes(o.value);
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  role="option"
+                  aria-selected={on}
+                  onClick={() => toggle(o.value)}
+                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-beige-10"
+                >
+                  <span
+                    className={cn(
+                      "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+                      on ? "border-green-90 bg-green-90 text-white" : "border-beige-40 bg-white"
+                    )}
+                  >
+                    {on && <Check size={12} strokeWidth={3} />}
+                  </span>
+                  {o.dot && <span className={cn("h-2 w-2 shrink-0 rounded-full", o.dot)} />}
+                  <span className="truncate text-green-90">{o.label}</span>
+                </button>
+              );
+            })}
+            {shown.length === 0 && (
+              <div className="px-2.5 py-2 text-sm text-beige-60">No matches</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * Single-select dropdown with a type-to-filter search box — a searchable
  * alternative to NativeSelect for long option lists. The trigger mirrors
  * NativeSelect's look so it sits cleanly among the other form fields.

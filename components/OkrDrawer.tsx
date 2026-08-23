@@ -502,6 +502,7 @@ function DrawerBody({
                 onClick={() => {
                   unarchiveOkr(d.id);
                   notify({ message: `“${d.title}” restored` });
+                  onClose();
                 }}
               >
                 <ArchiveRestore size={15} /> Restore
