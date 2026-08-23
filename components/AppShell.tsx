@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -16,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { isRoadmapOwner, useRoadmap } from "@/lib/store";
+import { isOkrViewOwner, isRoadmapOwner, useRoadmap } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { ownerName, type ViewKey } from "@/lib/types";
 import { Avatar, Button, IconSegmented, Tag } from "./ui";
@@ -27,8 +28,9 @@ import { SettingsDialog } from "./SettingsDialog";
 import { Toaster } from "./Toaster";
 import { RoadmapNav } from "./RoadmapNav";
 import { RoadmapSharePanel } from "./RoadmapShareMenu";
+import { OkrViewShareMenu } from "./OkrViewShareMenu";
 import { Segmented } from "./FilterBar";
-import { useOutsideClose } from "./hooks";
+import { useClampedPopover } from "./hooks";
 
 const TITLES: Record<string, string> = {
   "/okrs": "OKRs",
@@ -48,13 +50,21 @@ const VIEW_MODE_OPTIONS: { value: ViewKey; label: string; icon: typeof Rows3 }[]
 // needed, so a small local duplicate is cheaper than an extraction for a
 // second caller. Moved in from FilterBar.tsx (docs/plans/roadmap-dialog-
 // viewmode-and-archive-reversal.md T24) alongside the rest of the save
-// cluster's relocation into the header. ────────────────────────────────────
+// cluster's relocation into the header. Positioning migrated onto
+// `useClampedPopover` (fix/okr-view-share-header-and-popover-clamp) so this
+// duplicate of `NewRoadmapRow`'s pattern picks up the same viewport-clamp fix
+// that pattern's canonical home received, rather than staying on the
+// unclamped `absolute right-0 top-full` idiom it was deliberately copied
+// from pre-fix. ──────────────────────────────────────────────────────────
 function SaveAsNewRoadmapButton() {
   const { saveRoadmapAsNew } = useRoadmap();
-  const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
-  useOutsideClose(ref, open, () => setOpen(false));
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const { open, setOpen, coords, popoverRef, close } = useClampedPopover(triggerRef, {
+    estimatedWidth: 256,
+    estimatedHeight: 134,
+    align: "right",
+  });
 
   const submit = () => {
     const trimmed = name.trim();
@@ -65,35 +75,42 @@ function SaveAsNewRoadmapButton() {
   };
 
   return (
-    <div className="relative" ref={ref}>
-      <Button variant="secondary" size="sm" onClick={() => setOpen((o) => !o)}>
+    <>
+      <Button ref={triggerRef} variant="secondary" size="sm" onClick={() => setOpen((o) => !o)}>
         Save as new Roadmap
       </Button>
-      {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 w-64 rounded-xl border border-beige-20 bg-white p-3 shadow-lg">
-          <div className="mb-2 text-sm font-medium text-green-90">Save as new Roadmap</div>
-          <TextInput
-            autoFocus
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Q3 planning"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") submit();
-              if (e.key === "Escape") setOpen(false);
-            }}
-            className="mb-2"
-          />
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" size="sm" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button size="sm" disabled={!name.trim()} onClick={submit}>
-              Create
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
+      {open &&
+        coords &&
+        createPortal(
+          <div
+            ref={popoverRef}
+            style={{ position: "fixed", top: coords.top, left: coords.left }}
+            className="z-50 w-64 rounded-xl border border-beige-20 bg-white p-3 shadow-lg"
+          >
+            <div className="mb-2 text-sm font-medium text-green-90">Save as new Roadmap</div>
+            <TextInput
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Q3 planning"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submit();
+                if (e.key === "Escape") close();
+              }}
+              className="mb-2"
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" size="sm" onClick={close}>
+                Cancel
+              </Button>
+              <Button size="sm" disabled={!name.trim()} onClick={submit}>
+                Create
+              </Button>
+            </div>
+          </div>,
+          document.body
+        )}
+    </>
   );
 }
 
@@ -110,9 +127,17 @@ function RoadmapHeaderControls() {
     canPersistRoadmap,
     updateRoadmap,
   } = useRoadmap();
-  const [shareOpen, setShareOpen] = useState(false);
-  const shareRef = useRef<HTMLDivElement>(null);
-  useOutsideClose(shareRef, shareOpen, () => setShareOpen(false));
+  const shareTriggerRef = useRef<HTMLButtonElement>(null);
+  // Destructured immediately, not kept as a `sharePopover.foo` member
+  // expression — `react-hooks/refs` flags any later property access on an
+  // object that carries a ref as if it were the ref itself.
+  const {
+    open: shareOpen,
+    setOpen: setShareOpen,
+    coords: shareCoords,
+    popoverRef: sharePopoverRef,
+    close: closeShare,
+  } = useClampedPopover(shareTriggerRef, { estimatedWidth: 288, estimatedHeight: 260 });
 
   const isOwner = isRoadmapOwner(activeRoadmap, currentOwner);
   const viewOnly =
@@ -141,22 +166,81 @@ function RoadmapHeaderControls() {
         </div>
       )}
       {isOwner && (
-        <div className="relative" ref={shareRef}>
+        <div className="relative">
           <button
+            ref={shareTriggerRef}
             onClick={() => setShareOpen((o) => !o)}
             aria-label="Share roadmap"
             className="flex h-8 w-8 items-center justify-center rounded-lg text-green-70 transition-colors hover:bg-beige-10"
           >
             <Share2 size={16} strokeWidth={1.75} />
           </button>
-          {shareOpen && (
-            <div className="absolute left-0 top-full z-50 mt-1 rounded-xl border border-beige-20 bg-white shadow-lg">
-              <RoadmapSharePanel roadmap={activeRoadmap} onClose={() => setShareOpen(false)} />
-            </div>
-          )}
+          {shareOpen &&
+            shareCoords &&
+            createPortal(
+              <div
+                ref={sharePopoverRef}
+                style={{ position: "fixed", top: shareCoords.top, left: shareCoords.left }}
+                className="z-50 rounded-xl border border-beige-20 bg-white shadow-lg"
+              >
+                <RoadmapSharePanel roadmap={activeRoadmap} onClose={closeShare} />
+              </div>,
+              document.body
+            )}
         </div>
       )}
       {viewOnly && <Tag className="bg-beige-20 text-beige-70">View only</Tag>}
+    </div>
+  );
+}
+
+/** Header owner-only Share icon for the currently active OKR saved view —
+ * `/okrs` has no "system" always-present view the way `/roadmap` does (see
+ * `RoadmapNav.tsx`'s doc comment), so there's nothing to share when browsing
+ * plain/unfiltered `/okrs`; this renders nothing in that case rather than a
+ * disabled button. Mirrors `RoadmapHeaderControls`' Share button 1:1 (same
+ * icon, `aria-label` pattern, and `useClampedPopover` positioning) and opens
+ * the exact same `OkrViewShareMenu` the sidebar's "Share…" row menu item
+ * already uses for this view, so both entry points stay in sync by
+ * construction rather than by copy-pasted behavior. */
+function OkrsHeaderControls() {
+  const { activeOkrView, currentOwner } = useRoadmap();
+  const shareTriggerRef = useRef<HTMLButtonElement>(null);
+  // Destructured immediately, not kept as a `sharePopover.foo` member
+  // expression — `react-hooks/refs` flags any later property access on an
+  // object that carries a ref as if it were the ref itself.
+  const {
+    open: shareOpen,
+    setOpen: setShareOpen,
+    coords: shareCoords,
+    popoverRef: sharePopoverRef,
+    close: closeShare,
+  } = useClampedPopover(shareTriggerRef, { estimatedWidth: 288, estimatedHeight: 260 });
+
+  if (!activeOkrView || !isOkrViewOwner(activeOkrView, currentOwner)) return null;
+
+  return (
+    <div className="relative">
+      <button
+        ref={shareTriggerRef}
+        onClick={() => setShareOpen((o) => !o)}
+        aria-label="Share view"
+        className="flex h-8 w-8 items-center justify-center rounded-lg text-green-70 transition-colors hover:bg-beige-10"
+      >
+        <Share2 size={16} strokeWidth={1.75} />
+      </button>
+      {shareOpen &&
+        shareCoords &&
+        createPortal(
+          <div
+            ref={sharePopoverRef}
+            style={{ position: "fixed", top: shareCoords.top, left: shareCoords.left }}
+            className="z-50 rounded-xl border border-beige-20 bg-white shadow-lg"
+          >
+            <OkrViewShareMenu view={activeOkrView} onClose={closeShare} />
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
@@ -197,6 +281,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       .filter(Boolean)
       .join(" · ") || "Product team";
   const onRoadmapPage = pathname === "/roadmap";
+  const onOkrsPage = pathname === "/okrs";
   const onArchivedFamilyPage = pathname === "/archived" || pathname === "/archived_okrs";
   const title = onRoadmapPage ? activeRoadmap.name : TITLES[pathname] ?? "Roadmap";
 
@@ -291,6 +376,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex min-w-0 items-center gap-3">
             <h1 className="min-w-0 truncate font-display text-xl font-semibold text-green-90">{title}</h1>
             {onRoadmapPage && <RoadmapHeaderControls />}
+            {onOkrsPage && <OkrsHeaderControls />}
             {onArchivedFamilyPage && <ArchivedSwitcher />}
           </div>
           {pathname === "/okrs" ? (

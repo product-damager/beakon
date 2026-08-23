@@ -1,6 +1,6 @@
 "use client";
 
-import { type ButtonHTMLAttributes, type ComponentType, type ReactNode } from "react";
+import { type ButtonHTMLAttributes, type ComponentType, type ReactNode, type Ref } from "react";
 import { ChevronRight } from "lucide-react";
 import { cn, initials } from "@/lib/cn";
 import {
@@ -36,13 +36,16 @@ export function Button({
   size = "default",
   className,
   children,
+  ref,
   ...props
 }: {
   variant?: Variant;
   size?: Size;
+  ref?: Ref<HTMLButtonElement>;
 } & ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
+      ref={ref}
       className={cn(
         "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg font-semibold transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-90 focus-visible:ring-offset-1",
