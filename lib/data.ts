@@ -161,17 +161,6 @@ function rowToOwner(o: OwnerRow): Owner {
   };
 }
 
-function ownerToRow(o: Owner) {
-  return {
-    id: o.id,
-    name: o.name,
-    surname: o.surname ?? "",
-    role: o.role ?? "",
-    email: o.email ?? null,
-    team_id: o.teamId ?? null,
-  };
-}
-
 interface RoadmapRow {
   id: string;
   owner_id: string | null;
@@ -414,11 +403,29 @@ export async function persistUnarchive(id: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Upsert an owner profile (name/surname/team edited from settings). */
-export async function persistOwner(o: Owner): Promise<void> {
+/**
+ * Save the signed-in user's own profile (name/surname/role/team edited from
+ * settings). Routed through the `persist_owner_profile` RPC rather than a
+ * plain client-driven upsert — the server matches the row by the caller's
+ * own JWT email and decides the id, so the client can never mint a
+ * duplicate row for an email that already has one. Returns the server's
+ * authoritative row so callers can reconcile local state.
+ */
+export async function persistOwner(patch: {
+  name: string;
+  surname: string | undefined;
+  role: string;
+  teamId: string | null;
+}): Promise<Owner> {
   const sb = client();
-  const { error } = await sb.from("owners").upsert(ownerToRow(o));
+  const { data, error } = await sb.rpc("persist_owner_profile", {
+    p_name: patch.name,
+    p_surname: patch.surname ?? null,
+    p_role: patch.role,
+    p_team_id: patch.teamId,
+  });
   if (error) throw error;
+  return rowToOwner(data);
 }
 
 /** Insert a new theme (id generated client-side). */

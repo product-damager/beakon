@@ -38,15 +38,23 @@ export interface Column<K extends string = string> {
 }
 
 const COLUMNS: Column<SortKey>[] = [
-  { k: "title", label: "Initiative", className: "w-72" },
-  { k: "owner", label: "Owner", className: "w-40" },
-  { k: "status", label: "Status", className: "w-48" },
-  { k: "health", label: "Health", className: "w-32" },
-  { k: "target", label: "Target" },
-  { k: "team", label: "Team", className: "w-28" },
-  { k: "priority", label: "DIVE", align: "right", className: "w-24" },
-  { k: "updated", label: "Updated", align: "right" },
+  { k: "title", label: "Initiative", className: "w-[28%]" },
+  { k: "owner", label: "Owner", className: "w-[14%]" },
+  { k: "status", label: "Status", className: "w-[14%]" },
+  { k: "health", label: "Health", className: "w-[10%]" },
+  { k: "target", label: "Target", className: "w-[9%]" },
+  { k: "team", label: "Team", className: "w-[10%]" },
+  { k: "priority", label: "DIVE", align: "right", className: "w-[8%]" },
+  { k: "updated", label: "Updated", align: "right", className: "w-[7%]" },
 ];
+
+/** Every cell (header and body) pulls its width from here, so header and
+ * body can't drift apart the way separately hand-typed `w-*` classes did
+ * before (Target/Updated previously had no width at all, which is what let
+ * them stretch unpredictably under `table-layout: auto` at lower zoom). */
+const COLUMN_WIDTH: Record<SortKey, string | undefined> = Object.fromEntries(
+  COLUMNS.map((c) => [c.k, c.className])
+) as Record<SortKey, string | undefined>;
 
 /**
  * Sortable column header. Module-level so it isn't re-created on every
@@ -70,7 +78,7 @@ export function Th<K extends string>({
   return (
     <th
       className={cn(
-        "bg-beige-20 px-3 py-0",
+        "overflow-hidden bg-beige-20 px-3 py-0",
         align === "right" && "text-right",
         align === "center" && "text-center",
         className
@@ -79,7 +87,7 @@ export function Th<K extends string>({
       <button
         onClick={() => onToggle(k)}
         className={cn(
-          "mono-label flex h-10 items-center gap-1 text-beige-60 hover:text-green-90",
+          "mono-label flex h-10 min-w-0 items-center gap-1 text-beige-60 hover:text-green-90",
           align === "right" && "ml-auto",
           align === "center" && "mx-auto"
         )}
@@ -89,7 +97,7 @@ export function Th<K extends string>({
          * against the column's true right edge, matching the right-aligned
          * value below it instead of reading as shifted left. */}
         {align === "right" && <span className="flex w-3.5 shrink-0 justify-center text-green-60">{chevron}</span>}
-        {label}
+        <span className="truncate">{label}</span>
         {align !== "right" && <span className="flex w-3.5 shrink-0 justify-center text-green-60">{chevron}</span>}
       </button>
     </th>
@@ -149,7 +157,7 @@ export function List() {
       <div className="min-h-0 flex-1 overflow-hidden p-6">
         <div className="flex h-full flex-col overflow-hidden rounded-xl border border-beige-20 bg-white">
           <div className="calm-scroll min-h-0 flex-1 overflow-auto">
-            <table className="w-full border-collapse text-sm">
+            <table className="w-full table-fixed border-collapse text-sm">
               <thead className="sticky top-0 z-10">
                 <tr className="border-b border-beige-20">
                   {COLUMNS.map((col) => (
@@ -174,7 +182,7 @@ export function List() {
                       }}
                       className="cursor-pointer border-b border-beige-10 hover:bg-beige-10"
                     >
-                      <td className="w-72 max-w-0 px-3 py-2.5">
+                      <td className={cn(COLUMN_WIDTH.title, "max-w-0 px-3 py-2.5")}>
                         <div className="flex min-w-0 items-center gap-2">
                           {theme && (
                             <span className={cn("h-3 w-1 shrink-0 rounded-[2px]", THEME_COLOR_META[theme.color].dot)} />
@@ -198,13 +206,13 @@ export function List() {
                           )}
                         </div>
                       </td>
-                      <td className="w-40 max-w-0 px-3 py-2.5">
+                      <td className={cn(COLUMN_WIDTH.owner, "max-w-0 px-3 py-2.5")}>
                         <span className="flex items-center gap-2 text-green-90">
                           {owner && <Avatar name={ownerName(owner)} className="h-6 w-6 shrink-0 text-[10px]" neutral />}
                           <span className="truncate" title={ownerName(owner)}>{ownerName(owner)}</span>
                         </span>
                       </td>
-                      <td className="w-48 p-0">
+                      <td className={cn(COLUMN_WIDTH.status, "overflow-hidden p-0")}>
                         <InlineTagSelect
                           fill
                           label="Change status"
@@ -217,7 +225,7 @@ export function List() {
                           }}
                         />
                       </td>
-                      <td className="w-32 p-0">
+                      <td className={cn(COLUMN_WIDTH.health, "overflow-hidden p-0")}>
                         <InlineTagSelect
                           fill
                           label="Change health"
@@ -230,13 +238,13 @@ export function List() {
                           }}
                         />
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-green-70">
+                      <td className={cn(COLUMN_WIDTH.target, "truncate whitespace-nowrap px-3 py-2.5 text-green-70")}>
                         {quarterLabelFromISO(i.targetEnd)}
                       </td>
-                      <td className="w-28 max-w-0 truncate px-3 py-2.5 text-green-70" title={team?.name}>
+                      <td className={cn(COLUMN_WIDTH.team, "max-w-0 truncate px-3 py-2.5 text-green-70")} title={team?.name}>
                         {team?.name ?? "—"}
                       </td>
-                      <td className="w-24 px-3 py-2.5 text-right">
+                      <td className={cn(COLUMN_WIDTH.priority, "px-3 py-2.5 text-right")}>
                         <span
                           className="inline-flex items-center justify-end gap-1"
                           title={score === null ? tier.label : `${tier.label} · DIVE ${score}`}
@@ -247,7 +255,7 @@ export function List() {
                           </span>
                         </span>
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-right text-beige-60">
+                      <td className={cn(COLUMN_WIDTH.updated, "truncate whitespace-nowrap px-3 py-2.5 text-right text-beige-60")}>
                         {formatShortEN(i.updatedAt.slice(0, 10))}
                       </td>
                     </tr>

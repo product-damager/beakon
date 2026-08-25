@@ -256,7 +256,7 @@ function DrawerBody({
             options={GOVERNANCE_KEYS}
             render={(g: Okr["governanceStatus"]) => (
               <Tag shape="square" className={OKR_GOVERNANCE_META[g].tag}>
-                {OKR_GOVERNANCE_META[g].label}
+                <span className="min-w-0 truncate">{OKR_GOVERNANCE_META[g].label}</span>
               </Tag>
             )}
             onSelect={(governanceStatus) => patch({ governanceStatus })}

@@ -22,6 +22,7 @@ import { InlineTagSelect } from "./form";
 import {
   GOVERNANCE_KEYS,
   HEALTH_KEYS,
+  OKR_COLUMN_WIDTH,
   OKR_COLUMNS,
   OKR_GOVERNANCE_META,
   STRATEGIC_OBJECTIVE_ALIAS,
@@ -99,7 +100,7 @@ export function OkrGroupedList({
         }}
         className="cursor-pointer border-b border-beige-10 hover:bg-beige-10"
       >
-        <td className="w-80 max-w-0 px-3 py-2.5">
+        <td className={cn(OKR_COLUMN_WIDTH.title, "max-w-0 px-3 py-2.5")}>
           <span className="flex min-w-0 items-center gap-2">
             <span
               className={cn("truncate font-medium", o.archived ? "text-beige-70" : "text-green-90")}
@@ -110,13 +111,16 @@ export function OkrGroupedList({
             {o.archived && <Tag className="shrink-0 bg-beige-20 text-beige-70">Archived</Tag>}
           </span>
         </td>
-        <td className="w-20 max-w-0 truncate px-3 py-2.5 text-green-70" title={objective?.name}>
+        <td
+          className={cn(OKR_COLUMN_WIDTH.objective, "max-w-0 truncate px-3 py-2.5 text-green-70")}
+          title={objective?.name}
+        >
           {objective ? (STRATEGIC_OBJECTIVE_ALIAS[objective.id] ?? objective.name) : "—"}
         </td>
-        <td className="whitespace-nowrap px-3 py-2.5 text-green-70">
+        <td className={cn(OKR_COLUMN_WIDTH.quarter, "truncate whitespace-nowrap px-3 py-2.5 text-green-70")}>
           Q{o.quarter} {o.year}
         </td>
-        <td className="w-44 p-0">
+        <td className={cn(OKR_COLUMN_WIDTH.governance, "overflow-hidden p-0")}>
           <InlineTagSelect
             fill
             label="Change governance"
@@ -124,7 +128,7 @@ export function OkrGroupedList({
             options={GOVERNANCE_KEYS}
             render={(g: OkrGovernanceStatus) => (
               <Tag shape="square" className={OKR_GOVERNANCE_META[g].tag}>
-                {OKR_GOVERNANCE_META[g].label}
+                <span className="min-w-0 truncate">{OKR_GOVERNANCE_META[g].label}</span>
               </Tag>
             )}
             onSelect={(governanceStatus) => {
@@ -136,7 +140,7 @@ export function OkrGroupedList({
             }}
           />
         </td>
-        <td className="w-32 p-0">
+        <td className={cn(OKR_COLUMN_WIDTH.health, "overflow-hidden p-0")}>
           <InlineTagSelect
             fill
             label="Change health"
@@ -149,10 +153,10 @@ export function OkrGroupedList({
             }}
           />
         </td>
-        <td className="w-28 max-w-0 truncate px-3 py-2.5" title={ownerLabel(o)}>
+        <td className={cn(OKR_COLUMN_WIDTH.team, "max-w-0 truncate px-3 py-2.5")} title={ownerLabel(o)}>
           <span className="text-green-70">{ownerLabel(o)}</span>
         </td>
-        <td className="w-28 px-3 py-2.5 text-right">
+        <td className={cn(OKR_COLUMN_WIDTH.achievement, "px-3 py-2.5 text-right")}>
           <span
             className={cn(
               "font-display font-semibold tabular-nums",
@@ -163,7 +167,7 @@ export function OkrGroupedList({
             {formatAchievement(o.achievement)}
           </span>
         </td>
-        <td className="whitespace-nowrap px-3 py-2.5 text-right text-beige-60">
+        <td className={cn(OKR_COLUMN_WIDTH.updated, "truncate whitespace-nowrap px-3 py-2.5 text-right text-beige-60")}>
           {formatShortEN(o.updatedAt.slice(0, 10))}
         </td>
       </tr>
@@ -210,14 +214,14 @@ export function OkrGroupedList({
     <div className="min-h-0 flex-1 overflow-hidden p-6">
       <div className="flex h-full flex-col overflow-hidden rounded-xl border border-beige-20 bg-white">
         <div className="calm-scroll min-h-0 flex-1 overflow-auto">
-          <table className="w-full border-collapse text-sm">
+          <table className="w-full table-fixed border-collapse text-sm">
             <thead className="sticky top-0 z-10">
               <tr className="border-b border-beige-20">
                 {OKR_COLUMNS.map((col) => (
                   <th
                     key={col.k}
                     className={cn(
-                      "mono-label bg-beige-20 px-3 py-2.5 text-beige-60",
+                      "mono-label truncate overflow-hidden bg-beige-20 px-3 py-2.5 text-left text-beige-60",
                       col.align === "right" && "text-right",
                       col.align === "center" && "text-center",
                       col.className

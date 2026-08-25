@@ -81,7 +81,7 @@ export function Tag({
   return (
     <span
       className={cn(
-        "mono-label inline-flex items-center gap-1 whitespace-nowrap px-2 py-1 leading-none",
+        "mono-label inline-flex min-w-0 max-w-full items-center gap-1 whitespace-nowrap px-2 py-1 leading-none",
         shape === "square" ? "rounded-sm" : "rounded-md",
         className
       )}
@@ -161,8 +161,8 @@ export function StatusTag({ status }: { status: Status }) {
   return (
     <Tag className={m.tag}>
       {/* Round marker — status is a dot; theme uses the bar; health carries none. */}
-      <span className={cn("h-2 w-2 rounded-full", m.dot)} aria-hidden />
-      {m.label}
+      <span className={cn("h-2 w-2 shrink-0 rounded-full", m.dot)} aria-hidden />
+      <span className="min-w-0 truncate">{m.label}</span>
     </Tag>
   );
 }
@@ -173,7 +173,7 @@ export function HealthTag({ health, shape }: { health: Health; shape?: "round" |
   // would just repeat it (and collide with the status/theme markers).
   return (
     <Tag className={m.tag} shape={shape}>
-      {m.label}
+      <span className="min-w-0 truncate">{m.label}</span>
     </Tag>
   );
 }
@@ -187,8 +187,8 @@ export function ScoreTierTag({ score, className }: { score: number | null; class
   const t = scoreTier(score);
   return (
     <Tag className={cn("whitespace-nowrap", t.tag, className)}>
-      <span aria-hidden>{t.emoji}</span>
-      {t.label}
+      <span aria-hidden className="shrink-0">{t.emoji}</span>
+      <span className="min-w-0 truncate">{t.label}</span>
     </Tag>
   );
 }
