@@ -31,10 +31,14 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
         teams={teams}
         businessUnits={businessUnits}
         onClose={onClose}
-        onSave={(patch) => {
-          saveProfile(patch);
-          notify({ message: "Profile updated", tone: "success" });
-          onClose();
+        onSave={async (patch) => {
+          try {
+            await saveProfile(patch);
+            notify({ message: "Profile updated", tone: "success" });
+            onClose();
+          } catch {
+            notify({ message: "Could not save your profile. Please try again.", tone: "error" });
+          }
         }}
       />
     </div>
@@ -54,12 +58,18 @@ function ProfileForm({
   teams: Team[];
   businessUnits: BusinessUnit[];
   onClose: () => void;
-  onSave: (patch: { name: string; surname: string; teamId: string; role: string }) => void;
+  onSave: (patch: {
+    name: string;
+    surname: string;
+    teamId: string;
+    role: string;
+  }) => Promise<void>;
 }) {
   const [name, setName] = useState(owner?.name ?? "");
   const [surname, setSurname] = useState(owner?.surname ?? "");
   const [role, setRole] = useState(owner?.role ?? "");
   const [teamId, setTeamId] = useState(owner?.teamId ?? "");
+  const [saving, setSaving] = useState(false);
 
   // Live preview of how the name will render, using the same rule as everywhere else.
   const preview =
@@ -67,8 +77,15 @@ function ProfileForm({
   const teamName = teams.find((t) => t.id === teamId)?.name ?? "";
   const previewSub = [teamName, role].filter(Boolean).join(" · ");
 
-  const save = () =>
-    onSave({ name: name.trim(), surname: surname.trim(), teamId, role: role.trim() });
+  const save = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await onSave({ name: name.trim(), surname: surname.trim(), teamId, role: role.trim() });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="relative w-full max-w-md animate-slide-up rounded-2xl bg-white shadow-2xl">
@@ -138,10 +155,12 @@ function ProfileForm({
       </div>
 
       <div className="flex items-center justify-end gap-2 border-t border-beige-20 px-6 py-3">
-        <Button variant="secondary" onClick={onClose}>
+        <Button variant="secondary" onClick={onClose} disabled={saving}>
           Cancel
         </Button>
-        <Button onClick={save}>Save profile</Button>
+        <Button onClick={save} disabled={saving}>
+          {saving ? "Saving…" : "Save profile"}
+        </Button>
       </div>
     </div>
   );

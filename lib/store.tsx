@@ -403,8 +403,17 @@ interface RoadmapState {
   rescheduleInitiative: (id: string, targetStart: string, targetEnd: string) => void;
   /** Create a new theme (persists + adds to state). */
   addTheme: (t: Theme) => void;
-  /** Update the signed-in user's profile (name / surname / team / role). */
-  saveProfile: (patch: { name: string; surname: string; teamId: string; role: string }) => void;
+  /**
+   * Update the signed-in user's profile (name / surname / team / role).
+   * Resolves once the save has actually completed (or rejects on failure)
+   * so callers can wait before showing success/closing UI.
+   */
+  saveProfile: (patch: {
+    name: string;
+    surname: string;
+    teamId: string;
+    role: string;
+  }) => Promise<void>;
   /** Board drag: set status and place before `beforeId` (null = end of target column). */
   moveInitiative: (id: string, toStatus: Status, beforeId: string | null) => void;
   archiveInitiative: (id: string) => void;
@@ -1126,29 +1135,63 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
   );
 
   const saveProfile = useCallback(
-    (patch: { name: string; surname: string; teamId: string; role: string }) => {
-      const email = session?.user?.email ?? undefined;
-      // Edit the matched owner row if there is one; otherwise create a profile
-      // keyed to the signed-in email so anyone in the domain can identify.
-      const base: Owner =
-        currentOwner ??
-        { id: `u-${Math.random().toString(36).slice(2, 9)}`, name: "", role: "", email };
-      const next: Owner = {
-        ...base,
+    (patch: { name: string; surname: string; teamId: string; role: string }): Promise<void> => {
+      if (!isSupabaseConfigured) {
+        // Local/demo mode: no server to race against, and lib/seed.ts's
+        // owners already have fixed, known ids — keep the original
+        // optimistic client-only behavior unchanged. Nothing async happens
+        // here, but the return type stays a Promise so callers can await
+        // this path the same way as the Supabase-configured one below.
+        const email = session?.user?.email ?? undefined;
+        const base: Owner =
+          currentOwner ??
+          { id: `u-${Math.random().toString(36).slice(2, 9)}`, name: "", role: "", email };
+        const next: Owner = {
+          ...base,
+          name: patch.name.trim(),
+          surname: patch.surname.trim() || undefined,
+          role: patch.role.trim(),
+          teamId: patch.teamId || undefined,
+          email: base.email ?? email,
+        };
+        setOwners((prev) =>
+          prev.some((o) => o.id === next.id)
+            ? prev.map((o) => (o.id === next.id ? next : o))
+            : [...prev, next]
+        );
+        return Promise.resolve();
+      }
+      // Supabase-configured path: this is the exact call site that used to
+      // produce production duplicate `owners` rows (a client-minted id
+      // saved before the local `owners` array had loaded). The server (via
+      // persist_owner_profile) is now the source of truth for which row/id
+      // this is, so — deliberately, unlike every other mutation in this
+      // file — we await the round trip and reconcile from its response
+      // instead of splicing an optimistic local guess first. Correctness
+      // over perceived speed here; see
+      // docs/decisions/014-owner-profile-server-side-upsert.md.
+      //
+      // The caller (SettingsDialog) awaits this promise so it doesn't show
+      // "success" or close the dialog until the RPC has actually resolved;
+      // on failure we still call reportError (for AppShell's error banner)
+      // and rethrow so the caller can show its own failure state too.
+      return persistOwner({
         name: patch.name.trim(),
         surname: patch.surname.trim() || undefined,
         role: patch.role.trim(),
-        teamId: patch.teamId || undefined,
-        email: base.email ?? email,
-      };
-      setOwners((prev) =>
-        prev.some((o) => o.id === next.id)
-          ? prev.map((o) => (o.id === next.id ? next : o))
-          : [...prev, next]
-      );
-      if (isSupabaseConfigured) {
-        queueMicrotask(() => persistOwner(next).catch((e) => reportError(e, "save profile")));
-      }
+        teamId: patch.teamId || null,
+      })
+        .then((saved) => {
+          setOwners((prev) =>
+            prev.some((o) => o.id === saved.id)
+              ? prev.map((o) => (o.id === saved.id ? saved : o))
+              : [...prev, saved]
+          );
+        })
+        .catch((e) => {
+          reportError(e, "save profile");
+          throw e;
+        });
     },
     [currentOwner, session, reportError]
   );

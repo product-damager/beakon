@@ -82,12 +82,20 @@ export interface OkrColumn {
  * scope (PM decision — see the Vireo plan's "Data shape" section); these
  * are display labels only now, no SortKey/Th coupling. */
 export const OKR_COLUMNS: OkrColumn[] = [
-  { k: "title", label: "Title", className: "w-80" },
-  { k: "objective", label: "Objective", className: "w-20" },
-  { k: "quarter", label: "Quarter" },
-  { k: "governance", label: "Governance", className: "w-44" },
-  { k: "health", label: "Health", className: "w-32" },
-  { k: "team", label: "Team", className: "w-28" },
-  { k: "achievement", label: "Achievement", align: "right", className: "w-28" },
-  { k: "updated", label: "Updated", align: "right" },
+  { k: "title", label: "Title", className: "w-[26%]" },
+  { k: "objective", label: "Objective", className: "w-[9%]" },
+  { k: "quarter", label: "Quarter", className: "w-[8%]" },
+  { k: "governance", label: "Governance", className: "w-[15%]" },
+  { k: "health", label: "Health", className: "w-[11%]" },
+  { k: "team", label: "Team", className: "w-[11%]" },
+  { k: "achievement", label: "Achievement", align: "right", className: "w-[11%]" },
+  { k: "updated", label: "Updated", align: "right", className: "w-[9%]" },
 ];
+
+/** Every OKR table cell (header and body) pulls its width from here, so the
+ * two can't drift apart the way separately hand-typed `w-*` classes did
+ * before (Quarter/Updated previously had no width at all, which is what let
+ * them stretch unpredictably under `table-layout: auto` at lower zoom). */
+export const OKR_COLUMN_WIDTH: Record<OkrColumnKey, string | undefined> = Object.fromEntries(
+  OKR_COLUMNS.map((c) => [c.k, c.className])
+) as Record<OkrColumnKey, string | undefined>;

@@ -82,6 +82,27 @@ alter table owners add column if not exists surname text not null default '';
 alter table owners add column if not exists team text;
 alter table owners alter column name set default '';
 
+-- One `owners` row per email, case-insensitive, partial (only enforced where
+-- email is actually set). Fixed after a production duplicate-row bug:
+-- `saveProfile` (lib/store.tsx) could mint a brand-new client-side id before
+-- the client's local `owners` array had loaded, and the old `persistOwner`
+-- did a plain client-driven upsert with no server-side email match — see
+-- docs/decisions/014-owner-profile-server-side-upsert.md and
+-- supabase/migrations/2026-08-persist-owner-profile-rpc.sql.
+--
+-- NOTE for whoever applies this to beakon-prod: this statement will FAIL if
+-- beakon-prod still has duplicate-email rows in `owners` at the time
+-- schema.sql is (re-)applied there — Postgres cannot build a unique index
+-- over existing duplicate values. As of this change, the PM has already
+-- manually deleted prod's known duplicates (confirmed zero FK references
+-- existed), so this index is expected to apply cleanly to beakon-prod going
+-- forward; if a future re-run of this statement against prod ever fails,
+-- that means a new duplicate-email pair has appeared and needs the same
+-- cleanup treatment as before, not that this line should be removed.
+create unique index if not exists owners_email_unique_idx
+  on owners (lower(email))
+  where email is not null;
+
 -- ── Initiatives ──
 -- DIVE inputs match lib/types.ts exactly (log-calibrated, not linear buckets):
 --   demand:    3 | 15 | 50 | 250 | 1000  (account-band midpoints, accts/month)
@@ -587,6 +608,63 @@ $$;
 
 revoke execute on function current_owner_id() from public;
 grant execute on function current_owner_id() to authenticated;
+
+-- `persist_owner_profile()` — server-side, atomic find-or-create-by-email
+-- upsert for an owner's own profile (name/surname/role/team). Deliberately
+-- takes no `p_id`: the id is decided server-side (existing row's id on
+-- update, a freshly minted one on insert), never trusted from the client —
+-- that's what actually closes the race that produced production duplicate
+-- rows (the client no longer decides "is there already a row for me," the
+-- DB does, inside one statement, against the JWT's own email). See
+-- docs/decisions/014-owner-profile-server-side-upsert.md and
+-- supabase/migrations/2026-08-persist-owner-profile-rpc.sql for the full
+-- rationale, the case-insensitive-match tightening, and the residual
+-- concurrent-first-insert race the owners_email_unique_idx above backstops.
+--
+-- security invoker: matches current_owner_id()/persist_roadmap()'s own
+-- reasoning — this only ever touches `owners`, which `authenticated` already
+-- has RLS-backed access to; running as invoker means no privilege
+-- escalation and no new anon attack surface.
+create or replace function persist_owner_profile(
+  p_name text,
+  p_surname text,
+  p_role text,
+  p_team_id text
+) returns owners
+language plpgsql
+security invoker
+as $$
+declare
+  v_email text := auth.jwt() ->> 'email';
+  v_row owners%rowtype;
+begin
+  if v_email is null then
+    raise exception 'persist_owner_profile: no authenticated email';
+  end if;
+
+  update owners set
+    name = p_name,
+    surname = p_surname,
+    role = p_role,
+    team_id = p_team_id
+  where lower(email) = lower(v_email)
+  returning * into v_row;
+
+  if found then
+    return v_row;
+  end if;
+
+  insert into owners (id, name, surname, role, email, team_id)
+  values ('u-' || substr(md5(random()::text || clock_timestamp()::text), 1, 7),
+          p_name, p_surname, p_role, v_email, p_team_id)
+  returning * into v_row;
+
+  return v_row;
+end;
+$$;
+
+revoke execute on function persist_owner_profile(text, text, text, text) from public;
+grant execute on function persist_owner_profile(text, text, text, text) to authenticated;
 
 create table if not exists roadmaps (
   id text primary key,
