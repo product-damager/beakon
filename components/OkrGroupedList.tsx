@@ -120,7 +120,7 @@ export function OkrGroupedList({
         <td className={cn(OKR_COLUMN_WIDTH.quarter, "truncate whitespace-nowrap px-3 py-2.5 text-green-70")}>
           Q{o.quarter} {o.year}
         </td>
-        <td className={cn(OKR_COLUMN_WIDTH.governance, "p-0")}>
+        <td className={cn(OKR_COLUMN_WIDTH.governance, "overflow-hidden p-0")}>
           <InlineTagSelect
             fill
             label="Change governance"
@@ -128,7 +128,7 @@ export function OkrGroupedList({
             options={GOVERNANCE_KEYS}
             render={(g: OkrGovernanceStatus) => (
               <Tag shape="square" className={OKR_GOVERNANCE_META[g].tag}>
-                {OKR_GOVERNANCE_META[g].label}
+                <span className="min-w-0 truncate">{OKR_GOVERNANCE_META[g].label}</span>
               </Tag>
             )}
             onSelect={(governanceStatus) => {
@@ -140,7 +140,7 @@ export function OkrGroupedList({
             }}
           />
         </td>
-        <td className={cn(OKR_COLUMN_WIDTH.health, "p-0")}>
+        <td className={cn(OKR_COLUMN_WIDTH.health, "overflow-hidden p-0")}>
           <InlineTagSelect
             fill
             label="Change health"
@@ -221,7 +221,7 @@ export function OkrGroupedList({
                   <th
                     key={col.k}
                     className={cn(
-                      "mono-label truncate overflow-hidden bg-beige-20 px-3 py-2.5 text-beige-60",
+                      "mono-label truncate overflow-hidden bg-beige-20 px-3 py-2.5 text-left text-beige-60",
                       col.align === "right" && "text-right",
                       col.align === "center" && "text-center",
                       col.className

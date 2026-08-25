@@ -5,6 +5,7 @@ import { ArchiveRestore } from "lucide-react";
 import { formatShortEN } from "@/lib/dates";
 import type { Toast } from "@/lib/store";
 import type { BusinessUnit, Okr, StrategicObjective, Team } from "@/lib/types";
+import { cn } from "@/lib/cn";
 import { Tag } from "./ui";
 import { Th } from "./List";
 import type { Column, SortState } from "./List";
@@ -37,12 +38,22 @@ import { OKR_GOVERNANCE_META } from "./OkrList";
 type SortKey = "title" | "objective" | "team" | "governance" | "updated";
 
 const COLUMNS: Column<SortKey>[] = [
-  { k: "title", label: "OKR", className: "w-72" },
-  { k: "objective", label: "Objective", className: "w-32" },
-  { k: "team", label: "Team", className: "w-40" },
-  { k: "governance", label: "Governance", className: "w-40" },
-  { k: "updated", label: "Updated", align: "right" },
+  { k: "title", label: "OKR", className: "w-[30%]" },
+  { k: "objective", label: "Objective", className: "w-[14%]" },
+  { k: "team", label: "Team", className: "w-[15%]" },
+  { k: "governance", label: "Governance", className: "w-[15%]" },
+  { k: "updated", label: "Updated", align: "right", className: "w-[16%]" },
 ];
+
+/** Same drift-proofing as List.tsx's COLUMN_WIDTH: header and body cells
+ * pull from the same source instead of separately hand-typed `w-*` classes
+ * (Updated previously had no width, letting it stretch unpredictably under
+ * `table-layout: auto`). The trailing action column (Restore button, no
+ * header label) gets the remaining 10% so the full row sums to 100%. */
+const COLUMN_WIDTH: Record<SortKey, string | undefined> = Object.fromEntries(
+  COLUMNS.map((c) => [c.k, c.className])
+) as Record<SortKey, string | undefined>;
+const ACTION_COLUMN_WIDTH = "w-[10%]";
 
 export function ArchivedOkrs({
   okrs,
@@ -105,7 +116,7 @@ export function ArchivedOkrs({
       <div className="min-h-0 flex-1 overflow-hidden p-6">
         <div className="flex h-full flex-col overflow-hidden rounded-xl border border-beige-20 bg-white">
           <div className="calm-scroll min-h-0 flex-1 overflow-auto">
-            <table className="w-full border-collapse text-sm">
+            <table className="w-full table-fixed border-collapse text-sm">
               <thead className="sticky top-0 z-10">
                 <tr className="border-b border-beige-20">
                   {COLUMNS.map((col) => (
@@ -113,7 +124,7 @@ export function ArchivedOkrs({
                   ))}
                   {/* Row-action column — no header label, matches the width of the
                    * hover-visible Restore button it holds. */}
-                  <th className="w-10 bg-beige-20 px-2 py-0" aria-hidden />
+                  <th className={cn(ACTION_COLUMN_WIDTH, "bg-beige-20 px-2 py-0")} aria-hidden />
                 </tr>
               </thead>
               <tbody>
@@ -128,7 +139,7 @@ export function ArchivedOkrs({
                       }}
                       className="group cursor-pointer border-b border-beige-10 hover:bg-beige-10"
                     >
-                      <td className="w-72 max-w-0 px-3 py-2.5">
+                      <td className={cn(COLUMN_WIDTH.title, "max-w-0 px-3 py-2.5")}>
                         <span
                           className="block truncate font-medium text-green-90"
                           title={o.title || "Untitled OKR"}
@@ -136,21 +147,21 @@ export function ArchivedOkrs({
                           {o.title || "Untitled OKR"}
                         </span>
                       </td>
-                      <td className="w-32 max-w-0 truncate px-3 py-2.5 text-green-70" title={objective?.name}>
+                      <td className={cn(COLUMN_WIDTH.objective, "max-w-0 truncate px-3 py-2.5 text-green-70")} title={objective?.name}>
                         {objective?.name ?? "—"}
                       </td>
-                      <td className="w-40 max-w-0 truncate px-3 py-2.5 text-green-70" title={teamLabel(o)}>
+                      <td className={cn(COLUMN_WIDTH.team, "max-w-0 truncate px-3 py-2.5 text-green-70")} title={teamLabel(o)}>
                         {teamLabel(o)}
                       </td>
-                      <td className="w-40 px-3 py-2.5">
+                      <td className={cn(COLUMN_WIDTH.governance, "min-w-0 overflow-hidden px-3 py-2.5")}>
                         <Tag shape="square" className={OKR_GOVERNANCE_META[o.governanceStatus].tag}>
-                          {OKR_GOVERNANCE_META[o.governanceStatus].label}
+                          <span className="min-w-0 truncate">{OKR_GOVERNANCE_META[o.governanceStatus].label}</span>
                         </Tag>
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-right text-beige-70">
+                      <td className={cn(COLUMN_WIDTH.updated, "truncate whitespace-nowrap px-3 py-2.5 text-right text-beige-70")}>
                         Updated {formatShortEN(o.updatedAt.slice(0, 10))}
                       </td>
-                      <td className="w-10 px-2 py-2.5 text-right">
+                      <td className={cn(ACTION_COLUMN_WIDTH, "px-2 py-2.5 text-right")}>
                         <button
                           type="button"
                           onClick={(e) => {

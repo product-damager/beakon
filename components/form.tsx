@@ -374,14 +374,16 @@ export function InlineTagSelect<T extends string>({
         }}
         className={cn(
           "flex items-center gap-1.5 rounded-md transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-90 focus-visible:ring-offset-1",
-          fill ? "h-full w-full px-3 py-2.5 text-left hover:bg-beige-10" : "inline-flex hover:opacity-80"
+          fill
+            ? "h-full w-full min-w-0 overflow-hidden px-3 py-2.5 text-left hover:bg-beige-10"
+            : "inline-flex hover:opacity-80"
         )}
       >
         {render(value)}
         <ChevronDown
           size={13}
           className={cn(
-            "text-beige-60",
+            "shrink-0 text-beige-60",
             fill && "opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
           )}
         />

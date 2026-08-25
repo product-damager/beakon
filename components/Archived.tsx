@@ -6,6 +6,7 @@ import { useRoadmap } from "@/lib/store";
 import { applyFilters } from "@/lib/filters";
 import { formatShortEN } from "@/lib/dates";
 import { ownerName, STATUSES, type Initiative } from "@/lib/types";
+import { cn } from "@/lib/cn";
 import { Avatar, StatusTag } from "./ui";
 import { FilterBar } from "./FilterBar";
 import { Th } from "./List";
@@ -34,12 +35,23 @@ import type { Column, SortState } from "./List";
 type SortKey = "title" | "owner" | "team" | "status" | "updated";
 
 const COLUMNS: Column<SortKey>[] = [
-  { k: "title", label: "Initiative", className: "w-72" },
-  { k: "owner", label: "Owner", className: "w-40" },
-  { k: "team", label: "Team", className: "w-40" },
-  { k: "status", label: "Status" },
-  { k: "updated", label: "Updated", align: "right" },
+  { k: "title", label: "Initiative", className: "w-[30%]" },
+  { k: "owner", label: "Owner", className: "w-[16%]" },
+  { k: "team", label: "Team", className: "w-[16%]" },
+  { k: "status", label: "Status", className: "w-[14%]" },
+  { k: "updated", label: "Updated", align: "right", className: "w-[16%]" },
 ];
+
+/** Same drift-proofing as List.tsx's COLUMN_WIDTH: header and body cells
+ * pull from the same source instead of separately hand-typed `w-*` classes
+ * (Status/Updated previously had no width, letting them stretch
+ * unpredictably under `table-layout: auto`). The trailing action column
+ * (Restore button, no header label) gets the remaining 8% so the full row
+ * still sums to 100%. */
+const COLUMN_WIDTH: Record<SortKey, string | undefined> = Object.fromEntries(
+  COLUMNS.map((c) => [c.k, c.className])
+) as Record<SortKey, string | undefined>;
+const ACTION_COLUMN_WIDTH = "w-[8%]";
 
 export function Archived() {
   const {
@@ -89,7 +101,7 @@ export function Archived() {
       <div className="min-h-0 flex-1 overflow-hidden p-6">
         <div className="flex h-full flex-col overflow-hidden rounded-xl border border-beige-20 bg-white">
           <div className="calm-scroll min-h-0 flex-1 overflow-auto">
-            <table className="w-full border-collapse text-sm">
+            <table className="w-full table-fixed border-collapse text-sm">
               <thead className="sticky top-0 z-10">
                 <tr className="border-b border-beige-20">
                   {COLUMNS.map((col) => (
@@ -97,7 +109,7 @@ export function Archived() {
                   ))}
                   {/* Row-action column — no header label, matches the width of the
                    * hover-visible Restore button it holds. */}
-                  <th className="w-10 bg-beige-20 px-2 py-0" aria-hidden />
+                  <th className={cn(ACTION_COLUMN_WIDTH, "bg-beige-20 px-2 py-0")} aria-hidden />
                 </tr>
               </thead>
               <tbody>
@@ -113,7 +125,7 @@ export function Archived() {
                       }}
                       className="group cursor-pointer border-b border-beige-10 hover:bg-beige-10"
                     >
-                      <td className="w-72 max-w-0 px-3 py-2.5">
+                      <td className={cn(COLUMN_WIDTH.title, "max-w-0 px-3 py-2.5")}>
                         <span
                           className="block truncate font-medium text-green-90"
                           title={i.title || "Untitled initiative"}
@@ -121,22 +133,22 @@ export function Archived() {
                           {i.title || "Untitled initiative"}
                         </span>
                       </td>
-                      <td className="w-40 max-w-0 px-3 py-2.5">
+                      <td className={cn(COLUMN_WIDTH.owner, "max-w-0 px-3 py-2.5")}>
                         <span className="flex items-center gap-2 text-green-90">
                           {owner && <Avatar name={ownerName(owner)} className="h-6 w-6 shrink-0 text-[10px]" neutral />}
                           <span className="truncate" title={ownerName(owner)}>{ownerName(owner)}</span>
                         </span>
                       </td>
-                      <td className="w-40 max-w-0 truncate px-3 py-2.5 text-green-70" title={team?.name}>
+                      <td className={cn(COLUMN_WIDTH.team, "max-w-0 truncate px-3 py-2.5 text-green-70")} title={team?.name}>
                         {team?.name ?? "—"}
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className={cn(COLUMN_WIDTH.status, "min-w-0 overflow-hidden px-3 py-2.5")}>
                         <StatusTag status={i.status} />
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-right text-beige-70">
+                      <td className={cn(COLUMN_WIDTH.updated, "truncate whitespace-nowrap px-3 py-2.5 text-right text-beige-70")}>
                         Updated {formatShortEN(i.updatedAt.slice(0, 10))}
                       </td>
-                      <td className="w-10 px-2 py-2.5 text-right">
+                      <td className={cn(ACTION_COLUMN_WIDTH, "px-2 py-2.5 text-right")}>
                         <button
                           type="button"
                           onClick={(e) => {
