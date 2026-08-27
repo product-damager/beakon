@@ -120,7 +120,7 @@ export function OkrGroupedList({
         <td className={cn(OKR_COLUMN_WIDTH.quarter, "truncate whitespace-nowrap px-3 py-2.5 text-green-70")}>
           Q{o.quarter} {o.year}
         </td>
-        <td className={cn(OKR_COLUMN_WIDTH.governance, "overflow-hidden p-0")}>
+        <td className={cn(OKR_COLUMN_WIDTH.governance, "p-0")}>
           <InlineTagSelect
             fill
             label="Change governance"
@@ -140,7 +140,7 @@ export function OkrGroupedList({
             }}
           />
         </td>
-        <td className={cn(OKR_COLUMN_WIDTH.health, "overflow-hidden p-0")}>
+        <td className={cn(OKR_COLUMN_WIDTH.health, "p-0")}>
           <InlineTagSelect
             fill
             label="Change health"

@@ -212,7 +212,7 @@ export function List() {
                           <span className="truncate" title={ownerName(owner)}>{ownerName(owner)}</span>
                         </span>
                       </td>
-                      <td className={cn(COLUMN_WIDTH.status, "overflow-hidden p-0")}>
+                      <td className={cn(COLUMN_WIDTH.status, "p-0")}>
                         <InlineTagSelect
                           fill
                           label="Change status"
@@ -225,7 +225,7 @@ export function List() {
                           }}
                         />
                       </td>
-                      <td className={cn(COLUMN_WIDTH.health, "overflow-hidden p-0")}>
+                      <td className={cn(COLUMN_WIDTH.health, "p-0")}>
                         <InlineTagSelect
                           fill
                           label="Change health"
