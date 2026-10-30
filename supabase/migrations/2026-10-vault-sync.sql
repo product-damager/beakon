@@ -54,7 +54,21 @@ declare
 begin
   -- Only signed-in API callers are restricted; the sync runs as postgres.
   if current_user <> 'authenticated' then
+    -- On DELETE `new` is null, and returning null from a BEFORE trigger
+    -- silently cancels the delete: return the row being deleted instead.
+    if tg_op = 'DELETE' then
+      return old;
+    end if;
     return new;
+  end if;
+
+  if tg_op = 'DELETE' then
+    -- Vault rows are archived by the sync, never deleted from the app.
+    if old.source = 'vault' then
+      raise exception 'Managed in the vault: this record can only be removed from the vault'
+        using errcode = '42501';
+    end if;
+    return old;
   end if;
 
   if tg_op = 'INSERT' then
@@ -83,6 +97,10 @@ begin
   o := to_jsonb(old);
   n := to_jsonb(new);
   foreach f in array old.vault_fields loop
+    if not (o ? f) then
+      -- Fail closed: a vault_fields entry that isn't a column would otherwise go unguarded.
+      raise exception 'vault_fields names an unknown column "%"', f using errcode = '42501';
+    end if;
     if (o -> f) is distinct from (n -> f) then
       raise exception 'Managed in the vault: "%" can only be changed in the vault', f
         using errcode = '42501';
@@ -95,12 +113,12 @@ revoke execute on function guard_vault_definitions() from public, anon, authenti
 
 drop trigger if exists initiatives_guard_vault_definitions on initiatives;
 create trigger initiatives_guard_vault_definitions
-  before insert or update on initiatives
+  before insert or update or delete on initiatives
   for each row execute function guard_vault_definitions();
 
 drop trigger if exists okrs_guard_vault_definitions on okrs;
 create trigger okrs_guard_vault_definitions
-  before insert or update on okrs
+  before insert or update or delete on okrs
   for each row execute function guard_vault_definitions();
 
 -- ── persist_okr: keep stored values for vault-owned columns ──

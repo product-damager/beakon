@@ -180,6 +180,46 @@ class ReviewFixes(Base):
         self.assertNotIn("archived = excluded.archived", okr_stmt)
 
 
+class QaFixes(Base):
+    def test_second_write_back_works_after_fresh_backup(self):
+        bdir = os.path.join(self.vault, "backups")
+        p = os.path.join(self.vault, "live.json")
+        with open(p, "w") as f:
+            json.dump([{"source_key": "fr-1", "achievement": 0.2, "governance_status": "draft", "health": "on_track"}], f)
+        vs.main(["write-back", "--okr", self.okr, "--live", p, "--backup-dir", bdir, "--backup"])
+        time.sleep(0.02)
+        with open(p, "w") as f:
+            json.dump([{"source_key": "fr-1", "achievement": 0.5, "governance_status": "draft", "health": "on_track"}], f)
+        vs.main(["write-back", "--okr", self.okr, "--live", p, "--backup-dir", bdir, "--backup"])
+        c = json.load(open(self.okr))["squads"][0]["commitments"][0]
+        self.assertEqual(c["progress"], 50)
+        self.assertEqual(len([f for f in os.listdir(bdir) if f.endswith(".bak")]), 2)  # none overwritten
+
+    def test_link_conflicting_with_existing_vault_row_is_skipped(self):
+        self.add("Rollout Preview", note(beakon="i-old"))
+        cur = {"initiatives": [
+            {"id": "i-old", "title": "FF: Rollout Preview", "status": "planned", "archived": False,
+             "source": None, "source_key": None, "target_start": "2026-07-01", "target_end": "2026-09-30"},
+            {"id": "v-rollout-preview", "title": "Rollout Preview", "status": "planned", "archived": False,
+             "source": "vault", "source_key": "Rollout Preview"}], "okrs": [], "owners": []}
+        inits, _, skips, _, _ = self.build(cur)
+        self.assertNotIn("Rollout Preview", inits)
+        self.assertIn("conflicts with v-rollout-preview", dict(skips)["Rollout Preview"])
+
+    def test_possible_rename_is_flagged(self):
+        self.add("Rollout Preview v2", note())
+        cur = {"initiatives": [{"id": "v-rollout-preview", "title": "Rollout Preview", "status": "planned",
+                                "archived": False, "source": "vault", "source_key": "Rollout Preview",
+                                "team_id": "team-finalize-rollout"}], "okrs": [], "owners": []}
+        _, _, _, _, rep = self.build(cur)
+        self.assertIn("possible rename: `v-rollout-preview`", rep)
+
+    def test_non_ascii_title_gets_a_stable_id(self):
+        self.assertTrue(vs.slug("Приоритеты").startswith("h"))
+        self.assertEqual(vs.slug("Приоритеты"), vs.slug("Приоритеты"))
+        self.assertNotEqual(vs.slug("Приоритеты"), vs.slug("Сегменты"))
+
+
 class BuildOkrs(Base):
     def test_commitments_objectives_and_scope(self):
         _, okrs, skips, sql, _ = self.build()

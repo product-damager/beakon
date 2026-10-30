@@ -74,7 +74,11 @@ def sql_arr(items):
 
 
 def slug(s):
-    return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")
+    out = re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")
+    if not out:  # e.g. an all non-ASCII title: stable short hash instead of ""
+        import hashlib
+        out = "h" + hashlib.sha1(s.encode("utf-8")).hexdigest()[:10]
+    return out
 
 
 def quarter_dates(q):
@@ -154,6 +158,10 @@ def plan_initiatives(features_dir, current, today):
         link = fm.get("beakon", "") or None
         if link and link not in existing:
             skips.append((key, f"beakon: {link} does not exist in Beakon"))
+            continue
+        if link and key in by_key and by_key[key]["id"] != link:
+            skips.append((key, f"beakon: {link} conflicts with {by_key[key]['id']}, which is already synced "
+                               f"from this note — remove the beakon: line or archive {by_key[key]['id']} first"))
             continue
         prior = existing.get(link) if link else by_key.get(key)
         rid = link or (prior["id"] if prior else "v-" + slug(key))
@@ -369,6 +377,19 @@ def build(args):
         lines.append("")
     section("Initiatives (04 Features)", inits, INIT_COMPARE, "i")
     section("OKRs (okr.json commitments)", okrs, OKR_COMPARE, "o")
+    created_i = [r for r in inits if not r["_prior"]]
+    renames = []
+    import difflib
+    for old in archive_i:
+        for new in created_i:
+            if old.get("team_id") == new["team_id"] and \
+               difflib.SequenceMatcher(None, (old.get("title") or "").lower(), new["title"].lower()).ratio() >= 0.6:
+                renames.append(f"- possible rename: `{old['id']}` {old.get('title')!r} (archived) ↔ new {new['title']!r} "
+                               f"— if it's the same work, add `beakon: {old['id']}` to the note before applying")
+    if renames:
+        lines.append(f"## Possible renames — check before applying: {len(renames)}")
+        lines += renames
+        lines.append("")
     lines.append(f"## Archive (gone from the vault): {len(archive_i) + len(archive_o)}")
     lines += [f"- archive initiative `{r['id']}` {r.get('title')!r}" for r in archive_i]
     lines += [f"- archive OKR `{r['id']}` {r.get('title')!r}" for r in archive_o]
@@ -415,7 +436,13 @@ def write_back(args):
     if args.backup:
         os.makedirs(args.backup_dir, exist_ok=True)
         stamp = dt.datetime.now().strftime("%Y-%m-%d-%H%M%S")
-        shutil.copy2(args.okr, os.path.join(args.backup_dir, f"okr.json.{stamp}-before-vault-sync-writeback.bak"))
+        dest = os.path.join(args.backup_dir, f"okr.json.{stamp}-before-vault-sync-writeback.bak")
+        n = 1
+        while os.path.exists(dest):  # never overwrite an earlier backup
+            n += 1
+            dest = os.path.join(args.backup_dir, f"okr.json.{stamp}-{n}-before-vault-sync-writeback.bak")
+        shutil.copyfile(args.okr, dest)  # copyfile: the backup gets "now" as mtime (copy2 kept the old one)
+        os.utime(dest, None)
     last_backup = latest_backup_mtime(args.backup_dir) if os.path.isdir(args.backup_dir) else None
     last_write = os.path.getmtime(marker) if os.path.exists(marker) else None
     if last_backup is None or (last_write is not None and last_backup <= last_write):
