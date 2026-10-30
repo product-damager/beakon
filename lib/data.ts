@@ -376,11 +376,16 @@ export async function persistInitiative(i: Initiative): Promise<void> {
   // (title, dates…). An upsert would fail: Postgres checks NOT NULL on the
   // proposed insert before resolving the conflict. So vault rows are updated.
   const row = initiativeToRow(i);
-  const { error: upsertErr } =
-    i.source === "vault"
-      ? await sb.from("initiatives").update(row).eq("id", i.id)
-      : await sb.from("initiatives").upsert(row);
-  if (upsertErr) throw upsertErr;
+  if (i.source === "vault") {
+    // An update matching 0 rows isn't an error in PostgREST — check it, so a
+    // vanished or hidden vault row surfaces instead of "saving" silently.
+    const { data, error } = await sb.from("initiatives").update(row).eq("id", i.id).select("id");
+    if (error) throw error;
+    if (!data?.length) throw new Error("This initiative no longer exists — reload to see the latest roadmap.");
+  } else {
+    const { error: upsertErr } = await sb.from("initiatives").upsert(row);
+    if (upsertErr) throw upsertErr;
+  }
 
   // Replace links: simplest correct sync for a handful of rows per initiative.
   const { error: delErr } = await sb.from("delivery_links").delete().eq("initiative_id", i.id);
