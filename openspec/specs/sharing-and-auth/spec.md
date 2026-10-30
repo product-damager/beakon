@@ -1,7 +1,7 @@
 # sharing-and-auth Specification
 
 ## Purpose
-Who can get into Beakon and what anonymous visitors can read. The workspace is limited to Kameleoon teammates through passwordless magic-link sign-in; a curated, read-only public page (/share) shows external initiatives to anyone. The spec defines the exact anonymous surface — themes, the external roadmap projection and the displayed columns of external initiatives — and the database rules that enforce it. Source: ADR 004, ADR 014, security-hardening (2026-10-30).
+Who can get into Beakon and what anonymous visitors can read. The workspace is limited to Kameleoon teammates through passwordless magic-link sign-in; a curated, read-only public page (/share) shows external initiatives to anyone. The spec defines the exact anonymous surface — themes, the external roadmap projection and the initiative columns /share needs — and the database rules that enforce it. Source: ADR 004, ADR 014, security-hardening (2026-10-30).
 
 ## Requirements
 
