@@ -49,7 +49,7 @@ PM decisions: 2026-10-30 (proposal.md). Stop points: 4.1 (the dry-run report) an
 
 ## 4. First sync
 
-- [ ] 4.1 Add the D5 `beakon:` lines to the 2 feature notes. Build a dry-run report against production. **STOP: show the report to the PM.**
+- [x] 4.1 Add the D5 `beakon:` link and build a dry-run report against production. **STOP: show the report to the PM.** (Done 2026-10-30. After the first report the PM dropped the Experiment Rules link, keeping `i-3le9kw0` as Q3 history; only "Rollout Preview" → `i-98z7vw8` is linked.)
 - [ ] 4.2 After the PM's OK: apply to preview, check (counts match the report, guard works, anon surface unchanged), then apply to prod and check.
 
 ## 5. Write-back
