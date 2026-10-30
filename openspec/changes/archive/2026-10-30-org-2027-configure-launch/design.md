@@ -30,6 +30,14 @@ As of 2026-10-30, both projects have the 2026 org: 4 BUs, 11 teams, ids `bu-*` a
 - Empty BU and team groups stay hidden on the OKR page, so nothing changes visually until OKRs exist.
 - No product-designer pass is needed: there's no new or reworked surface.
 
+### Decision 4: one-off guarantees of this migration live here, not in the spec
+The spec states a lasting rule: adding org records never reassigns existing work. These are the specific promises for this migration (PM, 2026-10-30), checked by tasks 2.1 and 2.2:
+- Q3 2026 OKRs and initiatives stay on "Tech & Perso Builders";
+- the 13 team-less production initiatives stay team-less;
+- the rest of the 2026 org is untouched.
+
+**Note for vault-sync:** it must upsert org records on these exact ids (`bu-configure-launch`, `team-finalize-rollout`, `team-assets-creation`), never create duplicates by name.
+
 ## Risks / Trade-offs
 
 - **[Risk] Teammates pick the old "Tech & Perso Builders" for new work.** → Accepted for now. vault-sync will own team assignment for definitions. A later change could mark 2026 teams as historical in pickers.

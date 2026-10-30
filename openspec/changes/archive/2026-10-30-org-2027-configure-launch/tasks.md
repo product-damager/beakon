@@ -20,7 +20,7 @@
 
 - [x] 3.1 Run `npm run typecheck`, `npm run lint` (0 errors), `npm run test` and `npm run build`. All pass.
 - [x] 3.2 In seed mode (`npm run dev:demo`), verify that the team picker on an initiative and the team-or-BU picker on an OKR list "Finalize & Roll out" and "Assets Creation" under "Configure & Launch".
-- [ ] 3.3 qa-engineer pass, covering seed parity and that no existing row moved. dev-lead review: Approved.
+- [x] 3.3 qa-engineer pass, covering seed parity and that no existing row moved. dev-lead review: Approved.
 - [x] 3.4 `openspec validate org-2027-configure-launch --strict` passes.
 
 ## Workflow follow-up

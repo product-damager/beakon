@@ -1,4 +1,4 @@
--- org-2027-configure-launch (2026-10-30) — see openspec/changes/archive/…org-2027-configure-launch/
+-- org-2027-configure-launch (2026-10-30) — see openspec/changes/archive/2026-10-30-org-2027-configure-launch/
 --
 -- Adds the 2027 business unit "Configure & Launch" and its two squads. Data
 -- only; touches nothing but these three ids. Existing OKRs, initiatives and

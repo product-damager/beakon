@@ -13,13 +13,13 @@ The business unit "Configure & Launch" SHALL exist, with its two squads as teams
 - **WHEN** a user opens the team picker on an initiative
 - **THEN** "Finalize & Roll out" and "Assets Creation" are listed under "Configure & Launch"
 
-### Requirement: 2026 organisation kept as history
-The 2026 business units and teams SHALL stay as they are, and the OKRs, initiatives and owners recorded on them SHALL NOT be moved when the 2027 organisation is added. In particular, Q3 2026 work stays on "Tech & Perso Builders" (the 2026 name of the squad now called "Finalize & Roll out"), and initiatives without a team stay without one until vault-sync assigns them.
+### Requirement: Earlier org records kept alongside new ones
+Business units and teams from an earlier organisation SHALL stay as records alongside newer ones, so work recorded on them keeps its history. Adding business units or teams SHALL NOT by itself reassign any existing OKR, initiative or owner; reassignment happens only through an explicit edit or sync.
 
-#### Scenario: Existing OKR after the 2027 org is added
-- **WHEN** an OKR recorded on "Tech & Perso Builders" is opened after this change
-- **THEN** it still belongs to "Tech & Perso Builders"
+#### Scenario: OKR on an earlier team after new org records are added
+- **WHEN** new business units or teams are added and an OKR recorded on an earlier team (e.g. "Tech & Perso Builders") is opened
+- **THEN** it still belongs to that team
 
-#### Scenario: Team-less initiative
-- **WHEN** an initiative had no team before this change
-- **THEN** it still has none afterwards
+#### Scenario: Team-less initiative after new org records are added
+- **WHEN** new business units or teams are added and an initiative had no team before
+- **THEN** it still has none until someone, or a sync, assigns one
