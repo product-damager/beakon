@@ -66,7 +66,10 @@ Links: vault `01 Context/BU Configure & Launch.md`, `02 OKR/2026-Q4 OKR.md`, `04
   - a new `health` field;
   - `governance` from Beakon.
 - **D4.** `area` becomes a read-only label on synced initiatives. Theme stays Beakon's.
-- **D5.** Claude adds `beakon:` links to "Rollout Preview" (→ "FF: Rollout Preview") and "Experiment Rules for Personalization" (→ "Perso Experimentation Rule"). Other notes create new initiatives, and unclaimed initiatives stay untouched.
+- **D5.** Claude adds a `beakon:` link to "Rollout Preview" (→ "FF: Rollout Preview").
+  - The "Experiment Rules for Personalization" → "Perso Experimentation Rule" link was dropped after the first dry run, so the released Q3 initiative stays as history.
+  - Other notes create new initiatives, and unclaimed initiatives stay untouched.
+  - "Autopromo" is a product term (personalization type 100) and is allowlisted in the privacy check.
 - **D6.** Done by the PM: no production initiative title names a customer (checked 2026-10-30).
 - **D7.** Notes with squad "other" are skipped.
 - **Also:** initiatives created by the sync are internal, and `okr.json` is backed up before the first write-back.

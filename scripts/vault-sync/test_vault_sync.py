@@ -195,6 +195,11 @@ class WriteBack(Base):
         with self.assertRaises(SystemExit):  # a second write-back needs a fresh backup
             vs.main(["write-back", "--okr", self.okr, "--live", live, "--backup-dir", bdir])
 
+    def test_allowlisted_product_term_is_not_a_customer(self):
+        self.assertFalse(vs.denylisted("Autopromo Legacy read-only"))
+        self.assertTrue(vs.denylisted("BPCE Legacy read-only"))
+        self.assertTrue(vs.denylisted("Autopromo for BPCE"))
+
     def test_not_assessed_is_not_started(self):
         self.assertEqual(vs.commitment_status(None, "draft"), "not_started")
         self.assertEqual(vs.commitment_status(0, "validated"), "not_started")

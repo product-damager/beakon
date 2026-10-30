@@ -53,6 +53,10 @@ OBJECTIVE_DEFAULT = {"Finalize & Roll out": "so-core", "Assets Creation": "so-ai
 # Titles never sent to Supabase (privacy: no customer names). Case-insensitive
 # whole-word patterns; extend when a new customer name shows up in a report.
 CUSTOMER_DENYLIST = [r"\bbpce\b"]
+# Product terms that look like names but are not customers (PM-confirmed); a
+# title containing one is never flagged because of it. "Autopromo" = the
+# personalization type 100 (PM, 2026-10-30).
+PRODUCT_TERM_ALLOWLIST = [r"\bautopromo\b"]
 
 QUARTER_RE = re.compile(r"^(\d{4})-Q([1-4])$")
 
@@ -99,6 +103,8 @@ def parse_frontmatter(text):
 
 
 def denylisted(title):
+    for p in PRODUCT_TERM_ALLOWLIST:
+        title = re.sub(p, "", title, flags=re.I)
     return any(re.search(p, title, re.I) for p in CUSTOMER_DENYLIST)
 
 
