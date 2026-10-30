@@ -28,7 +28,7 @@ PM decisions: 2026-10-30 (proposal.md). Stop points: 4.1 (the dry-run report) an
   - seed mode gets one vault-managed initiative and one vault-managed OKR for the demo.
 
   Verify: typecheck, plus unit tests for the column stripping.
-- [ ] 2.2 UI (frontend-engineer). Vault-owned fields are read-only with a "Managed in the vault" hint in both drawers. For vault-managed initiatives:
+- [x] 2.2 UI (frontend-engineer). Vault-owned fields are read-only with a "Managed in the vault" hint in both drawers. For vault-managed initiatives:
   - status pickers (drawer and list) are disabled;
   - Board cards can't move to another column but can be reordered within it;
   - Archive and Restore are hidden;
@@ -50,12 +50,12 @@ PM decisions: 2026-10-30 (proposal.md). Stop points: 4.1 (the dry-run report) an
 ## 4. First sync
 
 - [x] 4.1 Add the D5 `beakon:` link and build a dry-run report against production. **STOP: show the report to the PM.** (Done 2026-10-30. After the first report the PM dropped the Experiment Rules link, keeping `i-3le9kw0` as Q3 history; only "Rollout Preview" → `i-98z7vw8` is linked.)
-- [ ] 4.2 After the PM's OK: apply to preview, check (counts match the report, guard works, anon surface unchanged), then apply to prod and check.
+- [x] 4.2 After the PM's OK: apply to preview, check (counts match the report, guard works, anon surface unchanged), then apply to prod and check.
 
 ## 5. Write-back
 
-- [ ] 5.1 Back up `okr.json` to `02 OKR/backups/`.
-- [ ] 5.2 Run the first write-back. **STOP: show the `okr.json` diff to the PM.**
+- [x] 5.1 Back up `okr.json` to `02 OKR/backups/`.
+- [x] 5.2 Run the first write-back. **STOP: show the `okr.json` diff to the PM.**
 
 ## 6. Review and release
 
