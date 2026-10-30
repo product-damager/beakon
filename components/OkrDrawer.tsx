@@ -296,7 +296,7 @@ function DrawerBody({
       <div className="flex flex-col gap-6 px-6 py-5">
         <div className="grid grid-cols-2 gap-4 rounded-xl border border-beige-20 bg-beige-5 p-4">
           <div className="col-span-2">
-            <Prop icon={Users} label="Team / business unit">
+            <Prop icon={Users} label="Team / business unit" locked={vo("team_id") || vo("business_unit_id")}>
               {vo("team_id") || vo("business_unit_id") ? (
                 <span title={VAULT_HINT}>{teamBuLabel}</span>
               ) : (
@@ -317,7 +317,7 @@ function DrawerBody({
             </Prop>
           </div>
           <div className="col-span-2">
-            <Prop icon={Building2} label="Strategic objective">
+            <Prop icon={Building2} label="Strategic objective" locked={vo("strategic_objective_id")}>
               {vo("strategic_objective_id") ? (
                 <span title={VAULT_HINT}>
                   {strategicObjectives.find((s) => s.id === d.strategicObjectiveId)?.name ?? "—"}
@@ -340,7 +340,7 @@ function DrawerBody({
             </Prop>
           </div>
           <div className="col-span-2">
-            <Prop icon={CalendarRange} label="Year / quarter">
+            <Prop icon={CalendarRange} label="Year / quarter" locked={vo("year") || vo("quarter")}>
               {vo("year") || vo("quarter") ? (
                 <span title={VAULT_HINT}>
                   Q{d.quarter} {d.year}
@@ -374,7 +374,7 @@ function DrawerBody({
           {/* Tier (size of the work) — set only by the vault sync; there is
            * no persist_okr parameter for it, so it is read-only for everyone. */}
           <div className="col-span-2">
-            <Prop icon={Layers} label="Tier">
+            <Prop icon={Layers} label="Tier" locked={vault}>
               <span title={vault ? VAULT_HINT : undefined}>
                 {d.tier ? <TierTag tier={d.tier} /> : <span className="text-beige-60">—</span>}
               </span>
@@ -392,7 +392,7 @@ function DrawerBody({
           </div>
         </div>
 
-        <Field label="Deliverable detail">
+        <Field label="Deliverable detail" locked={vo("deliverable_detail")}>
           {vo("deliverable_detail") ? (
             <span title={VAULT_HINT} className="block whitespace-pre-line text-sm text-green-90">
               {d.deliverableDetail || <span className="text-beige-60">—</span>}

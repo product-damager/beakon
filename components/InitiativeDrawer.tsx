@@ -266,7 +266,7 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
 
       {/* Properties — compact labeled rows, edited in place */}
       <div className="flex flex-col gap-0.5 px-4 py-3">
-        <PropRow icon={CalendarRange} label="Timeframe">
+        <PropRow icon={CalendarRange} label="Timeframe" locked={vo("target_start")}>
           {vo("target_start") ? (
             <div className="flex flex-wrap items-center gap-2" title={VAULT_HINT}>
               <span>{formatDateEN(d.targetStart)}</span>
@@ -307,7 +307,7 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
         {!vo("target_start") && dateOutOfOrder && (
           <p className="px-2 pb-1 text-xs text-red-70">End date must be on or after the start date.</p>
         )}
-        <PropRow icon={User} label="Owner">
+        <PropRow icon={User} label="Owner" locked={vo("owner_id")}>
           <InlineTagSelect
             label="Change owner"
             value={d.ownerId}
@@ -318,7 +318,7 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
             disabledTitle={VAULT_HINT}
           />
         </PropRow>
-        <PropRow icon={Users} label="Team">
+        <PropRow icon={Users} label="Team" locked={vo("team_id")}>
           {vo("team_id") ? (
             <span title={VAULT_HINT} className={cn(!d.teamId && "text-beige-60")}>
               {teams.find((t) => t.id === d.teamId)?.name ?? "No team"}
@@ -333,11 +333,11 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
           )}
         </PropRow>
         {d.area && (
-          <PropRow icon={Shapes} label="Area">
+          <PropRow icon={Shapes} label="Area" locked={vo("area")}>
             <span title={vo("area") ? VAULT_HINT : undefined}>{d.area}</span>
           </PropRow>
         )}
-        <PropRow icon={Layers} label="Tier">
+        <PropRow icon={Layers} label="Tier" locked={vo("tier")}>
           <InlineTagSelect
             label="Change tier"
             value={d.tier ?? ""}
@@ -552,7 +552,9 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
           </>
         ) : (
           <>
-            {vo("archived") ? null : d.archived ? (
+            {vo("archived") ? (
+              <span className="text-xs text-beige-60">Archiving is managed in the vault</span>
+            ) : d.archived ? (
               <Button
                 variant="ghost"
                 onClick={() => {

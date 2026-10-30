@@ -211,10 +211,22 @@ export function VaultTag() {
   );
 }
 
-/** Tier (T1–T3, size of the work) — neutral, never a status/lime colour. */
+/** 10px lock after a field label — the vault owns this field (visible without hovering). */
+export function VaultLock() {
+  return (
+    <span title={VAULT_HINT} className="inline-flex shrink-0">
+      <Lock size={10} strokeWidth={2} className="text-beige-50" aria-label="Managed in the vault" />
+    </span>
+  );
+}
+
+/**
+ * Tier (T1–T3, size of the work) — an outlined square chip, so it reads as a
+ * neutral attribute and never as a state tag (Archived) or a status/lime colour.
+ */
 export function TierTag({ tier, className }: { tier: Tier; className?: string }) {
   return (
-    <Tag className={cn("shrink-0 bg-beige-20 text-beige-70", className)}>
+    <Tag shape="square" className={cn("shrink-0 border border-beige-30 bg-transparent text-beige-60", className)}>
       <span title={`Tier ${tier}`}>{tier}</span>
     </Tag>
   );

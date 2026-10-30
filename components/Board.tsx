@@ -86,28 +86,36 @@ function Card({
       {/* Quick edit */}
       <div className="mt-3 flex items-center gap-2 border-t border-beige-10 pt-2.5">
         {owner && <Avatar name={ownerName(owner)} className="h-6 w-6 text-[10px]" neutral />}
-        <select
-          value={initiative.ownerId}
-          onChange={(e) => {
-            const ownerId = e.target.value;
-            saveInitiative({ ...initiative, ownerId });
-            notify({
-              message: ownerId ? `Owner set to ${ownerName(getOwner(ownerId))}` : "Owner cleared",
-              tone: "success",
-            });
-          }}
-          className="min-w-0 flex-1 truncate rounded-md border border-beige-20 bg-beige-5 px-2 py-1 text-xs text-green-90 focus:outline-none focus:ring-1 focus:ring-green-90 disabled:cursor-not-allowed disabled:opacity-60"
-          aria-label="Owner"
-          disabled={vaultOwns(initiative, "owner_id")}
-          title={vaultOwns(initiative, "owner_id") ? VAULT_HINT : undefined}
-        >
-          <option value="">Unassigned</option>
-          {owners.map((o) => (
-            <option key={o.id} value={o.id}>
-              {ownerName(o)}
-            </option>
-          ))}
-        </select>
+        {vaultOwns(initiative, "owner_id") ? (
+          // vault-sync: owner is read-only here — plain name, like the drawer.
+          <span
+            title={VAULT_HINT}
+            className={cn("min-w-0 flex-1 truncate text-xs", owner ? "text-green-90" : "text-beige-60")}
+          >
+            {owner ? ownerName(owner) : "Unassigned"}
+          </span>
+        ) : (
+          <select
+            value={initiative.ownerId}
+            onChange={(e) => {
+              const ownerId = e.target.value;
+              saveInitiative({ ...initiative, ownerId });
+              notify({
+                message: ownerId ? `Owner set to ${ownerName(getOwner(ownerId))}` : "Owner cleared",
+                tone: "success",
+              });
+            }}
+            className="min-w-0 flex-1 truncate rounded-md border border-beige-20 bg-beige-5 px-2 py-1 text-xs text-green-90 focus:outline-none focus:ring-1 focus:ring-green-90"
+            aria-label="Owner"
+          >
+            <option value="">Unassigned</option>
+            {owners.map((o) => (
+              <option key={o.id} value={o.id}>
+                {ownerName(o)}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
     </div>
   );
@@ -228,6 +236,17 @@ export function Board() {
                   <span className="mono-label-sm text-beige-60">{items.length}</span>
                 </div>
                 <div className="space-y-2.5">
+                  {/* vault-sync: browsers show no title tooltip mid-drag, so say why this column refuses the drop. */}
+                  {dragId && !acceptsDrop(s) && (
+                    <div
+                      className={cn(
+                        "flex items-center justify-center rounded-lg border border-dashed border-beige-30 px-4 text-center text-xs leading-relaxed text-balance text-beige-60",
+                        items.length === 0 ? "min-h-[92px] py-6" : "py-3"
+                      )}
+                    >
+                      Status set in the vault
+                    </div>
+                  )}
                   {items.map((i) => (
                     <div key={i.id}>
                       {dragId && dragId !== i.id && drop?.status === s && drop.beforeId === i.id && (

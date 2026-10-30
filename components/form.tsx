@@ -11,16 +11,20 @@ import {
 import { Check, ChevronDown, Search } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useOutsideClose } from "./hooks";
+import { VaultLock } from "./ui";
 
 export function Field({
   label,
   hint,
   error,
   required,
+  locked,
   children,
   className,
 }: {
   label: string;
+  /** The vault owns this field — shows a small lock after the label. */
+  locked?: boolean;
   hint?: string;
   /** Validation message; shown in red and takes precedence over `hint`. */
   error?: string;
@@ -37,6 +41,11 @@ export function Field({
           <span className="text-red-60" aria-hidden>
             {" "}
             *
+          </span>
+        )}
+        {locked && (
+          <span className="ml-1 inline-flex align-middle">
+            <VaultLock />
           </span>
         )}
       </span>
