@@ -67,15 +67,16 @@ Records without `source = 'vault'` keep today's behaviour: every field editable.
 - **Why a per-row list, not a fixed column set:** one source of truth for both enforcement layers, and conditional ownership without special cases.
 
 ### Decision 3: the run is a script plus SQL applied through Claude, with no credentials
-- **`scripts/vault-sync/build-sql.mjs`** (Node, no dependencies):
-  - reads `04 Features` and `okr.json` through vault-relative paths (overridable);
-  - validates them (known squad, tier in {T1, T2, T3, empty}, quarter `YYYY-Qn`, status in the 7 values, strategic_objective in the 4 values);
-  - writes `vault-sync-<date>.sql`, which holds idempotent upserts and archive-on-missing in one transaction;
-  - writes a report: creates, updates with field diffs, archives, skips with reasons. Its `--dry-run` mode compares against a JSON dump of current rows that Claude reads with SQL.
-- **`scripts/vault-sync/write-back.mjs`:** merges OKR live state into `okr.json` (D3) and touches only `status`, `progress`, `health` and `governance` on synced commitments.
-  - It refuses to run if no backup in `02 OKR/backups/` is newer than the last write-back marker.
-  - The first run creates `02 OKR/backups/okr-<timestamp>.json`.
-- **Gitignore:** generated SQL, JSON and report files are gitignored.
+- **`scripts/vault-sync/vault_sync.py`**, Python standard library only:
+  - **`build`** reads `04 Features` and `okr.json` plus a JSON dump of current rows, which Claude reads with SQL.
+    - It validates the input (known squad, the 7 statuses, tier, `YYYY-Qn` quarter, strategic_objective, `beakon:` target exists, denylist).
+    - It writes `out/vault-sync-<date>.sql`: idempotent upserts plus archive-on-missing, in one transaction.
+    - It also writes `out/vault-sync-<date>.md`: creates, updates with field diffs, archives, skips and warnings.
+  - **`write-back`** merges OKR live state into `okr.json` (D3), touching only `status`, `progress`, `health` and `governance` on synced commitments.
+    - It refuses to run unless a backup in `02 OKR/backups/` is newer than the last write-back marker. `--backup` creates `okr.json.<timestamp>-before-vault-sync-writeback.bak`, following the folder's existing naming.
+- **Why Python, not Node** (changed during apply): `okr.json` is written by Python's `json` module (indent 1, `ensure_ascii=False`, `75.0` kept as a float). Re-serializing it the same way is byte-exact, so a write-back diff shows only the values it owns. Node's `JSON.stringify` turns `75.0` into `75`.
+- **Tests:** `python3 -m unittest discover -s scripts/vault-sync` (outside `npm run test`, which is vitest).
+- **Gitignore:** generated files are gitignored (`scripts/vault-sync/out/`).
 
 ### Decision 4: additive schema
 - `tier` is text, checked against (T1, T2, T3), and nullable. `area`, `source` and `source_key` are nullable text. `vault_fields` is `text[] not null default '{}'`.

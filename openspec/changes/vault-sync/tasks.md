@@ -38,14 +38,14 @@ PM decisions: 2026-10-30 (proposal.md). Stop points: 4.1 (the dry-run report) an
 
 ## 3. Sync tooling
 
-- [ ] 3.1 `scripts/vault-sync/build-sql.mjs` plus unit tests. Covers:
+- [x] 3.1 `scripts/vault-sync/vault_sync.py build` (Python, see design Decision 3) plus unit tests. Covers:
   - keys, squad → team, the status mapping and parked ↔ archived;
   - the D2 strategic_objective with defaults, and visibility internal on create;
   - D5 `beakon:` adoption and archive-on-missing;
   - skips (squad "other", the denylist, validation errors);
   - the dry-run report against a JSON dump of current rows.
-- [ ] 3.2 `scripts/vault-sync/write-back.mjs` plus unit tests. Covers the D3 mapping, that only the 4 live-state keys of synced commitments change, and that it refuses to run without a fresh backup in `02 OKR/backups/`.
-- [ ] 3.3 Runbook in `supabase/README.md`: how the PM asks Claude for a sync or a write-back, and which paths it uses. Gitignore the generated files.
+- [x] 3.2 `scripts/vault-sync/vault_sync.py write-back` plus unit tests. Covers the D3 mapping, that only the 4 live-state keys of synced commitments change, and that it refuses to run without a fresh backup in `02 OKR/backups/`.
+- [x] 3.3 Runbook in `supabase/README.md`: how the PM asks Claude for a sync or a write-back, and which paths it uses. Gitignore the generated files.
 
 ## 4. First sync
 
