@@ -105,13 +105,6 @@ The OKR page SHALL show non-archived OKRs grouped by business unit (alphabetical
 - **WHEN** a user clicks "Collapse all"
 - **THEN** every business-unit and team group collapses
 
-### Requirement: OKR table columns and order
-OKR rows SHALL show Title, Objective, Quarter, Governance, Health, Team (or business unit), Achievement and Updated. Within a group, OKRs SHALL be ordered by last update, newest first; there is no user sorting on this page.
-
-#### Scenario: Recently edited first
-- **WHEN** an OKR is edited
-- **THEN** it moves to the top of its group
-
 ### Requirement: OKR filters
 Users SHALL filter OKRs by quarter, team, business unit and strategic objective (multi-select; team searchable) and reset with "Clear all". A business-unit filter also matches team OKRs of that business unit. There is no year filter: a quarter filter matches that quarter in any year (inferred). Filters used outside a saved view are remembered in the browser.
 
@@ -194,3 +187,18 @@ For an OKR created from an `okr.json` commitment, the definition fields (title, 
 #### Scenario: Edit a synced commitment's text
 - **WHEN** a signed-in user tries to change the title of a vault-managed OKR
 - **THEN** the field is not editable, and an update sent directly to the database is refused
+
+### Requirement: OKR table columns and stable order
+OKR rows SHALL show Title, Objective, Quarter, Governance, Health, Team (or business unit), Achievement and Updated. Within a group, OKRs SHALL be ordered by commitment key in natural order (fr-1, fr-2 … fr-10) for vault-synced OKRs, followed by Beakon-only OKRs in record-id order; editing an OKR SHALL NOT change its position. There is no user sorting on this page.
+
+#### Scenario: Edit keeps the position
+- **WHEN** a user changes the achievement of fr-4
+- **THEN** fr-4 stays between fr-3 and fr-5 in its group
+
+#### Scenario: Natural key order
+- **WHEN** a group holds commitments ac-1, ac-2 and ac-10
+- **THEN** they are listed ac-1, ac-2, ac-10
+
+#### Scenario: Synced before Beakon-only
+- **WHEN** a group holds vault-synced and Beakon-only OKRs
+- **THEN** the synced ones come first, then the Beakon-only ones by record id

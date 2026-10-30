@@ -29,11 +29,18 @@ const ZERO_HEALTH_COUNTS: Record<Health, number> = {
   delayed: 0,
 };
 
-/** Default sort inside every bucket — same as the (now-deleted) flat list's
- * default sort, per the plan's explicit scope cut (no per-group interactive
- * sort). ISO datetime strings sort correctly lexically. */
-function sortByUpdatedDesc(okrs: Okr[]): Okr[] {
-  return [...okrs].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
+const naturalCompare = (a: string, b: string) => a.localeCompare(b, "en", { numeric: true });
+
+/** Stable order inside every bucket (okr-order-by-key): vault-synced OKRs by
+ * commitment key in natural order (fr-2 before fr-10), then Beakon-only OKRs
+ * by id. Editing an OKR never moves it. Exported for tests. */
+export function sortByKey(okrs: Okr[]): Okr[] {
+  return [...okrs].sort((a, b) => {
+    if (a.sourceKey && b.sourceKey) return naturalCompare(a.sourceKey, b.sourceKey);
+    if (a.sourceKey) return -1;
+    if (b.sourceKey) return 1;
+    return naturalCompare(a.id, b.id);
+  });
 }
 
 function healthCountsFor(okrs: Okr[]): Record<Health, number> {
@@ -103,14 +110,14 @@ export function groupOkrs(
     const bu = businessUnitsById.get(buId);
     if (!bu) continue; // filter named an id that doesn't resolve to a real BU — nothing to render
 
-    const directOkrs = sortByUpdatedDesc(directOkrsByBuId.get(buId) ?? []);
+    const directOkrs = sortByKey(directOkrsByBuId.get(buId) ?? []);
 
     const teamGroups: OkrTeamGroup[] = [];
     for (const team of teams.filter((t) => t.businessUnitId === buId)) {
       const teamOkrs = teamOkrsByTeamId.get(team.id) ?? [];
       const explicitlyFiltered = filters.teamIds.includes(team.id);
       if (teamOkrs.length === 0 && !explicitlyFiltered) continue;
-      teamGroups.push({ key: `team:${team.id}`, team, okrs: sortByUpdatedDesc(teamOkrs) });
+      teamGroups.push({ key: `team:${team.id}`, team, okrs: sortByKey(teamOkrs) });
     }
     teamGroups.sort((a, b) => a.team.name.localeCompare(b.team.name));
 
@@ -132,7 +139,7 @@ export function groupOkrs(
   buGroups.sort((a, b) => (a.bu?.name ?? "").localeCompare(b.bu?.name ?? ""));
 
   if (unassigned.length > 0) {
-    const sorted = sortByUpdatedDesc(unassigned);
+    const sorted = sortByKey(unassigned);
     buGroups.push({
       key: "unassigned",
       bu: null,

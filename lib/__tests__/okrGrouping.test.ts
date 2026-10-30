@@ -100,11 +100,28 @@ describe("groupOkrs", () => {
     expect(groups.some((g) => g.key === "unassigned")).toBe(false);
   });
 
-  it("sorts OKRs within a bucket by updatedAt descending by default", () => {
-    const older = makeOkr({ id: "okr-older", businessUnitId: buA.id, updatedAt: "2026-01-01T00:00:00.000Z" });
-    const newer = makeOkr({ id: "okr-newer", businessUnitId: buA.id, updatedAt: "2026-02-01T00:00:00.000Z" });
-    const groups = groupOkrs([older, newer], [], [buA], EMPTY_OKR_FILTERS);
-    expect(groups[0].directOkrs.map((o) => o.id)).toEqual(["okr-newer", "okr-older"]);
+  it("orders OKRs within a bucket by commitment key, naturally, regardless of updatedAt", () => {
+    const ac10 = makeOkr({ id: "okr-v-ac-10", sourceKey: "ac-10", source: "vault", businessUnitId: buA.id, updatedAt: "2026-03-01T00:00:00.000Z" });
+    const ac2 = makeOkr({ id: "okr-v-ac-2", sourceKey: "ac-2", source: "vault", businessUnitId: buA.id, updatedAt: "2026-01-01T00:00:00.000Z" });
+    const ac1 = makeOkr({ id: "okr-v-ac-1", sourceKey: "ac-1", source: "vault", businessUnitId: buA.id, updatedAt: "2026-02-01T00:00:00.000Z" });
+    const groups = groupOkrs([ac10, ac2, ac1], [], [buA], EMPTY_OKR_FILTERS);
+    expect(groups[0].directOkrs.map((o) => o.sourceKey)).toEqual(["ac-1", "ac-2", "ac-10"]);
+  });
+
+  it("puts vault-synced OKRs first, then Beakon-only OKRs by id", () => {
+    const local2 = makeOkr({ id: "okr-b", businessUnitId: buA.id });
+    const local1 = makeOkr({ id: "okr-a", businessUnitId: buA.id });
+    const synced = makeOkr({ id: "okr-z", sourceKey: "fr-1", source: "vault", businessUnitId: buA.id });
+    const groups = groupOkrs([local2, synced, local1], [], [buA], EMPTY_OKR_FILTERS);
+    expect(groups[0].directOkrs.map((o) => o.id)).toEqual(["okr-z", "okr-a", "okr-b"]);
+  });
+
+  it("does not move an OKR when it is edited (newer updatedAt)", () => {
+    const fr3 = makeOkr({ id: "o3", sourceKey: "fr-3", source: "vault", businessUnitId: buA.id });
+    const fr4 = makeOkr({ id: "o4", sourceKey: "fr-4", source: "vault", businessUnitId: buA.id, updatedAt: "2099-01-01T00:00:00.000Z" });
+    const fr5 = makeOkr({ id: "o5", sourceKey: "fr-5", source: "vault", businessUnitId: buA.id });
+    const groups = groupOkrs([fr4, fr5, fr3], [], [buA], EMPTY_OKR_FILTERS);
+    expect(groups[0].directOkrs.map((o) => o.sourceKey)).toEqual(["fr-3", "fr-4", "fr-5"]);
   });
 });
 
