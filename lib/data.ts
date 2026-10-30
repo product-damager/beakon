@@ -372,7 +372,14 @@ export async function fetchWorkspace(): Promise<Workspace> {
 export async function persistInitiative(i: Initiative): Promise<void> {
   const sb = client();
 
-  const { error: upsertErr } = await sb.from("initiatives").upsert(initiativeToRow(i));
+  // A vault row always exists and its row payload omits vault-owned columns
+  // (title, dates…). An upsert would fail: Postgres checks NOT NULL on the
+  // proposed insert before resolving the conflict. So vault rows are updated.
+  const row = initiativeToRow(i);
+  const { error: upsertErr } =
+    i.source === "vault"
+      ? await sb.from("initiatives").update(row).eq("id", i.id)
+      : await sb.from("initiatives").upsert(row);
   if (upsertErr) throw upsertErr;
 
   // Replace links: simplest correct sync for a handful of rows per initiative.

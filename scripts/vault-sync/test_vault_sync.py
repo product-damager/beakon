@@ -149,6 +149,37 @@ class BuildInitiatives(Base):
         self.assertIn("0 create · 0 update · 1 unchanged", rep)  # re-run on the same vault changes nothing
 
 
+class ReviewFixes(Base):
+    def test_invalid_note_is_skipped_not_archived(self):
+        self.add("Typo", note(tier="T9"))  # still exists, fails validation
+        cur = {"initiatives": [{"id": "v-typo", "title": "Typo", "status": "planned", "archived": False,
+                                "source": "vault", "source_key": "Typo"}], "okrs": [], "owners": []}
+        _, _, skips, sql, rep = self.build(cur)
+        self.assertIn("'Typo'", sql.split("source_key not in")[1])  # protected from archive
+        self.assertNotIn("archive initiative `v-typo`", rep)
+        self.assertTrue(any(k == "Typo" for k, _ in skips))
+
+    def test_crlf_frontmatter_is_read(self):
+        self.add("Windows note", note().replace("\n", "\r\n"))
+        inits, _, _, _, _ = self.build()
+        self.assertIn("Windows note", inits)
+
+    def test_duplicate_ids_fail_the_build(self):
+        self.add("Same Name", note())
+        self.add("same-name", note())
+        with self.assertRaises(SystemExit):
+            self.build()
+
+    def test_upserts_only_write_on_change_and_okr_archived_is_beakons(self):
+        self.add("Clean", note())
+        _, _, _, sql, _ = self.build()
+        init_stmt = [s for s in sql.split(";") if "insert into initiatives" in s][0]
+        okr_stmt = [s for s in sql.split(";") if "insert into okrs" in s][0]
+        self.assertIn("is distinct from", init_stmt)
+        self.assertIn("is distinct from", okr_stmt)
+        self.assertNotIn("archived = excluded.archived", okr_stmt)
+
+
 class BuildOkrs(Base):
     def test_commitments_objectives_and_scope(self):
         _, okrs, skips, sql, _ = self.build()

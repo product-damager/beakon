@@ -87,6 +87,15 @@ Records without `source = 'vault'` keep today's behaviour: every field editable.
 - Only frontmatter and note titles cross into Supabase; note bodies never do.
 - A customer-name denylist in the script skips matching titles and reports them.
 
+### Decision 6: review follow-ups (dev-lead, 2026-10-30)
+- **Saving a vault initiative uses `update`, not `upsert`:** Postgres checks NOT NULL on the proposed insert before resolving the conflict, and the payload omits vault-owned columns.
+- **Archive-on-missing only fires when a note file, or a commitment key in `okr.json`, no longer exists.** A note that exists but fails validation is skipped and reported, never archived.
+- **Upserts write only when a synced column differs** (`where … is distinct from excluded …`), so a re-run is a true no-op and `updated_at` isn't bumped.
+- **OKR `archived` stays Beakon's:** the sync sets it on insert only, plus archive-on-missing.
+- **Two notes mapping to the same id fail the build.**
+- **Scope cut:** OKR tier is set only by the vault. Beakon-only OKRs show tier but can't edit it, because `persist_okr` has no tier parameter and there's no current need.
+- **Edge case:** if the vault owns an initiative's `owner_id` and that owner is removed, the app can't reassign it. Fix it in the vault note, then re-sync.
+
 ## Risks / Trade-offs
 
 - **[Risk] A note is renamed**, so it looks like a new note plus an archived one. → The report flags likely renames (same squad, similar title) before the prod apply.

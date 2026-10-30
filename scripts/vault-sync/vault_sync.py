@@ -88,6 +88,7 @@ def quarter_dates(q):
 
 def parse_frontmatter(text):
     """Minimal YAML frontmatter: `key: value` lines; lists/quotes kept as text."""
+    text = text.replace("\r\n", "\n")
     m = re.match(r"---\n(.*?)\n---", text, re.S)
     if not m:
         return None
@@ -113,7 +114,7 @@ def denylisted(title):
 INIT_COMPARE = ["title", "team_id", "status", "archived", "area", "tier", "owner_id",
                 "target_start", "target_end", "source", "source_key", "vault_fields"]
 OKR_COMPARE = ["title", "team_id", "year", "quarter", "deliverable_detail",
-               "strategic_objective_id", "tier", "archived", "source", "source_key", "vault_fields"]
+               "strategic_objective_id", "tier", "source", "source_key", "vault_fields"]
 
 
 def plan_initiatives(features_dir, current, today):
@@ -271,9 +272,13 @@ def initiative_sql(r):
         sets.append("owner_id = excluded.owner_id")
     if r["dates_owned"]:
         sets += ["target_start = excluded.target_start", "target_end = excluded.target_end"]
-    # visibility is set on insert only (Beakon owns it afterwards)
+    # visibility is set on insert only (Beakon owns it afterwards). The WHERE
+    # makes a re-run a true no-op (no write, no updated_at bump).
+    changed = [x.split(" = ")[0] for x in sets if " = excluded." in x]
+    where = (f"({', '.join('initiatives.' + c for c in changed)}) is distinct from "
+             f"({', '.join('excluded.' + c for c in changed)})")
     return (f"insert into initiatives ({', '.join(cols)})\n  values ({', '.join(vals)})\n"
-            f"  on conflict (id) do update set {', '.join(sets)};")
+            f"  on conflict (id) do update set {', '.join(sets)}\n  where {where};")
 
 
 def okr_sql(r):
@@ -282,9 +287,12 @@ def okr_sql(r):
     vals = [sql_str(r["id"]), sql_str(r["title"]), sql_str(r["team_id"]), str(r["year"]), str(r["quarter"]),
             sql_str(r["deliverable_detail"]), sql_str(r["strategic_objective_id"]), sql_str(r["tier"]),
             "false", "'vault'", sql_str(r["source_key"]), sql_arr(r["vault_fields"])]
-    sets = [f"{c} = excluded.{c}" for c in cols[1:]]
+    upd = [c for c in cols[1:] if c != "archived"]  # archived: insert-only (Beakon owns it)
+    sets = [f"{c} = excluded.{c}" for c in upd]
+    where = (f"({', '.join('okrs.' + c for c in upd)}) is distinct from "
+             f"({', '.join('excluded.' + c for c in upd)})")
     return (f"insert into okrs ({', '.join(cols)})\n  values ({', '.join(vals)})\n"
-            f"  on conflict (id) do update set {', '.join(sets)};")
+            f"  on conflict (id) do update set {', '.join(sets)}\n  where {where};")
 
 
 def diff(prior, row, fields):
@@ -313,8 +321,19 @@ def build(args):
     okr = json.load(open(args.okr, encoding="utf-8"))
     okrs, skips_o = plan_okrs(okr, current)
 
-    keys_i = {r["source_key"] for r in inits}
-    keys_o = {r["source_key"] for r in okrs}
+    for kind, rows in (("initiative", inits), ("OKR", okrs)):
+        seen = {}
+        for r in rows:
+            if r["id"] in seen:
+                raise SystemExit(f"two vault records map to the same {kind} id {r['id']!r}: "
+                                 f"{seen[r['id']]!r} and {r['source_key']!r} — rename one")
+            seen[r["id"]] = r["source_key"]
+
+    # Archive only what has no source left at all. A note or commitment that
+    # still exists but fails a check is skipped (and reported), never archived.
+    features_dir = os.path.join(args.vault, "04 Features")
+    keys_i = {fn[:-3] for fn in os.listdir(features_dir) if fn.endswith(".md")}
+    keys_o = {c.get("key") for sq in okr.get("squads", []) for c in sq.get("commitments", []) if c.get("key")}
     archive_i = [r for r in current.get("initiatives", [])
                  if r.get("source") == "vault" and r["source_key"] not in keys_i and not r.get("archived")]
     archive_o = [r for r in current.get("okrs", [])
