@@ -519,6 +519,8 @@ export const BUSINESS_UNITS: BusinessUnit[] = [
   { id: "bu-build", name: "BU Build" },
   { id: "bu-analyze", name: "BU Analyze" },
   { id: "bu-disrupt", name: "BU Disrupt" },
+  // 2027 org (org-2027-configure-launch); the 2026 BUs above stay as history.
+  { id: "bu-configure-launch", name: "Configure & Launch" },
 ];
 
 export const TEAMS_TABLE: Team[] = [
@@ -533,6 +535,8 @@ export const TEAMS_TABLE: Team[] = [
   { id: "team-ai-analytics", name: "AI Analytics", businessUnitId: "bu-analyze" },
   { id: "team-pbx", name: "PBX", businessUnitId: "bu-disrupt" },
   { id: "team-ai-tools", name: "AI Tools", businessUnitId: "bu-disrupt" },
+  { id: "team-finalize-rollout", name: "Finalize & Roll out", businessUnitId: "bu-configure-launch" },
+  { id: "team-assets-creation", name: "Assets Creation", businessUnitId: "bu-configure-launch" },
 ];
 
 export const STRATEGIC_OBJECTIVES: StrategicObjective[] = [

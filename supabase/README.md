@@ -71,7 +71,7 @@ After the initial setup, changes fall into three kinds — each edits a differen
 | Kind of change | Edit | Applies to |
 |----------------|------|------------|
 | **Schema** — new column, table, constraint, enum value, view, trigger, policy | `schema.sql` | both projects |
-| **Reference data** — a new real owner or starter theme | `seed_prod.sql` | prod |
+| **Reference data** — a new real owner, starter theme, or org record (business unit / team) | `seed_prod.sql` (+ for org records: a one-off idempotent file in `migrations/`, and the same rows in `seed.sql` + `lib/seed.ts` for parity) | prod (migration: preview first, then prod) |
 | **Demo data** — different sample initiatives/owners for the playground | `seed.sql` (+ `lib/seed.ts`) | preview |
 
 ### Golden rule for editing `schema.sql`

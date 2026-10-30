@@ -14,7 +14,9 @@ insert into business_units (id, name) values
   ('bu-setup',   'BU Set up'),
   ('bu-build',   'BU Build'),
   ('bu-analyze', 'BU Analyze'),
-  ('bu-disrupt', 'BU Disrupt');
+  ('bu-disrupt', 'BU Disrupt'),
+  -- 2027 org (org-2027-configure-launch); the 2026 BUs above stay as history.
+  ('bu-configure-launch', 'Configure & Launch');
 
 -- ── Teams ────────────────────────────────────────────────────────────────
 insert into teams (id, name, business_unit_id) values
@@ -28,7 +30,9 @@ insert into teams (id, name, business_unit_id) values
   ('team-cross-insights',       'Cross Insights',         'bu-analyze'),
   ('team-ai-analytics',         'AI Analytics',           'bu-analyze'),
   ('team-pbx',                  'PBX',                    'bu-disrupt'),
-  ('team-ai-tools',              'AI Tools',                'bu-disrupt');
+  ('team-ai-tools',              'AI Tools',                'bu-disrupt'),
+  ('team-finalize-rollout',     'Finalize & Roll out',    'bu-configure-launch'),
+  ('team-assets-creation',      'Assets Creation',        'bu-configure-launch');
 
 -- ── Strategic objectives (2026) ─────────────────────────────────────────
 -- Also inserted before `initiatives`, which now carries a
