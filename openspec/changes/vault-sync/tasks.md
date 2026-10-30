@@ -4,14 +4,14 @@ PM decisions: 2026-10-30 (proposal.md). Stop points: 4.1 (the dry-run report) an
 
 ## 1. Schema (backend)
 
-- [ ] 1.1 Migration `supabase/migrations/2026-10-vault-sync.sql`, mirrored in `schema.sql`. It adds:
+- [x] 1.1 Migration `supabase/migrations/2026-10-vault-sync.sql`, mirrored in `schema.sql`. It adds:
   - `tier` (check T1/T2/T3), `area`, `source`, `source_key` and `vault_fields text[] default '{}'` on `initiatives`, and `tier`, `source`, `source_key` and `vault_fields` on `okrs`;
   - a partial unique index on `(source, source_key)`;
   - the `guard_vault_definitions` trigger: for `authenticated`, it rejects any change to a column in `old.vault_fields`, or to `source`, `source_key` or `vault_fields` on a vault row, and it forces new rows to `source = null` and `vault_fields = '{}'`. search_path is pinned and the API can't execute it;
   - `persist_okr` keeps the stored value for any column in `vault_fields`.
 
   Verify: it re-runs cleanly twice on preview.
-- [ ] 1.2 Apply to preview. Verify, inside a rolled-back block:
+- [x] 1.2 Apply to preview. Verify, inside a rolled-back block:
   - an `authenticated` rename of a vault row is refused;
   - an update of health is accepted;
   - `persist_okr` on a vault OKR keeps the stored title;
