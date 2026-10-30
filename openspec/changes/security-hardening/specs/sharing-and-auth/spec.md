@@ -51,8 +51,8 @@ Anonymous callers SHALL be able to read themes (id, name, description, colour) s
 Functions that exist only to run as database triggers (the company-domain signup check and the automatic row-level-security enabler) SHALL NOT be callable by anonymous or signed-in callers through the API, and SHALL keep firing as triggers.
 
 #### Scenario: Anon calls the signup check
-- **WHEN** an anonymous caller invokes the signup-check function through the API
-- **THEN** the call is refused with "permission denied"
+- **WHEN** an anonymous or signed-in caller tries to invoke either function through the API
+- **THEN** the call is refused (not exposed, or "permission denied") and the database reports that neither role holds execute rights on it
 
 #### Scenario: Signup check still enforced
 - **WHEN** someone requests a magic link with an email outside the company domain and allow-list
@@ -80,7 +80,7 @@ Anonymous callers SHALL NOT read or write initiatives, delivery links, business 
 
 #### Scenario: Anon has no table privileges
 - **WHEN** the database's grants are inspected
-- **THEN** the anonymous role holds no privilege on workspace tables other than the initiative columns and themes listed in this spec
+- **THEN** the anonymous role holds no privilege on workspace tables or views other than the initiative columns, themes and the external roadmap projection listed in this spec
 
 #### Scenario: Future table
 - **WHEN** a new table is added to the public schema

@@ -36,7 +36,7 @@ Probe script: extend the anon REST check used for the hotfix (no-op writes use f
 - [x] 3.1 Add `rls_auto_enable()` to `schema.sql` verbatim from beakon-prod, plus a guarded `ensure_rls` event trigger; verify `pg_get_functiondef` on prod matches the file text
 - [x] 3.2 Add `revoke execute … from public, anon, authenticated` for `enforce_company_domain()` and `rls_auto_enable()` to the migration and `schema.sql`; verify with `has_function_privilege` for anon and authenticated (both false)
 - [x] 3.3 Apply to beakon-preview. Verify:
-  - anon `POST /rpc/enforce_company_domain` → permission denied;
+  - anon `POST /rpc/rls_auto_enable` → permission denied and `/rpc/enforce_company_domain` → not exposed (404; PostgREST never exposes trigger functions, so `has_function_privilege` = false is the proof);
   - a magic-link request for a non-company address is still rejected;
   - a probe table created in `public` gets `relrowsecurity = true` (then drop it).
 - [x] 3.4 Apply to beakon-prod; verify the two `has_function_privilege` checks and the anon RPC refusal
@@ -56,11 +56,17 @@ Probe script: extend the anon REST check used for the hotfix (no-op writes use f
 
 ## 6. Review and release
 
-- [ ] 6.1 Run the Supabase security advisor on beakon-preview and beakon-prod; verify the only security finding left is leaked-password protection
-- [ ] 6.2 qa-engineer pass (`/qa security-hardening`): try to read or write anything anonymously beyond the spec, using the probe script; findings become new tasks here
-- [ ] 6.3 dev-lead review (`/review`) against this change's spec scenarios; verdict Approved
-- [ ] 6.4 Update `supabase/README.md` (golden rule) with the new convention: new tables/functions get explicit grants, anon gets nothing by default; verify the section reads correctly
-- [ ] 6.5 `openspec validate security-hardening --strict` passes
+- [x] 6.1 Run the Supabase security advisor on beakon-preview and beakon-prod; verify the only security finding left is leaked-password protection
+- [x] 6.2 qa-engineer pass (`/qa security-hardening`): try to read or write anything anonymously beyond the spec, using the probe script; findings become new tasks here
+- [x] 6.3 dev-lead review (`/review`) against this change's spec scenarios; verdict Approved
+- [x] 6.4 Update `supabase/README.md` (golden rule) with the new convention: new tables/functions get explicit grants, anon gets nothing by default; verify the section reads correctly
+- [x] 6.5 `openspec validate security-hardening --strict` passes
+
+## Review follow-ups (dev-lead, 2026-10-30)
+
+- `rls_auto_enable()` owner on beakon-prod is `postgres`, so schema.sql re-runs are safe there. For a fresh project, the definition and the `ensure_rls` block are now guarded and raise a notice instead of aborting. A fresh-project run is still unverified.
+- beakon-preview lacks `persist_owner_profile()` (pre-existing drift): re-run that function's definition from schema.sql on preview.
+- QA F3: transitive `source-map-js` (high) / `baseline-browser-mapping` (moderate) via next — separate follow-up (`npm audit fix`).
 
 ## Workflow follow-up
 

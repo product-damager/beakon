@@ -64,6 +64,20 @@ See proposal.md for motivation. Current state as of 2026-10-30, after the hotfix
 - Its event trigger `ensure_rls` is created behind an `if not exists (select 1 from pg_event_trigger where evtname = 'ensure_rls')` guard. Creating event triggers can need elevated rights on a fresh project, so the guard also catches `insufficient_privilege` and raises a notice instead of failing the whole file.
 - **Alternative considered:** drop `rls_auto_enable()`. Rejected because it is useful (no new table can ship without RLS), and Supabase installs it on purpose.
 
+### Decision 4b (added during apply): anon executes no function; `touch_updated_at()` trigger-only
+Found while applying group 3:
+- Supabase grants `anon` EXECUTE on every function directly (not via PUBLIC), so anon could call `persist_*` and `current_owner_id()`. RLS stopped any effect.
+- `touch_updated_at()` was executable by everyone through PUBLIC.
+
+Following the PM's decision "anon gets nothing on future tables and functions" (2026-10-30), three changes:
+- `revoke execute on all functions in schema public from anon`;
+- `touch_updated_at()` is revoked from public, anon and authenticated like the other trigger-only functions;
+- the default privileges revoke `all on functions from anon, public`, not just `execute from public`.
+
+Signed-in users are unaffected:
+- `persist_*` and `current_owner_id()` keep explicit `authenticated` grants;
+- triggers aren't privilege-checked when they fire, and stamping was verified on preview.
+
 ### Decision 5: Pin `search_path = public, pg_temp` in the definitions
 - Add `set search_path = public, pg_temp` to the seven function definitions in `schema.sql`. `create or replace function` resets function settings to what the statement says, so an `alter function … set` alone would be undone by the next schema re-run. The migration file also runs `alter function … set search_path = public, pg_temp` so the live databases change without re-running whole definitions.
 - **Alternative considered:** `search_path = ''` with fully qualified names. That is stricter but means rewriting every table reference in seven bodies for no extra protection, since `anon` and `authenticated` cannot create objects in `public` (verified as a task).

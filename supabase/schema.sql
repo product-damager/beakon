@@ -265,6 +265,10 @@ revoke execute on function enforce_company_domain() from public, anon, authentic
 -- event trigger). Existed in both projects before it was written down here
 -- (2026-10-30, security-hardening) — copied verbatim from beakon-prod.
 -- ══════════════════════════════════════════════════════════════════════
+-- Guarded: on a fresh project Supabase may own this function (supabase_admin),
+-- and replacing it would then fail the whole file. Say so instead.
+do $do$ begin
+  execute $fn$
 CREATE OR REPLACE FUNCTION public.rls_auto_enable()
  RETURNS event_trigger
  LANGUAGE plpgsql
@@ -293,7 +297,11 @@ BEGIN
      END IF;
   END LOOP;
 END;
-$function$;
+$function$
+$fn$;
+exception when insufficient_privilege then
+  raise notice 'rls_auto_enable() not replaced (not owner) — keep the platform version';
+end $do$;
 
 -- Creating an event trigger can need elevated rights on a fresh project:
 -- don't fail the whole file over it, say so instead.
@@ -303,8 +311,8 @@ do $$ begin
       when tag in ('CREATE TABLE', 'CREATE TABLE AS', 'SELECT INTO')
       execute function public.rls_auto_enable();
   end if;
-exception when insufficient_privilege then
-  raise notice 'ensure_rls event trigger not created (insufficient privilege) — enable RLS on new tables manually';
+exception when others then
+  raise notice 'ensure_rls event trigger not created (%) — enable RLS on new tables manually', sqlerrm;
 end $$;
 
 -- Trigger-only: never callable through the API.
