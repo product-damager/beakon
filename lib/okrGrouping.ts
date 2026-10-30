@@ -29,7 +29,7 @@ const ZERO_HEALTH_COUNTS: Record<Health, number> = {
   delayed: 0,
 };
 
-const naturalCompare = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true });
+const naturalCompare = (a: string, b: string) => a.localeCompare(b, "en", { numeric: true });
 
 /** Stable order inside every bucket (okr-order-by-key): vault-synced OKRs by
  * commitment key in natural order (fr-2 before fr-10), then Beakon-only OKRs

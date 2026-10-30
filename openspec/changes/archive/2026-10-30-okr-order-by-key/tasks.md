@@ -6,4 +6,4 @@
 
 ## 2. Review and release
 
-- [ ] 2.1 Run typecheck, lint (0 errors), test and build. QA and dev-lead review. Deploy preview: `/share`, `/roadmap` and `/okrs` load. `openspec validate okr-order-by-key --strict`.
+- [x] 2.1 Run typecheck, lint (0 errors), test and build. QA and dev-lead review. Deploy preview: `/share`, `/roadmap` and `/okrs` load. `openspec validate okr-order-by-key --strict`.
