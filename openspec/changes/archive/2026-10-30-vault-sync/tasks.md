@@ -55,8 +55,8 @@ PM decisions: 2026-10-30 (proposal.md). Stop points: 4.1 (the dry-run report) an
 ## 5. Write-back
 
 - [x] 5.1 Back up `okr.json` to `02 OKR/backups/`.
-- [x] 5.2 Run the first write-back. **STOP: show the `okr.json` diff to the PM.**
+- [x] 5.2 Run the first write-back. **STOP: show the `okr.json` diff to the PM.** (Done 2026-10-30. After the PM recorded achievements in Beakon, write-back was re-run, the diff was confirmed and it was committed in bu-dashboard as 59a0a93.)
 
 ## 6. Review and release
 
-- [ ] 6.1 Run typecheck, lint, test and build. QA, including guard-bypass attempts through the API and every UI path. dev-lead Approved. `openspec validate vault-sync --strict` passes. Then the deploy preview, merge and archive.
+- [x] 6.1 Run typecheck, lint, test and build. QA, including guard-bypass attempts through the API and every UI path. dev-lead Approved. `openspec validate vault-sync --strict` passes. Then the deploy preview, merge and archive.
