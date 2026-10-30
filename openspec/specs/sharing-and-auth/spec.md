@@ -83,7 +83,7 @@ This and the following baseline requirements record today's anonymous (signed-ou
 - **THEN** it receives only external, non-archived initiatives with those ten columns, of which /share displays only title, status, theme and dates
 
 ### Requirement: Anonymous read of reference data and scores (baseline 2026-10-30)
-Anonymous callers SHALL today be able to read every theme, every owner record (emails included) and the initiative score projection (id and DIVE score of every initiative, internal included; inferred). These are gaps; the anonymous read of owner emails is the first item in security-hardening's scope.
+Anonymous callers SHALL today be able to read every theme and every owner record (emails included); the owner read is a gap and the first item in security-hardening's scope. Anonymous callers SHALL NOT read the initiative score projection (revoked by the 2026-10-30 hotfix; it covers internal initiatives).
 
 #### Scenario: Anon reads owners
 - **WHEN** an anonymous caller queries owners
@@ -91,7 +91,7 @@ Anonymous callers SHALL today be able to read every theme, every owner record (e
 
 #### Scenario: Anon reads scores
 - **WHEN** an anonymous caller queries the initiative score projection
-- **THEN** today it receives a score row for internal initiatives too (inferred)
+- **THEN** the database refuses it with "permission denied"
 
 ### Requirement: No anonymous access to workspace tables
 Anonymous callers SHALL NOT read or write initiatives, delivery links, business units, teams, strategic objectives, OKRs, OKR owners, OKR–initiative links, check-ins, flags, saved roadmaps or saved OKR views directly; row-level rules on those tables admit signed-in users only.
@@ -101,7 +101,7 @@ Anonymous callers SHALL NOT read or write initiatives, delivery links, business 
 - **THEN** it receives no rows
 
 ### Requirement: Projections are read-only
-Anonymous and signed-in callers SHALL only read the external roadmap and initiative score projections, never insert, update or delete through them. Write grants on these RLS-bypassing projections were revoked by the 2026-10-30 hotfix (supabase/migrations/2026-10-revoke-view-writes.sql, preview then prod). Their creator's-rights mode remains a security-hardening item.
+Anonymous and signed-in callers SHALL never insert, update or delete through the external roadmap and initiative score projections; anon reads only the external roadmap, signed-in users read both. Write grants on these RLS-bypassing projections were revoked by the 2026-10-30 hotfix (supabase/migrations/2026-10-revoke-view-writes.sql, preview then prod). Their creator's-rights mode remains a security-hardening item.
 
 #### Scenario: Anon write refused
 - **WHEN** an anonymous caller sends an update or delete to either projection
