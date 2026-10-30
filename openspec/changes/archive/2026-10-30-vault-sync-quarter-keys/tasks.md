@@ -16,4 +16,4 @@
 
 ## 3. Review and release
 
-- [ ] 3.1 Run typecheck, lint, test and build. QA and dev-lead review. Deploy preview: `/share`, `/roadmap` and `/okrs` load. `openspec validate --strict`. Then the runbook note, merge and archive.
+- [x] 3.1 Run typecheck, lint, test and build. QA and dev-lead review. Deploy preview: `/share`, `/roadmap` and `/okrs` load. `openspec validate --strict`. Then the runbook note, merge and archive.

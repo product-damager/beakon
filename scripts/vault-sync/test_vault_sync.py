@@ -238,6 +238,13 @@ class QuarterKeys(Base):
         self.assertIn("0 create", rep.split("## OKRs")[1])
         self.assertIn("## Archive (gone from the vault): 0", rep)  # re-keyed records are not "missing"
 
+    def test_string_year_quarter_in_dump_is_handled(self):
+        rows = self.q4_rows(keyed=False)
+        for r in rows: r["year"], r["quarter"] = "2026", "4"
+        _, okrs, _, _, rep = self.build({"initiatives": [], "okrs": rows, "owners": []})
+        self.assertEqual(okrs["2026-Q4/fr-1"]["id"], "okr-v-fr-1")  # adopted, not duplicated
+        self.assertIn("## Archive (gone from the vault): 0", rep)
+
     def test_next_quarter_neither_overwrites_nor_archives_q4(self):
         q1 = json.loads(json.dumps(OKR)); q1["quarter"] = "2027-Q1"
         with open(self.okr, "w", encoding="utf-8") as f:
