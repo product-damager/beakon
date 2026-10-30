@@ -50,8 +50,8 @@ Probe script: extend the anon REST check used for the hotfix (no-op writes use f
 
 ## 5. Next.js 16.4.3
 
-- [ ] 5.1 Upgrade `next` and `eslint-config-next` to 16.4.3; stage only the version hunks of `package.json` plus the lockfile (leave the local `allowScripts` block unstaged); verify `npm ls next` shows 16.4.3 and `npm audit --omit=dev` lists no critical/high Next.js advisory
-- [ ] 5.2 Run `npm run typecheck`, `npm run lint`, `npm run test` and `npm run build`; all pass
+- [x] 5.1 Upgrade `next` and `eslint-config-next` to 16.4.3; stage only the version hunks of `package.json` plus the lockfile (leave the local `allowScripts` block unstaged); verify `npm ls next` shows 16.4.3 and `npm audit --omit=dev` lists no critical/high Next.js advisory
+- [x] 5.2 Run `npm run typecheck`, `npm run lint`, `npm run test` and `npm run build`; all pass
 - [ ] 5.3 Smoke-test the dev server against preview: /share renders, /roadmap and /okrs load after sign-in, with no console errors
 
 ## 6. Review and release
