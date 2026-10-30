@@ -28,6 +28,7 @@ import {
   STATUSES,
   ZOOM_SCALE_MAX,
   ZOOM_SCALE_MIN,
+  vaultOwns,
   type GroupBy,
   type Initiative,
   type Zoom,
@@ -246,7 +247,8 @@ export function Timeline() {
   };
 
   const beginDrag = (e: ReactPointerEvent<HTMLElement>, i: Initiative, mode: DragMode) => {
-    if (!editable || e.button !== 0) return;
+    // vault-sync: dates the PM's vault owns can't be replanned here.
+    if (!editable || e.button !== 0 || vaultOwns(i, "target_start")) return;
     e.stopPropagation();
     justDragged.current = false; // fresh interaction — never inherit a stale swallow flag
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -487,6 +489,7 @@ export function Timeline() {
                       const isRelated = dragRelated.has(i.id);
                       const isConflict = conflictIds.has(i.id);
                       const isDraggingThis = Boolean(pv);
+                      const datesEditable = editable && !vaultOwns(i, "target_start");
                       const owner = owners.find((o) => o.id === i.ownerId);
                       // Bars too narrow for their title get the label rendered beside them
                       // instead of clipping it to an unreadable stub.
@@ -552,7 +555,7 @@ export function Timeline() {
                                 className={cn(
                                   "flex h-full w-full items-center overflow-hidden rounded-md px-2.5 text-left text-xs font-medium shadow-sm transition-[filter,box-shadow] hover:brightness-105",
                                   meta.bar,
-                                  editable && "cursor-grab touch-none active:cursor-grabbing",
+                                  datesEditable && "cursor-grab touch-none active:cursor-grabbing",
                                   isSelected && "ring-2 ring-green-90 ring-offset-1",
                                   (isPrereq || isRelated) &&
                                     "outline-dashed outline-2 outline-offset-1 outline-lime-60",
@@ -562,7 +565,7 @@ export function Timeline() {
                               >
                                 {!labelOutside && <span className="truncate">{i.title}</span>}
                               </button>
-                              {editable && (
+                              {datesEditable && (
                                 <>
                                   <span
                                     onPointerDown={(e) => beginDrag(e, i, "start")}

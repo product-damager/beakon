@@ -5,9 +5,9 @@ import { CalendarRange, GripVertical } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import { applyFilters } from "@/lib/filters";
 import { quarterLabelFromISO } from "@/lib/dates";
-import { ownerName, STATUS_META, STATUSES, THEME_COLOR_META, type Initiative, type Status } from "@/lib/types";
+import { ownerName, STATUS_META, STATUSES, THEME_COLOR_META, vaultOwns, type Initiative, type Status } from "@/lib/types";
 import { cn } from "@/lib/cn";
-import { Avatar, Eyebrow, HealthTag, Tag } from "./ui";
+import { Avatar, Eyebrow, HealthTag, Tag, VAULT_HINT } from "./ui";
 import { FilterBar } from "./FilterBar";
 
 /**
@@ -96,8 +96,10 @@ function Card({
               tone: "success",
             });
           }}
-          className="min-w-0 flex-1 truncate rounded-md border border-beige-20 bg-beige-5 px-2 py-1 text-xs text-green-90 focus:outline-none focus:ring-1 focus:ring-green-90"
+          className="min-w-0 flex-1 truncate rounded-md border border-beige-20 bg-beige-5 px-2 py-1 text-xs text-green-90 focus:outline-none focus:ring-1 focus:ring-green-90 disabled:cursor-not-allowed disabled:opacity-60"
           aria-label="Owner"
+          disabled={vaultOwns(initiative, "owner_id")}
+          title={vaultOwns(initiative, "owner_id") ? VAULT_HINT : undefined}
         >
           <option value="">Unassigned</option>
           {owners.map((o) => (
@@ -145,13 +147,18 @@ export function Board() {
     return rel;
   }, [dragged, initiatives]);
 
+  // vault-sync: a card whose status the vault owns may only be reordered
+  // within its own column — other columns don't accept the drop.
+  const lockedStatus = dragged && vaultOwns(dragged, "status") ? dragged.status : null;
+  const acceptsDrop = (s: Status) => lockedStatus === null || lockedStatus === s;
+
   const endDrag = () => {
     setDragId(null);
     setDrop(null);
   };
 
   const commitDrop = (status: Status) => {
-    if (dragId) {
+    if (dragId && acceptsDrop(status)) {
       const beforeId = drop && drop.status === status ? drop.beforeId : null;
       const moved = initiatives.find((i) => i.id === dragId);
       moveInitiative(dragId, status, beforeId);
@@ -179,6 +186,11 @@ export function Board() {
                 key={s}
                 onDragOver={(e) => {
                   if (!dragId) return;
+                  // Not calling preventDefault() leaves this column a non-target.
+                  if (!acceptsDrop(s)) {
+                    setDrop((prev) => (prev === null ? prev : null));
+                    return;
+                  }
                   e.preventDefault();
                   const cardEls = Array.from(
                     e.currentTarget.querySelectorAll("[data-card-id]")
@@ -205,8 +217,10 @@ export function Board() {
                 }}
                 className={cn(
                   "flex w-56 shrink-0 flex-col rounded-xl p-3 transition-colors",
-                  isTarget ? "bg-green-10/70 ring-1 ring-green-40" : "bg-beige-5/60"
+                  isTarget ? "bg-green-10/70 ring-1 ring-green-40" : "bg-beige-5/60",
+                  dragId && !acceptsDrop(s) && "opacity-50"
                 )}
+                title={dragId && !acceptsDrop(s) ? VAULT_HINT : undefined}
               >
                 <div className="mb-3 flex items-center gap-2 px-1">
                   <span className={cn("h-2.5 w-2.5 rounded-full", STATUS_META[s].dot)} />
@@ -244,7 +258,7 @@ export function Board() {
                   ))}
                   {/* Placeholder / hint at the end of the column */}
                   {dragId && drop?.status === s && drop.beforeId === null && <Placeholder />}
-                  {items.length === 0 && !isTarget && Boolean(dragId) && (
+                  {items.length === 0 && !isTarget && Boolean(dragId) && acceptsDrop(s) && (
                     <div className="flex min-h-[92px] items-center justify-center rounded-lg border border-dashed border-beige-30 px-4 py-6 text-center text-xs leading-relaxed text-balance text-beige-60">
                       Drop here to mark {STATUS_META[s].label.toLowerCase()}
                     </div>

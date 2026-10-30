@@ -17,7 +17,7 @@ import {
   type Team,
 } from "@/lib/types";
 import { cn } from "@/lib/cn";
-import { GroupHeaderContent, HealthTag, Tag } from "./ui";
+import { GroupHeaderContent, HealthTag, Tag, TierTag } from "./ui";
 import { InlineTagSelect } from "./form";
 import {
   GOVERNANCE_KEYS,
@@ -108,6 +108,7 @@ export function OkrGroupedList({
             >
               {o.title || "Untitled OKR"}
             </span>
+            {o.tier && <TierTag tier={o.tier} />}
             {o.archived && <Tag className="shrink-0 bg-beige-20 text-beige-70">Archived</Tag>}
           </span>
         </td>

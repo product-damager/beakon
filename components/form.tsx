@@ -344,12 +344,18 @@ export function InlineTagSelect<T extends string>({
   render,
   onSelect,
   fill = false,
+  disabled = false,
+  disabledTitle,
 }: {
   label: string;
   value: T;
   options: readonly T[];
   render: (v: T) => ReactNode;
   onSelect: (v: T) => void;
+  /** Read-only: renders just the value (no menu, no chevron), e.g. a
+   * vault-owned field. `disabledTitle` explains why on hover. */
+  disabled?: boolean;
+  disabledTitle?: string;
   /** Fill the parent cell and make the whole area clickable, with the
    * chevron hidden until hover — for table cells, where the small
    * tag-plus-chevron hit target reads as fussier than it needs to be.
@@ -360,6 +366,21 @@ export function InlineTagSelect<T extends string>({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useOutsideClose(ref, open, () => setOpen(false));
+
+  if (disabled) {
+    return (
+      <div
+        aria-label={`${label} (read-only)`}
+        title={disabledTitle}
+        className={cn(
+          "flex items-center gap-1.5",
+          fill ? "h-full w-full min-w-0 overflow-hidden px-3 py-2.5" : "inline-flex"
+        )}
+      >
+        {render(value)}
+      </div>
+    );
+  }
 
   return (
     <div className={cn("group relative", fill ? "block" : "inline-block")} ref={ref}>

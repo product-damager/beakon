@@ -1,7 +1,7 @@
 "use client";
 
 import { type ButtonHTMLAttributes, type ComponentType, type ReactNode, type Ref } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Lock } from "lucide-react";
 import { cn, initials } from "@/lib/cn";
 import {
   HEALTH_META,
@@ -11,6 +11,7 @@ import {
   type Health,
   type Status,
   type ThemeColor,
+  type Tier,
 } from "@/lib/types";
 
 // ── Button (ShadCN variant mapping, Product colors, Inter sentence case) ──
@@ -189,6 +190,32 @@ export function ScoreTierTag({ score, className }: { score: number | null; class
     <Tag className={cn("whitespace-nowrap", t.tag, className)}>
       <span aria-hidden className="shrink-0">{t.emoji}</span>
       <span className="min-w-0 truncate">{t.label}</span>
+    </Tag>
+  );
+}
+
+// ── Vault-sync markers ──
+/** Tooltip for anything the PM's vault owns (openspec vault-sync). */
+export const VAULT_HINT =
+  "Defined in the PM's vault (04 Features / okr.json). Change it there; Beakon updates on the next sync.";
+
+/** Compact "Managed in the vault" marker — one per drawer, next to the eyebrow. */
+export function VaultTag() {
+  return (
+    <span title={VAULT_HINT} className="inline-flex shrink-0">
+      <Tag className="border border-beige-30 bg-beige-5 text-beige-70">
+        <Lock size={11} strokeWidth={2} aria-hidden className="shrink-0" />
+        Managed in the vault
+      </Tag>
+    </span>
+  );
+}
+
+/** Tier (T1–T3, size of the work) — neutral, never a status/lime colour. */
+export function TierTag({ tier, className }: { tier: Tier; className?: string }) {
+  return (
+    <Tag className={cn("shrink-0 bg-beige-20 text-beige-70", className)}>
+      <span title={`Tier ${tier}`}>{tier}</span>
     </Tag>
   );
 }
