@@ -14,8 +14,8 @@
 
 ## 3. Review and release
 
-- [ ] 3.1 qa-engineer pass. Check the lockfile diff: only semver-compatible bumps, no new packages beyond the dry run, no `package.json` drift. Then check that `/share` renders on the PR's Netlify deploy preview.
-- [ ] 3.2 dev-lead review against this change; verdict Approved.
+- [x] 3.1 qa-engineer pass. Check the lockfile diff: only semver-compatible bumps, no new packages beyond the dry run, no `package.json` drift. Then check that `/share` renders on the PR's Netlify deploy preview.
+- [x] 3.2 dev-lead review against this change; verdict Approved.
 
 ## Workflow follow-up
 

@@ -11,10 +11,11 @@ Two small follow-ups came out of security-hardening (archived as `2026-10-30-sec
 
 ## What Changes
 
-1. **Run `npm audit fix` without `--force`.** It refreshes 29 entries in `package-lock.json`, all patch or minor and within the current ranges. `package.json` is unchanged.
+1. **Run `npm audit fix` without `--force`.** It refreshes 43 entries in `package-lock.json` (42 packages, 15 of them rolldown platform bindings), all patch or minor and within the current ranges, with nothing added or removed. `package.json` is unchanged.
    - It clears all 10 advisories:
      - the 2 production-tree ones: `source-map-js` 1.2.1 → 1.2.2 and `baseline-browser-mapping` 2.10.42 → 2.11.34;
-     - 8 in dev tooling: `vite` 8.2.2 → 8.3.5, `vitest` 4.1.11 → 4.1.12, `zod` 4.4.3 → 4.6.7, `launch-editor`, `picomatch`, `brace-expansion`, `js-yaml`, `nanoid`, and others.
+     - 8 in dev tooling, among them `vite` 8.2.2 → 8.3.5, `vitest` 4.1.11 → 4.1.12, `zod` 4.4.3 → 4.6.7, `picomatch`, `brace-expansion` and `js-yaml`.
+     - In the production tree, `caniuse-lite` and `nanoid` get routine patch bumps as well.
    - Plain `npm audit fix` is what the PM asked for. The alternative, `npm audit fix --omit=dev`, would leave the dev advisories for later.
 2. **Rewrite the `sharing-and-auth` Purpose** so it describes what the spec covers now.
 3. **Add a `data-platform` requirement** recording the production-only hydration error #418 caused by Netlify's injected comment: known, accepted, and when it would need reopening.

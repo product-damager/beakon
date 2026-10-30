@@ -1,7 +1,7 @@
 # data-platform Specification
 
 ## Purpose
-Where Beakon's data lives and how it changes: a zero-config demo mode on in-memory seed data, a real mode on Supabase, two separate Supabase projects for preview and production, and forward-only schema changes. Source: ADR 001, ADR 002, supabase/README.md.
+Where Beakon's data lives and how it changes: a zero-config demo mode on in-memory seed data, a real mode on Supabase, two separate Supabase projects for preview and production, forward-only schema changes, and how production hosting (Netlify) affects what runs in the browser. Source: ADR 001, ADR 002, supabase/README.md.
 
 ## Requirements
 
