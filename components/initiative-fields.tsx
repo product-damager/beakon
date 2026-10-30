@@ -20,7 +20,7 @@ import {
   type ThemeColor,
 } from "@/lib/types";
 import { cn } from "@/lib/cn";
-import { Button, Eyebrow, ScoreTierTag } from "./ui";
+import { Button, Eyebrow, ScoreTierTag, VaultLock } from "./ui";
 import { Field, NativeSelect, TextInput } from "./form";
 import { useOutsideClose, usePopoverPlacement } from "./hooks";
 import { baseInput, TeamGroupList } from "./okr-fields";
@@ -43,17 +43,23 @@ export function withScheme(url: string): string {
 export function Prop({
   icon: Icon,
   label,
+  locked,
   children,
 }: {
   icon: LucideIcon;
   label: string;
+  /** The vault owns this field — shows a small lock after the label. */
+  locked?: boolean;
   children: ReactNode;
 }) {
   return (
     <div className="flex items-start gap-2.5">
       <Icon size={15} strokeWidth={1.75} className="mt-0.5 shrink-0 text-beige-60" />
       <div className="min-w-0 flex-1">
-        <div className="mono-label-sm text-beige-60">{label}</div>
+        <div className="mono-label-sm flex items-center gap-1 text-beige-60">
+          {label}
+          {locked && <VaultLock />}
+        </div>
         <div className="mt-0.5 text-sm text-green-90">{children}</div>
       </div>
     </div>
@@ -64,17 +70,23 @@ export function Prop({
 export function PropRow({
   icon: Icon,
   label,
+  locked,
   children,
 }: {
   icon: LucideIcon;
   label: string;
+  /** The vault owns this field — shows a small lock after the label. */
+  locked?: boolean;
   children: ReactNode;
 }) {
   return (
     <div className="grid grid-cols-[104px_1fr] items-start gap-3 rounded-lg px-2 py-1">
       <span className="flex items-center gap-2 pt-1 text-sm text-beige-60">
         <Icon size={15} strokeWidth={1.75} className="shrink-0" />
-        {label}
+        <span className="flex items-center gap-1">
+          {label}
+          {locked && <VaultLock />}
+        </span>
       </span>
       <div className="min-w-0 self-center text-sm text-green-90">{children}</div>
     </div>

@@ -5,7 +5,7 @@ import { ArchiveRestore } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import { applyFilters } from "@/lib/filters";
 import { formatShortEN } from "@/lib/dates";
-import { ownerName, STATUSES, type Initiative } from "@/lib/types";
+import { ownerName, STATUSES, vaultOwns, type Initiative } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Avatar, StatusTag } from "./ui";
 import { FilterBar } from "./FilterBar";
@@ -149,19 +149,21 @@ export function Archived() {
                         Updated {formatShortEN(i.updatedAt.slice(0, 10))}
                       </td>
                       <td className={cn(ACTION_COLUMN_WIDTH, "px-2 py-2.5 text-right")}>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            unarchiveInitiative(i.id);
-                            notify({ message: `“${i.title || "Untitled initiative"}” restored`, tone: "success" });
-                          }}
-                          aria-label={`Restore ${i.title || "Untitled initiative"}`}
-                          title="Restore"
-                          className="rounded-md p-1.5 text-beige-60 opacity-0 transition-opacity hover:bg-beige-20 hover:text-green-90 group-hover:opacity-100 focus-visible:opacity-100"
-                        >
-                          <ArchiveRestore size={15} />
-                        </button>
+                        {!vaultOwns(i, "archived") && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              unarchiveInitiative(i.id);
+                              notify({ message: `“${i.title || "Untitled initiative"}” restored`, tone: "success" });
+                            }}
+                            aria-label={`Restore ${i.title || "Untitled initiative"}`}
+                            title="Restore"
+                            className="rounded-md p-1.5 text-beige-60 opacity-0 transition-opacity hover:bg-beige-20 hover:text-green-90 group-hover:opacity-100 focus-visible:opacity-100"
+                          >
+                            <ArchiveRestore size={15} />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

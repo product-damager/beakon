@@ -22,7 +22,7 @@ import {
 } from "./seed";
 import { EMPTY_FILTERS, normalizeFilters, type Filters } from "./filters";
 import type { OkrFilters } from "./okrFilters";
-import { ZOOM_SCALE_MAX, ZOOM_SCALE_MIN } from "./types";
+import { ZOOM_SCALE_MAX, ZOOM_SCALE_MIN, vaultOwns } from "./types";
 import type {
   BusinessUnit,
   Density,
@@ -440,6 +440,11 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
   const [initiatives, setInitiatives] = useState<Initiative[]>(() =>
     isSupabaseConfigured ? [] : seededInitiatives()
   );
+  // Latest initiatives for action guards that run outside a state updater.
+  const initiativesRef = useRef(initiatives);
+  useEffect(() => {
+    initiativesRef.current = initiatives;
+  }, [initiatives]);
   const [themes, setThemes] = useState<Theme[]>(() => (isSupabaseConfigured ? [] : THEMES));
   const [owners, setOwners] = useState<Owner[]>(() => (isSupabaseConfigured ? [] : OWNERS));
   const [teams, setTeams] = useState<Team[]>(() => (isSupabaseConfigured ? [] : TEAMS_TABLE));
@@ -1031,6 +1036,9 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
 
   const rescheduleInitiative = useCallback(
     (id: string, targetStart: string, targetEnd: string) => {
+      // vault-sync: dates owned by the vault can't be rescheduled here (UI blocks it; backstop).
+      const it = initiativesRef.current.find((x) => x.id === id);
+      if (it && vaultOwns(it, "target_start")) return;
       setInitiatives((prev) =>
         prev.map((x) =>
           x.id === id
@@ -1053,6 +1061,9 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       setInitiatives((prev) => {
         const dragged = prev.find((x) => x.id === id);
         if (!dragged) return prev;
+        // vault-sync: the vault owns this initiative's status — reorder within
+        // its column only (the Board also blocks the drop; this is the backstop).
+        if (toStatus !== dragged.status && vaultOwns(dragged, "status")) return prev;
         const without = prev.filter((x) => x.id !== id);
 
         let insertAt: number;
@@ -1084,7 +1095,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
 
         if (isSupabaseConfigured) {
           queueMicrotask(() =>
-            persistMove(id, toStatus, position).catch((e) => reportError(e, "move"))
+            persistMove(id, toStatus, position, dragged.source === "vault" ? dragged.vaultFields : undefined).catch((e) => reportError(e, "move"))
           );
         }
 
@@ -1107,6 +1118,9 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
 
   const archiveInitiative = useCallback(
     (id: string) => {
+      // vault-sync: archiving is the vault's on synced initiatives (UI hides it; backstop).
+      const it = initiativesRef.current.find((x) => x.id === id);
+      if (it && vaultOwns(it, "archived")) return;
       setInitiatives((prev) =>
         prev.map((x) =>
           x.id === id ? { ...x, archived: true, updatedAt: new Date().toISOString() } : x
@@ -1122,6 +1136,8 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
 
   const unarchiveInitiative = useCallback(
     (id: string) => {
+      const it = initiativesRef.current.find((x) => x.id === id);
+      if (it && vaultOwns(it, "archived")) return;
       setInitiatives((prev) =>
         prev.map((x) =>
           x.id === id ? { ...x, archived: false, updatedAt: new Date().toISOString() } : x

@@ -7,7 +7,9 @@ import {
   CalendarRange,
   Clock,
   Eye,
+  Layers,
   Palette,
+  Shapes,
   Target,
   User,
   Users,
@@ -21,14 +23,17 @@ import {
   ownerName,
   STATUSES,
   THEME_COLOR_META,
+  TIERS,
+  vaultOwns,
   type Health,
   type Initiative,
   type Status,
+  type Tier,
 } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Drawer } from "./Drawer";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { Avatar, Button, Eyebrow, HealthTag, StatusTag } from "./ui";
+import { Avatar, Button, Eyebrow, HealthTag, StatusTag, TierTag, VAULT_HINT, VaultTag } from "./ui";
 import { Field, InlineTagSelect, SearchableSelect, TextArea, TextInput } from "./form";
 import {
   CollapsibleSection,
@@ -44,6 +49,8 @@ import {
 
 const HEALTH_KEYS = Object.keys(HEALTH_META) as Health[];
 const VISIBILITIES = ["internal", "external"] as const;
+/** "" = no tier; shown as "—", never defaulted. */
+const TIER_OPTIONS = ["", ...TIERS] as const;
 
 /**
  * One drawer for viewing and editing an initiative. Existing initiatives edit in
@@ -113,6 +120,18 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
   };
 
   const theme = getTheme(d.themeId);
+  // vault-sync: columns the PM's vault owns on this row render read-only.
+  const vault = !creating && d.source === "vault";
+  const vo = (column: string) => !creating && vaultOwns(d, column);
+  const ownerDisplay = (id: string) =>
+    id ? (
+      <span className="inline-flex items-center gap-2">
+        <Avatar name={ownerName(getOwner(id))} className="h-5 w-5 text-[9px]" neutral />
+        {ownerName(getOwner(id))}
+      </span>
+    ) : (
+      <span className="text-beige-60">Unassigned</span>
+    );
   const titleMissing = d.title.trim().length === 0;
   const dateOutOfOrder = d.targetStart > d.targetEnd;
   // "Q3 2026" for a single quarter; a range drops the repeated year ("Q2 – Q3 2026")
@@ -186,6 +205,7 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
                   />
                 )}
                 <Eyebrow>{theme?.name ?? "No theme"}</Eyebrow>
+                {vault && <VaultTag />}
               </>
             )}
           </div>
@@ -197,18 +217,27 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
             <X size={18} />
           </button>
         </div>
-        <input
-          value={d.title}
-          onChange={(e) => set("title", e.target.value)}
-          onBlur={() => {
-            setTitleTouched(true);
-            patch({ title: d.title.trim() });
-          }}
-          placeholder="What is this initiative?"
-          aria-label="Title"
-          autoFocus={creating}
-          className="-mx-2 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 py-0.5 font-display text-xl font-semibold leading-snug text-green-90 placeholder:text-beige-40 hover:border-beige-30 hover:bg-beige-5 focus:border-green-90 focus:bg-white focus:outline-none focus:ring-2 focus:ring-green-90/30"
-        />
+        {vo("title") ? (
+          <h2
+            title={VAULT_HINT}
+            className="px-0 py-0.5 font-display text-xl font-semibold leading-snug text-green-90"
+          >
+            {d.title || "Untitled initiative"}
+          </h2>
+        ) : (
+          <input
+            value={d.title}
+            onChange={(e) => set("title", e.target.value)}
+            onBlur={() => {
+              setTitleTouched(true);
+              patch({ title: d.title.trim() });
+            }}
+            placeholder="What is this initiative?"
+            aria-label="Title"
+            autoFocus={creating}
+            className="-mx-2 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 py-0.5 font-display text-xl font-semibold leading-snug text-green-90 placeholder:text-beige-40 hover:border-beige-30 hover:bg-beige-5 focus:border-green-90 focus:bg-white focus:outline-none focus:ring-2 focus:ring-green-90/30"
+          />
+        )}
         {creating && titleTouched && titleMissing && (
           <p className="mt-1 text-xs text-red-70">Give the initiative a title.</p>
         )}
@@ -222,6 +251,8 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
             options={STATUSES}
             render={(s: Status) => <StatusTag status={s} />}
             onSelect={(status) => patch({ status })}
+            disabled={vo("status")}
+            disabledTitle={VAULT_HINT}
           />
           <InlineTagSelect
             label="Change health"
@@ -235,58 +266,86 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
 
       {/* Properties — compact labeled rows, edited in place */}
       <div className="flex flex-col gap-0.5 px-4 py-3">
-        <PropRow icon={CalendarRange} label="Timeframe">
-          <div className="flex flex-wrap items-center gap-2">
-            <TextInput
-              type="date"
-              value={d.targetStart}
-              onChange={(e) => patch({ targetStart: e.target.value })}
-              aria-label="Target start"
-              style={{ width: "132px" }}
-            />
-            <span className="text-beige-60" aria-hidden>
-              →
-            </span>
-            <TextInput
-              type="date"
-              value={d.targetEnd}
-              onChange={(e) => patch({ targetEnd: e.target.value })}
-              aria-invalid={dateOutOfOrder}
-              aria-label="Target end"
-              style={{ width: "132px" }}
-            />
-            <span className="mono-label-sm shrink-0 whitespace-nowrap rounded-md border border-beige-20 bg-beige-5 px-2 py-1 text-beige-60">
-              {timeframeQuarter}
-            </span>
-          </div>
+        <PropRow icon={CalendarRange} label="Timeframe" locked={vo("target_start")}>
+          {vo("target_start") ? (
+            <div className="flex flex-wrap items-center gap-2" title={VAULT_HINT}>
+              <span>{formatDateEN(d.targetStart)}</span>
+              <span className="text-beige-60" aria-hidden>
+                →
+              </span>
+              <span>{formatDateEN(d.targetEnd)}</span>
+              <span className="mono-label-sm shrink-0 whitespace-nowrap rounded-md border border-beige-20 bg-beige-5 px-2 py-1 text-beige-60">
+                {timeframeQuarter}
+              </span>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <TextInput
+                type="date"
+                value={d.targetStart}
+                onChange={(e) => patch({ targetStart: e.target.value })}
+                aria-label="Target start"
+                style={{ width: "132px" }}
+              />
+              <span className="text-beige-60" aria-hidden>
+                →
+              </span>
+              <TextInput
+                type="date"
+                value={d.targetEnd}
+                onChange={(e) => patch({ targetEnd: e.target.value })}
+                aria-invalid={dateOutOfOrder}
+                aria-label="Target end"
+                style={{ width: "132px" }}
+              />
+              <span className="mono-label-sm shrink-0 whitespace-nowrap rounded-md border border-beige-20 bg-beige-5 px-2 py-1 text-beige-60">
+                {timeframeQuarter}
+              </span>
+            </div>
+          )}
         </PropRow>
-        {dateOutOfOrder && (
+        {!vo("target_start") && dateOutOfOrder && (
           <p className="px-2 pb-1 text-xs text-red-70">End date must be on or after the start date.</p>
         )}
-        <PropRow icon={User} label="Owner">
+        <PropRow icon={User} label="Owner" locked={vo("owner_id")}>
           <InlineTagSelect
             label="Change owner"
             value={d.ownerId}
             options={ownerOptions}
-            render={(id) =>
-              id ? (
-                <span className="inline-flex items-center gap-2">
-                  <Avatar name={ownerName(getOwner(id))} className="h-5 w-5 text-[9px]" neutral />
-                  {ownerName(getOwner(id))}
-                </span>
-              ) : (
-                <span className="text-beige-60">Unassigned</span>
-              )
-            }
+            render={ownerDisplay}
             onSelect={(ownerId) => patch({ ownerId })}
+            disabled={vo("owner_id")}
+            disabledTitle={VAULT_HINT}
           />
         </PropRow>
-        <PropRow icon={Users} label="Team">
-          <TeamPicker
-            teams={teams}
-            businessUnits={businessUnits}
-            teamId={d.teamId}
-            onChange={(teamId) => patch({ teamId })}
+        <PropRow icon={Users} label="Team" locked={vo("team_id")}>
+          {vo("team_id") ? (
+            <span title={VAULT_HINT} className={cn(!d.teamId && "text-beige-60")}>
+              {teams.find((t) => t.id === d.teamId)?.name ?? "No team"}
+            </span>
+          ) : (
+            <TeamPicker
+              teams={teams}
+              businessUnits={businessUnits}
+              teamId={d.teamId}
+              onChange={(teamId) => patch({ teamId })}
+            />
+          )}
+        </PropRow>
+        {d.area && (
+          <PropRow icon={Shapes} label="Area" locked={vo("area")}>
+            <span title={vo("area") ? VAULT_HINT : undefined}>{d.area}</span>
+          </PropRow>
+        )}
+        <PropRow icon={Layers} label="Tier" locked={vo("tier")}>
+          <InlineTagSelect
+            label="Change tier"
+            value={d.tier ?? ""}
+            options={TIER_OPTIONS}
+            render={(t) => (t ? <TierTag tier={t} /> : <span className="text-beige-60">—</span>)}
+            onSelect={(t) => patch({ tier: (t || null) as Tier | null })}
+            disabled={vo("tier")}
+            disabledTitle={VAULT_HINT}
           />
         </PropRow>
         <PropRow icon={Target} label="Objective">
@@ -493,7 +552,9 @@ function DrawerBody({ source, creating }: { source: Initiative; creating: boolea
           </>
         ) : (
           <>
-            {d.archived ? (
+            {vo("archived") ? (
+              <span className="text-xs text-beige-60">Archiving is managed in the vault</span>
+            ) : d.archived ? (
               <Button
                 variant="ghost"
                 onClick={() => {

@@ -155,6 +155,37 @@ privileges for `postgres` no longer include `anon`). Objects created by Supabase
 - **After any schema change**, run the Supabase security advisor on both projects. The only
   accepted finding is leaked-password protection (Beakon has no passwords).
 
+### Workflow: vault-sync (definitions from the PM's vault, OKR live state back)
+
+One writer per field (openspec `vault-sync`): the vault owns feature definitions **and
+initiative status** (`04 Features` frontmatter) and commitment definitions
+(`../bu-dashboard/data/okr.json`); Beakon owns OKR live state (governance, % done, health,
+check-ins). Synced rows carry `source = 'vault'` and `vault_fields` (the columns the vault
+owns on that row); signed-in users can't change those columns. Nothing here needs stored
+credentials — the PM asks Claude, and Claude reads/writes Supabase with its own tools.
+
+**Sync (vault → Beakon)** — "sync the vault into Beakon":
+1. Claude dumps current rows from **beakon-prod** as JSON:
+   `{"initiatives": [id, title, team_id, status, archived, area, tier, owner_id, target_start,
+   target_end, source, source_key, vault_fields], "okrs": [id, title, team_id, year, quarter,
+   deliverable_detail, strategic_objective_id, tier, archived, source, source_key,
+   vault_fields], "owners": [id, name, surname]}`.
+2. `python3 scripts/vault-sync/vault_sync.py build --current <dump.json>` → `out/vault-sync-<date>.md`
+   (report: creates / updates with field diffs / archives / skips) and `out/vault-sync-<date>.sql`.
+3. The PM reads the report. Then Claude applies the SQL to **beakon-preview**, checks counts
+   against the report, then to **beakon-prod**, checks again. The SQL is idempotent and never
+   deletes: a definition gone from the vault is archived.
+
+**Write-back (Beakon → okr.json)** — "write OKR live state back":
+1. Claude reads `source_key, achievement, governance_status, health` of `okrs where source = 'vault'`
+   from beakon-prod into a JSON list.
+2. `python3 scripts/vault-sync/vault_sync.py write-back --live <live.json> --backup` — copies
+   `okr.json` to `02 OKR/backups/okr.json.<timestamp>-before-vault-sync-writeback.bak`, then
+   updates only `status`, `progress`, `health`, `governance` of synced commitments (formatting
+   preserved). It refuses to run without a fresh backup.
+
+Tests: `python3 -m unittest discover -s scripts/vault-sync`.
+
 ### Workflow: apply a schema change
 
 **1. Test on preview (rebuild from scratch).** Preview holds only disposable data, so the

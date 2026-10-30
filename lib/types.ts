@@ -10,6 +10,23 @@ export type Status =
   | "released";
 export type Visibility = "internal" | "external";
 export type Health = "on_track" | "at_risk" | "blocked" | "delayed";
+/** Size of the work (vault-sync): T1 largest … T3 smallest. Distinct from OkrClass. */
+export type Tier = "T1" | "T2" | "T3";
+export const TIERS: Tier[] = ["T1", "T2", "T3"];
+
+/** True when the record is synced from the PM's vault (openspec vault-sync). */
+export function isVaultManaged(r: { source?: "vault" | null }): boolean {
+  return r.source === "vault";
+}
+
+/**
+ * True when the vault owns `column` (a DB column name, e.g. "title",
+ * "team_id", "status") on this record — the UI shows it read-only and the
+ * database guard refuses changes to it from signed-in users.
+ */
+export function vaultOwns(r: { source?: "vault" | null; vaultFields?: string[] }, column: string): boolean {
+  return r.source === "vault" && (r.vaultFields ?? []).includes(column);
+}
 export type GroupBy = "theme" | "team" | "owner";
 export type Zoom = "month" | "quarter" | "half";
 /** Sort dimension for timeline rows within each group. */
@@ -118,6 +135,15 @@ export interface Initiative {
   notes: string; // internal-only, excluded from external share
   updatedAt: string; // ISO datetime
   archived: boolean;
+  /** Size of the work (T1–T3); vault-owned when the initiative is synced. */
+  tier?: Tier | null;
+  /** Feature area from the vault note (read-only label on synced initiatives). */
+  area?: string | null;
+  /** "vault" when the initiative is synced from a feature note; see vaultOwns(). */
+  source?: "vault" | null;
+  sourceKey?: string | null;
+  /** DB column names the vault owns on this row (e.g. "title", "status"). */
+  vaultFields?: string[];
   /**
    * Global sort order (board drag, list/timeline order). Optional at construction:
    * the store assigns it on load (from Supabase, or by index in seed mode) and on
@@ -339,6 +365,13 @@ export interface Okr {
   archived: boolean;
   position?: number;
   updatedAt: string; // ISO datetime
+  /** Size of the work (T1–T3), independent of okrClass; vault-owned when synced. */
+  tier?: Tier | null;
+  /** "vault" when the OKR is synced from an okr.json commitment; see vaultOwns(). */
+  source?: "vault" | null;
+  sourceKey?: string | null;
+  /** DB column names the vault owns on this row (e.g. "title", "team_id"). */
+  vaultFields?: string[];
 }
 
 export interface OkrOwner {

@@ -13,12 +13,13 @@ import {
   STATUS_META,
   STATUSES,
   THEME_COLOR_META,
+  vaultOwns,
   type Health,
   type Initiative,
   type Status,
 } from "@/lib/types";
 import { cn } from "@/lib/cn";
-import { Avatar, HealthTag, StatusTag, Tag } from "./ui";
+import { Avatar, HealthTag, StatusTag, Tag, TierTag, VAULT_HINT } from "./ui";
 import { InlineTagSelect } from "./form";
 import { FilterBar } from "./FilterBar";
 
@@ -196,6 +197,7 @@ export function List() {
                           >
                             {i.title || "Untitled initiative"}
                           </span>
+                          {i.tier && <TierTag tier={i.tier} />}
                           {i.archived && (
                             <Tag className="shrink-0 bg-beige-20 text-beige-70">Archived</Tag>
                           )}
@@ -223,6 +225,8 @@ export function List() {
                             saveInitiative({ ...i, status });
                             notify({ message: `Status set to ${STATUS_META[status].label}`, tone: "success" });
                           }}
+                          disabled={vaultOwns(i, "status")}
+                          disabledTitle={VAULT_HINT}
                         />
                       </td>
                       <td className={cn(COLUMN_WIDTH.health, "p-0")}>

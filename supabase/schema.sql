@@ -620,23 +620,24 @@ begin
     p_deliverable_detail, p_governance_status, p_okr_class, p_target_date, p_achievement,
     p_health, p_notes, p_carried_from_id, p_archived, p_position
   )
+  -- vault-sync: keep stored values for columns the vault owns (vault_fields).
   on conflict (id) do update set
-    title                   = excluded.title,
-    strategic_objective_id  = excluded.strategic_objective_id,
-    team_id                 = excluded.team_id,
-    business_unit_id        = excluded.business_unit_id,
-    year                    = excluded.year,
-    quarter                 = excluded.quarter,
-    deliverable_detail      = excluded.deliverable_detail,
-    governance_status       = excluded.governance_status,
-    okr_class               = excluded.okr_class,
-    target_date             = excluded.target_date,
-    achievement             = excluded.achievement,
-    health                  = excluded.health,
-    notes                   = excluded.notes,
-    carried_from_id         = excluded.carried_from_id,
-    archived                = excluded.archived,
-    position                = excluded.position;
+    title                  = case when 'title' = any(okrs.vault_fields) then okrs.title else excluded.title end,
+    strategic_objective_id = case when 'strategic_objective_id' = any(okrs.vault_fields) then okrs.strategic_objective_id else excluded.strategic_objective_id end,
+    team_id                = case when 'team_id' = any(okrs.vault_fields) then okrs.team_id else excluded.team_id end,
+    business_unit_id       = case when 'business_unit_id' = any(okrs.vault_fields) then okrs.business_unit_id else excluded.business_unit_id end,
+    year                   = case when 'year' = any(okrs.vault_fields) then okrs.year else excluded.year end,
+    quarter                = case when 'quarter' = any(okrs.vault_fields) then okrs.quarter else excluded.quarter end,
+    deliverable_detail     = case when 'deliverable_detail' = any(okrs.vault_fields) then okrs.deliverable_detail else excluded.deliverable_detail end,
+    governance_status      = excluded.governance_status,
+    okr_class              = excluded.okr_class,
+    target_date            = excluded.target_date,
+    achievement            = excluded.achievement,
+    health                 = excluded.health,
+    notes                  = excluded.notes,
+    carried_from_id        = excluded.carried_from_id,
+    archived               = case when 'archived' = any(okrs.vault_fields) then okrs.archived else excluded.archived end,
+    position               = excluded.position;
 
   delete from okr_owners where okr_id = p_id;
   if p_owners is not null and jsonb_array_length(p_owners) > 0 then
@@ -1103,6 +1104,122 @@ revoke execute on function persist_okr_view(
 grant execute on function persist_okr_view(
   text, text, text, jsonb, text, boolean, double precision, jsonb
 ) to authenticated;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- vault-sync (2026-10-30): records synced from the PM's vault. On a row with
+-- source = 'vault', vault_fields lists the columns the vault owns; signed-in
+-- users can't change them (the sync runs as postgres). See
+-- supabase/migrations/2026-10-vault-sync.sql and openspec vault-sync.
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Columns ──
+alter table initiatives add column if not exists tier         text;
+alter table initiatives add column if not exists area         text;
+alter table initiatives add column if not exists source       text;
+alter table initiatives add column if not exists source_key   text;
+alter table initiatives add column if not exists vault_fields text[] not null default '{}';
+alter table okrs        add column if not exists tier         text;
+alter table okrs        add column if not exists source       text;
+alter table okrs        add column if not exists source_key   text;
+alter table okrs        add column if not exists vault_fields text[] not null default '{}';
+
+do $$ begin
+  alter table initiatives add constraint initiatives_tier_check check (tier in ('T1', 'T2', 'T3'));
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter table okrs add constraint okrs_tier_check check (tier in ('T1', 'T2', 'T3'));
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter table initiatives add constraint initiatives_source_check check (source in ('vault'));
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter table okrs add constraint okrs_source_check check (source in ('vault'));
+exception when duplicate_object then null; end $$;
+
+create unique index if not exists initiatives_source_key_idx
+  on initiatives (source, source_key) where source is not null;
+create unique index if not exists okrs_source_key_idx
+  on okrs (source, source_key) where source is not null;
+
+-- ── Guard: vault-owned columns are read-only for signed-in users ──
+create or replace function guard_vault_definitions() returns trigger
+language plpgsql
+security invoker
+set search_path = public, pg_temp
+as $$
+declare
+  f text;
+  o jsonb;
+  n jsonb;
+begin
+  -- Only signed-in API callers are restricted; the sync runs as postgres.
+  if current_user <> 'authenticated' then
+    -- On DELETE `new` is null, and returning null from a BEFORE trigger
+    -- silently cancels the delete: return the row being deleted instead.
+    if tg_op = 'DELETE' then
+      return old;
+    end if;
+    return new;
+  end if;
+
+  if tg_op = 'DELETE' then
+    -- Vault rows are archived by the sync, never deleted from the app.
+    if old.source = 'vault' then
+      raise exception 'Managed in the vault: this record can only be removed from the vault'
+        using errcode = '42501';
+    end if;
+    return old;
+  end if;
+
+  if tg_op = 'INSERT' then
+    -- Rows created from the app are never vault rows.
+    new.source := null;
+    new.source_key := null;
+    new.vault_fields := '{}';
+    return new;
+  end if;
+
+  if old.source is null then
+    if new.source is not null or new.source_key is not null or new.vault_fields <> '{}' then
+      raise exception 'Only a vault sync can mark a record as managed in the vault'
+        using errcode = '42501';
+    end if;
+    return new;
+  end if;
+
+  if new.source is distinct from old.source
+     or new.source_key is distinct from old.source_key
+     or new.vault_fields is distinct from old.vault_fields then
+    raise exception 'Vault metadata can only be changed by a vault sync'
+      using errcode = '42501';
+  end if;
+
+  o := to_jsonb(old);
+  n := to_jsonb(new);
+  foreach f in array old.vault_fields loop
+    if not (o ? f) then
+      -- Fail closed: a vault_fields entry that isn't a column would otherwise go unguarded.
+      raise exception 'vault_fields names an unknown column "%"', f using errcode = '42501';
+    end if;
+    if (o -> f) is distinct from (n -> f) then
+      raise exception 'Managed in the vault: "%" can only be changed in the vault', f
+        using errcode = '42501';
+    end if;
+  end loop;
+  return new;
+end;
+$$;
+revoke execute on function guard_vault_definitions() from public, anon, authenticated;
+
+drop trigger if exists initiatives_guard_vault_definitions on initiatives;
+create trigger initiatives_guard_vault_definitions
+  before insert or update or delete on initiatives
+  for each row execute function guard_vault_definitions();
+
+drop trigger if exists okrs_guard_vault_definitions on okrs;
+create trigger okrs_guard_vault_definitions
+  before insert or update or delete on okrs
+  for each row execute function guard_vault_definitions();
+
 
 -- ══════════════════════════════════════════════════════════════════════
 -- Anonymous access — keep this section LAST (security-hardening 2026-10-30)

@@ -1,7 +1,7 @@
 "use client";
 
 import { type ButtonHTMLAttributes, type ComponentType, type ReactNode, type Ref } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Lock } from "lucide-react";
 import { cn, initials } from "@/lib/cn";
 import {
   HEALTH_META,
@@ -11,6 +11,7 @@ import {
   type Health,
   type Status,
   type ThemeColor,
+  type Tier,
 } from "@/lib/types";
 
 // ── Button (ShadCN variant mapping, Product colors, Inter sentence case) ──
@@ -189,6 +190,44 @@ export function ScoreTierTag({ score, className }: { score: number | null; class
     <Tag className={cn("whitespace-nowrap", t.tag, className)}>
       <span aria-hidden className="shrink-0">{t.emoji}</span>
       <span className="min-w-0 truncate">{t.label}</span>
+    </Tag>
+  );
+}
+
+// ── Vault-sync markers ──
+/** Tooltip for anything the PM's vault owns (openspec vault-sync). */
+export const VAULT_HINT =
+  "Defined in the PM's vault (04 Features / okr.json). Change it there; Beakon updates on the next sync.";
+
+/** Compact "Managed in the vault" marker — one per drawer, next to the eyebrow. */
+export function VaultTag() {
+  return (
+    <span title={VAULT_HINT} className="inline-flex shrink-0">
+      <Tag className="border border-beige-30 bg-beige-5 text-beige-70">
+        <Lock size={11} strokeWidth={2} aria-hidden className="shrink-0" />
+        Managed in the vault
+      </Tag>
+    </span>
+  );
+}
+
+/** 10px lock after a field label — the vault owns this field (visible without hovering). */
+export function VaultLock() {
+  return (
+    <span title={VAULT_HINT} className="inline-flex shrink-0">
+      <Lock size={10} strokeWidth={2} className="text-beige-50" aria-label="Managed in the vault" />
+    </span>
+  );
+}
+
+/**
+ * Tier (T1–T3, size of the work) — an outlined square chip, so it reads as a
+ * neutral attribute and never as a state tag (Archived) or a status/lime colour.
+ */
+export function TierTag({ tier, className }: { tier: Tier; className?: string }) {
+  return (
+    <Tag shape="square" className={cn("shrink-0 border border-beige-30 bg-transparent text-beige-60", className)}>
+      <span title={`Tier ${tier}`}>{tier}</span>
     </Tag>
   );
 }

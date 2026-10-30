@@ -1,9 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Archive, ArchiveRestore, Building2, CalendarRange, Flag, Users, X } from "lucide-react";
+import { Archive, ArchiveRestore, Building2, CalendarRange, Flag, Layers, Users, X } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
-import { HEALTH_META } from "@/lib/types";
+import { HEALTH_META, vaultOwns } from "@/lib/types";
 import type {
   BusinessUnit,
   Health,
@@ -18,7 +18,7 @@ import type {
 import { cn } from "@/lib/cn";
 import { Drawer } from "./Drawer";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { Button, Eyebrow, HealthTag, StatusTag, Tag } from "./ui";
+import { Button, Eyebrow, HealthTag, StatusTag, Tag, TierTag, VAULT_HINT, VaultTag } from "./ui";
 import { Field, InlineTagSelect, NativeSelect, SearchableSelect, TextArea, TextInput } from "./form";
 import { DependencyPicker, Prop } from "./initiative-fields";
 import { AchievementInput, OkrOwnersEditor, TeamOrBuPicker } from "./okr-fields";
@@ -193,6 +193,15 @@ function DrawerBody({
   const teamBuInvalid = Boolean(d.teamId) === Boolean(d.businessUnitId);
   const canSave = !titleMissing && !objectiveMissing && !teamBuInvalid;
 
+  // vault-sync: columns the PM's vault owns on this row render read-only.
+  const vault = !creating && d.source === "vault";
+  const vo = (column: string) => !creating && vaultOwns(d, column);
+  const teamBuLabel = d.teamId
+    ? (teams.find((t) => t.id === d.teamId)?.name ?? "Unknown team")
+    : d.businessUnitId
+      ? (businessUnits.find((b) => b.id === d.businessUnitId)?.name ?? "Unknown business unit")
+      : "None";
+
   const ownerOptionsForPicker = owners;
   const initiativeCandidates = initiatives.filter((i) => !i.archived);
 
@@ -224,7 +233,10 @@ function DrawerBody({
       {/* Header */}
       <div className="sticky top-0 z-10 border-b border-beige-20 bg-white px-6 pb-4 pt-5">
         <div className="mb-3 flex items-start justify-between gap-3">
-          <Eyebrow>{creating ? "New OKR" : "Edit OKR"}</Eyebrow>
+          <div className="flex min-w-0 items-center gap-2">
+            <Eyebrow>{creating ? "New OKR" : "Edit OKR"}</Eyebrow>
+            {vault && <VaultTag />}
+          </div>
           <button
             onClick={attemptClose}
             className="rounded-md p-1 text-beige-60 hover:bg-beige-10 hover:text-green-90"
@@ -233,18 +245,27 @@ function DrawerBody({
             <X size={18} />
           </button>
         </div>
-        <input
-          value={d.title}
-          onChange={(e) => set("title", e.target.value)}
-          onBlur={() => {
-            setTitleTouched(true);
-            patch({ title: d.title.trim() });
-          }}
-          placeholder="What is this OKR?"
-          aria-label="Title"
-          autoFocus={creating}
-          className="-mx-2 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 py-0.5 font-display text-xl font-semibold leading-snug text-green-90 placeholder:text-beige-40 hover:border-beige-30 hover:bg-beige-5 focus:border-green-90 focus:bg-white focus:outline-none focus:ring-2 focus:ring-green-90/30"
-        />
+        {vo("title") ? (
+          <h2
+            title={VAULT_HINT}
+            className="py-0.5 font-display text-xl font-semibold leading-snug text-green-90"
+          >
+            {d.title || "Untitled OKR"}
+          </h2>
+        ) : (
+          <input
+            value={d.title}
+            onChange={(e) => set("title", e.target.value)}
+            onBlur={() => {
+              setTitleTouched(true);
+              patch({ title: d.title.trim() });
+            }}
+            placeholder="What is this OKR?"
+            aria-label="Title"
+            autoFocus={creating}
+            className="-mx-2 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 py-0.5 font-display text-xl font-semibold leading-snug text-green-90 placeholder:text-beige-40 hover:border-beige-30 hover:bg-beige-5 focus:border-green-90 focus:bg-white focus:outline-none focus:ring-2 focus:ring-green-90/30"
+          />
+        )}
         {titleTouched && titleMissing && <p className="mt-1 text-xs text-red-70">Give the OKR a title.</p>}
         {/* Governance/Health live once, here — pinned in the sticky header as
          * the single interactive control (ADR 007 decision 4), not duplicated
@@ -275,63 +296,88 @@ function DrawerBody({
       <div className="flex flex-col gap-6 px-6 py-5">
         <div className="grid grid-cols-2 gap-4 rounded-xl border border-beige-20 bg-beige-5 p-4">
           <div className="col-span-2">
-            <Prop icon={Users} label="Team / business unit">
-              <TeamOrBuPicker
-                teams={teams}
-                businessUnits={businessUnits}
-                teamId={d.teamId}
-                businessUnitId={d.businessUnitId}
-                onChange={({ teamId, businessUnitId }) => {
-                  setTeamBuTouched(true);
-                  patch({ teamId, businessUnitId });
-                }}
-              />
+            <Prop icon={Users} label="Team / business unit" locked={vo("team_id") || vo("business_unit_id")}>
+              {vo("team_id") || vo("business_unit_id") ? (
+                <span title={VAULT_HINT}>{teamBuLabel}</span>
+              ) : (
+                <TeamOrBuPicker
+                  teams={teams}
+                  businessUnits={businessUnits}
+                  teamId={d.teamId}
+                  businessUnitId={d.businessUnitId}
+                  onChange={({ teamId, businessUnitId }) => {
+                    setTeamBuTouched(true);
+                    patch({ teamId, businessUnitId });
+                  }}
+                />
+              )}
               {teamBuTouched && teamBuInvalid && (
                 <p className="mt-1 text-xs text-red-70">Choose exactly one team or business unit.</p>
               )}
             </Prop>
           </div>
           <div className="col-span-2">
-            <Prop icon={Building2} label="Strategic objective">
-              <SearchableSelect
-                ariaLabel="Strategic objective"
-                value={d.strategicObjectiveId}
-                onChange={(v) => {
-                  setObjectiveTouched(true);
-                  patch({ strategicObjectiveId: v });
-                }}
-                placeholder="Choose an objective"
-                options={strategicObjectives.map((s) => ({ value: s.id, label: s.name }))}
-              />
+            <Prop icon={Building2} label="Strategic objective" locked={vo("strategic_objective_id")}>
+              {vo("strategic_objective_id") ? (
+                <span title={VAULT_HINT}>
+                  {strategicObjectives.find((s) => s.id === d.strategicObjectiveId)?.name ?? "—"}
+                </span>
+              ) : (
+                <SearchableSelect
+                  ariaLabel="Strategic objective"
+                  value={d.strategicObjectiveId}
+                  onChange={(v) => {
+                    setObjectiveTouched(true);
+                    patch({ strategicObjectiveId: v });
+                  }}
+                  placeholder="Choose an objective"
+                  options={strategicObjectives.map((s) => ({ value: s.id, label: s.name }))}
+                />
+              )}
               {objectiveTouched && objectiveMissing && (
                 <p className="mt-1 text-xs text-red-70">Choose a strategic objective.</p>
               )}
             </Prop>
           </div>
           <div className="col-span-2">
-            <Prop icon={CalendarRange} label="Year / quarter">
-              <div className="grid grid-cols-2 gap-2">
-                <TextInput
-                  type="number"
-                  value={d.year}
-                  onChange={(e) => set("year", Number(e.target.value) || d.year)}
-                  onBlur={saveNow}
-                  aria-label="Year"
-                  className="w-full"
-                />
-                <NativeSelect
-                  aria-label="Quarter"
-                  value={d.quarter}
-                  onChange={(e) => patch({ quarter: Number(e.target.value) })}
-                  className="w-full"
-                >
-                  {[1, 2, 3, 4].map((q) => (
-                    <option key={q} value={q}>
-                      Q{q}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </div>
+            <Prop icon={CalendarRange} label="Year / quarter" locked={vo("year") || vo("quarter")}>
+              {vo("year") || vo("quarter") ? (
+                <span title={VAULT_HINT}>
+                  Q{d.quarter} {d.year}
+                </span>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <TextInput
+                    type="number"
+                    value={d.year}
+                    onChange={(e) => set("year", Number(e.target.value) || d.year)}
+                    onBlur={saveNow}
+                    aria-label="Year"
+                    className="w-full"
+                  />
+                  <NativeSelect
+                    aria-label="Quarter"
+                    value={d.quarter}
+                    onChange={(e) => patch({ quarter: Number(e.target.value) })}
+                    className="w-full"
+                  >
+                    {[1, 2, 3, 4].map((q) => (
+                      <option key={q} value={q}>
+                        Q{q}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </div>
+              )}
+            </Prop>
+          </div>
+          {/* Tier (size of the work) — set only by the vault sync; there is
+           * no persist_okr parameter for it, so it is read-only for everyone. */}
+          <div className="col-span-2">
+            <Prop icon={Layers} label="Tier" locked={vault}>
+              <span title={vault ? VAULT_HINT : undefined}>
+                {d.tier ? <TierTag tier={d.tier} /> : <span className="text-beige-60">—</span>}
+              </span>
             </Prop>
           </div>
           <div className="col-span-2">
@@ -346,12 +392,18 @@ function DrawerBody({
           </div>
         </div>
 
-        <Field label="Deliverable detail">
-          <TextArea
-            value={d.deliverableDetail}
-            onChange={(e) => set("deliverableDetail", e.target.value)}
-            onBlur={saveNow}
-          />
+        <Field label="Deliverable detail" locked={vo("deliverable_detail")}>
+          {vo("deliverable_detail") ? (
+            <span title={VAULT_HINT} className="block whitespace-pre-line text-sm text-green-90">
+              {d.deliverableDetail || <span className="text-beige-60">—</span>}
+            </span>
+          ) : (
+            <TextArea
+              value={d.deliverableDetail}
+              onChange={(e) => set("deliverableDetail", e.target.value)}
+              onBlur={saveNow}
+            />
+          )}
         </Field>
 
         {/* Achievement — keeps null ("not assessed yet") distinct from 0. */}
