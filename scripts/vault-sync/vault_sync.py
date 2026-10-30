@@ -134,10 +134,15 @@ def plan_initiatives(features_dir, current, today):
         key = fn[:-3]
         fm = parse_frontmatter(open(os.path.join(features_dir, fn), encoding="utf-8").read())
         if not fm or fm.get("type") != "feature":
+            if key in by_key:
+                skips.append((key, "no longer a feature note but still vault-managed in Beakon — "
+                                   "its initiative is left as is; delete the note to archive it"))
             continue
         squad = fm.get("squad", "")
         if squad not in SQUAD_TEAM:
-            skips.append((key, f"squad {squad!r} is out of scope"))
+            extra = (" — its initiative stays vault-managed and is no longer updated; "
+                     "delete the note to archive it") if key in by_key else ""
+            skips.append((key, f"squad {squad!r} is out of scope{extra}"))
             continue
         status = fm.get("status", "")
         if status not in VAULT_STATUSES:
