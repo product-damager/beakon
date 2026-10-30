@@ -1,6 +1,6 @@
 # Proposal: vault-sync
 
-> **Status: proposed. Waiting for PM review before apply** (PM rule, 2026-10-30). The decisions in "Decisions for the PM" below need an answer first.
+> **Status: decisions taken by the PM on 2026-10-30, in progress.** Stop points: the first dry-run report, and the first `okr.json` diff.
 
 ## Why
 
@@ -25,8 +25,12 @@ Links: vault `01 Context/BU Configure & Launch.md`, `02 OKR/2026-Q4 OKR.md`, `04
    - every feature note with a known squad becomes an initiative;
    - every `okr.json` commitment becomes an OKR (Beakon's "OKR" = a delivery commitment).
    - Records are matched on a stable key: the feature note's file name, and the commitment's `key` (e.g. `fr-1`).
+   - Initiative status comes from the note's `status` (D1 mapping), and `parked` archives the initiative (reversibly).
+   - Initiatives the sync creates start with visibility "internal".
    - Upserts are idempotent. A run never deletes; a definition removed from the vault is archived in Beakon.
-2. **Live state, Supabase → `okr.json`**, at each bu-dashboard refresh. Each commitment gets Beakon's current status, % done, health and governance (see D3).
+2. **Live state of OKRs only, Supabase → `okr.json`**, at each bu-dashboard refresh. Each commitment gets Beakon's current status, % done, health and governance (D3).
+   - Initiatives get no write-back: the vault owns their status (D1).
+   - Before the first write-back, `okr.json` is backed up to the vault's `02 OKR/backups/`.
 3. **Read-only in the UI:** on a vault-managed record, the definition fields can't be edited in Beakon.
    - The drawer shows them as read-only, marked "Managed in the vault".
    - The database rejects edits to them by signed-in users.
@@ -48,35 +52,24 @@ Links: vault `01 Context/BU Configure & Launch.md`, `02 OKR/2026-Q4 OKR.md`, `04
 - `initiatives`: adds tier; vault-managed initiatives get read-only definition fields.
 - `okr-tracking`: adds tier and the commitment key; vault-managed OKRs get read-only definition fields.
 
-## Decisions for the PM
+## Decisions (PM, 2026-10-30)
 
-Each has a recommendation, marked ★.
-
-- **D1. Field ownership table** (design.md, "Field ownership"). Approve it or edit it.
-  - The main open point is **initiative status**. config.yaml says Beakon owns status, but feature notes also carry `status` (idea → shipped), which your Bases views use.
-  - ★ Beakon owns status, and the sync writes it back to the note's frontmatter as `status`, so Bases keeps working with one writer.
-  - Alternative: feature status stays vault-owned and Beakon status becomes read-only for synced initiatives.
-- **D2. Strategic objective for Q4 commitments.** Beakon requires one per OKR; `okr.json` has none.
-  - ★ Add `objective: core | ai | data | internal` per commitment in `okr.json`.
-  - Until it's filled, default to "AI: Scaling PBX adoption" for Assets Creation and "Core: Strengthening our foundations" for Finalize & Roll out.
-- **D3. Live state written back to `okr.json`.**
-  - ★ `progress` = achievement %.
-  - ★ `status` = `done` at 100%; `dropped` if governance is Rejected; `in_progress` if achievement is above 0; otherwise `not_started`.
-  - ★ New `health` field; `governance` comes from Beakon.
-  - This makes governance Beakon-owned live state: validation happens in the OKR meetings and is recorded in Beakon.
-- **D4. Feature `area` versus Beakon `theme`.**
-  - ★ Don't map them. Theme stays Beakon-owned, for presentation grouping and the /share labels.
-  - `area` is stored as a read-only label on synced initiatives.
-- **D5. Links to existing initiatives.**
-  - ★ I add `beakon:` lines to the matching feature notes, and you confirm the list:
-    - "Rollout Preview" ↔ "FF: Rollout Preview";
-    - "Experiment Rules for Personalization" ↔ "Perso Experimentation Rule";
-    - the rest create new initiatives.
-  - Alternative: you add the lines yourself.
-- **D6. A production initiative title names a customer** ("BPCE Legacy read-only"). That breaks the privacy rule.
-  - ★ Rename it to "Legacy read-only migration (bank customer)", or a title you choose.
-  - Out of scope for the sync, but this changes real data, so it needs your OK.
-- **D7. Feature notes with squad "other"** (1 note). ★ Skip them; the scope is "Configure & Launch" only.
+- **D1. The vault owns initiative status.** It is one-way and read-only in Beakon.
+  - Ivan updates status in Obsidian. The vault has 7 values and Beakon 5, so a write-back would lose information.
+  - Mapping: `idea` → Backlog; `discovery` → Opportunity Framing; `spec`, `prototype` → Solution Framing; `in-dev` → In Development; `shipped` → Released; `parked` → archived (reversible: leaving `parked` restores the initiative).
+  - "Beakon owns live state" applies to OKRs only: status, %, health, governance, check-ins.
+- **D2. A per-commitment `strategic_objective: core | ai | data | internal`** in `okr.json`, named so it doesn't clash with `objectives[]`, which is the measurable layer.
+  - Defaults until it's filled: "Core: Strengthening our foundations" for Finalize & Roll out; "AI: Scaling PBX adoption" for Assets Creation.
+- **D3. OKR live state written back as recommended:**
+  - `progress` = achievement %;
+  - `status` derived: `done` at 100%, `dropped` if Rejected, `in_progress` above 0, otherwise `not_started`;
+  - a new `health` field;
+  - `governance` from Beakon.
+- **D4.** `area` becomes a read-only label on synced initiatives. Theme stays Beakon's.
+- **D5.** Claude adds `beakon:` links to "Rollout Preview" (→ "FF: Rollout Preview") and "Experiment Rules for Personalization" (→ "Perso Experimentation Rule"). Other notes create new initiatives, and unclaimed initiatives stay untouched.
+- **D6.** Done by the PM: no production initiative title names a customer (checked 2026-10-30).
+- **D7.** Notes with squad "other" are skipped.
+- **Also:** initiatives created by the sync are internal, and `okr.json` is backed up before the first write-back.
 
 ## Out of scope
 
@@ -97,5 +90,5 @@ Each has a recommendation, marked ★.
 - **Tooling:** `scripts/vault-sync/`, run through Claude:
   - one step reads the vault and `okr.json` and produces SQL, applied with the Supabase tools;
   - one step reads live state and writes `okr.json`.
-- **Vault:** frontmatter writes, limited to `status` (D1) and `beakon:` (D5); `okr.json` writes live-state fields only.
+- **Vault:** one-time `beakon:` lines in 2 notes (D5); `okr.json` gets live-state fields only, after a backup. Feature notes are never written by a sync run.
 - **Anonymous access:** no change. New columns get no anon grant, and `/share`'s projection is unchanged.

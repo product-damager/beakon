@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Keep one writer per field between the PM's Obsidian vault and Beakon: definitions (features, delivery commitments, tier, squad) flow from the vault into Beakon, and live state (status, % done, health, governance) flows from Beakon back to the vault's OKR copy.
+Keep one writer per field between the PM's Obsidian vault and Beakon: definitions (features with their status, delivery commitments, tier, squad) flow from the vault into Beakon, and the live state of OKRs (status, % done, health, governance) flows from Beakon back to the vault's OKR copy.
 
 ## ADDED Requirements
 
@@ -39,12 +39,41 @@ A feature note that names an existing Beakon initiative SHALL adopt that initiat
 - **WHEN** no note names an existing team-less initiative
 - **THEN** it is left exactly as it is
 
-### Requirement: Live state written back
-After each Beakon-side change cycle, a write-back run SHALL copy the live state of synced OKRs into `okr.json` (status, progress, health, governance), and the live status of synced initiatives into their feature notes, changing nothing else in those files.
+### Requirement: Initiative status follows the vault
+For a vault-managed initiative, status and archiving SHALL come from the feature note's `status`: idea → Backlog, discovery → Opportunity Framing, spec and prototype → Solution Framing, in-dev → In Development, shipped → Released, parked → archived (keeping the last mapped status). Leaving `parked` SHALL restore the initiative. Nothing SHALL be written back from Beakon to feature notes.
+
+#### Scenario: Parked feature
+- **WHEN** a feature note's status changes to `parked` and the sync runs
+- **THEN** its initiative is archived and appears on the Archived page
+
+#### Scenario: Un-parked feature
+- **WHEN** that note's status changes from `parked` to `spec` and the sync runs
+- **THEN** the initiative is restored with status Solution Framing
+
+### Requirement: New synced initiatives are internal
+An initiative created by a sync SHALL start with visibility "internal"; visibility stays Beakon-owned afterwards.
+
+#### Scenario: Created by the sync
+- **WHEN** a sync creates an initiative from a feature note
+- **THEN** it does not appear on /share until someone in Beakon makes it external
+
+### Requirement: OKR live state written back
+A write-back run SHALL copy the live state of vault-managed OKRs into `okr.json` (progress = achievement %, status derived as done at 100%, dropped when governance is Rejected, in_progress above 0, otherwise not_started; health; governance), changing nothing else in the file. Before the first write-back, the current `okr.json` SHALL be copied to the vault's `02 OKR/backups/`.
 
 #### Scenario: Achievement recorded in Beakon
 - **WHEN** a synced OKR's achievement is set to 40% in Beakon and write-back runs
 - **THEN** the matching `okr.json` commitment shows progress 40 and status "in_progress", and its text and deliverables are unchanged
+
+#### Scenario: First write-back
+- **WHEN** write-back runs for the first time
+- **THEN** a timestamped copy of `okr.json` exists in `02 OKR/backups/` before any change is made
+
+### Requirement: Strategic objective for synced commitments
+A synced OKR's strategic objective SHALL come from the commitment's `strategic_objective` (core, ai, data, internal); when it is missing, it SHALL default to "Core: Strengthening our foundations" for "Finalize & Roll out" and "AI: Scaling PBX adoption" for "Assets Creation".
+
+#### Scenario: Commitment without strategic objective
+- **WHEN** an "Assets Creation" commitment has no `strategic_objective` and the sync runs
+- **THEN** its OKR is linked to "AI: Scaling PBX adoption"
 
 ### Requirement: Runs triggered by the PM without stored credentials
 Sync and write-back SHALL be runnable by the PM in a Claude session, with no server, scheduler or stored database credentials; database changes SHALL be applied to beakon-preview and checked before beakon-prod.
