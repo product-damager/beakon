@@ -348,12 +348,13 @@ grant select on external_roadmap to anon, authenticated;
 -- Read-only views: both are owned by postgres and auto-updatable, and
 -- Supabase's default grants give anon/authenticated INSERT/UPDATE/DELETE on
 -- new views — which would let anyone write through them, bypassing RLS.
--- Revoke everything, then grant SELECT back. Hotfix 2026-10-30, see
+-- Revoke everything, then grant SELECT back (initiative_scores to signed-in
+-- users only: it covers internal initiatives). Hotfix 2026-10-30, see
 -- supabase/migrations/2026-10-revoke-view-writes.sql.
 revoke all on external_roadmap  from anon, authenticated;
 revoke all on initiative_scores from anon, authenticated;
 grant select on external_roadmap  to anon, authenticated;
-grant select on initiative_scores to anon, authenticated;
+grant select on initiative_scores to authenticated;
 
 -- ── OKRs ──
 create table if not exists okrs (

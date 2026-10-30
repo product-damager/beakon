@@ -10,10 +10,11 @@
 -- openspec/specs/sharing-and-auth/spec.md (anonymous-access baseline).
 --
 -- What: revoke everything from anon/authenticated on both views, then grant
--- SELECT back, so read access is exactly what it was (anon reads
--- external_roadmap for /share; authenticated may too). Nothing else changes —
--- security_invoker, the anon read of `owners`, the score view's anon read,
--- functions and search_path are the security-hardening change's scope.
+-- SELECT back: external_roadmap to anon (/share) and authenticated;
+-- initiative_scores to authenticated only — anon used to read every
+-- initiative's score, internal ones included, and nothing anonymous needs it
+-- (second pass, same day). Nothing else changes — security_invoker, the anon
+-- read of `owners`, functions and search_path are security-hardening's scope.
 --
 -- Idempotent: REVOKE/GRANT are no-ops when already in the target state.
 -- Mirrored in supabase/schema.sql right after the external_roadmap view.
@@ -22,4 +23,4 @@ revoke all on external_roadmap  from anon, authenticated;
 revoke all on initiative_scores from anon, authenticated;
 
 grant select on external_roadmap  to anon, authenticated;
-grant select on initiative_scores to anon, authenticated;
+grant select on initiative_scores to authenticated;
