@@ -257,7 +257,7 @@ def plan_okrs(okr, current):
                 "team_id": SQUAD_TEAM[name],
                 "year": year,
                 "quarter": quarter,
-                "deliverable_detail": "\n".join(d.get("text", "") for d in c.get("deliverables") or []),
+                "deliverable_detail": "\n".join(d["text"] for d in c.get("deliverables") or [] if d.get("text")),
                 "strategic_objective_id": OBJECTIVE_MAP.get(obj) if obj else OBJECTIVE_DEFAULT[name],
                 "tier": tier,
                 "archived": False,
