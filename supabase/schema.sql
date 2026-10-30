@@ -162,7 +162,10 @@ begin
   new.updated_at = now();
   return new;
 end;
-$$ language plpgsql;
+$$ language plpgsql
+  set search_path = public, pg_temp;
+-- Trigger-only: never callable through the API (security-hardening 2026-10-30).
+revoke execute on function touch_updated_at() from public, anon, authenticated;
 
 drop trigger if exists initiatives_touch_updated_at on initiatives;
 create trigger initiatives_touch_updated_at
@@ -170,7 +173,9 @@ create trigger initiatives_touch_updated_at
   for each row execute function touch_updated_at();
 
 -- ── Derived DIVE score = (demand * impact * viability) / effort ──
-create or replace view initiative_scores as
+-- security_invoker: runs with the caller's rights and RLS (security-hardening
+-- 2026-10-30). Must stay in this statement — create or replace resets options.
+create or replace view initiative_scores with (security_invoker = true) as
 select id, round((demand * impact * viability) / effort) as dive_score
 from initiatives;
 
@@ -210,7 +215,8 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 -- The anonymous public (share page) reads ONLY the external_roadmap view,
--- plus themes/owners for labels. No direct anon access to `initiatives`.
+-- plus themes for labels. Anon's narrow access to `initiatives` (external
+-- rows, displayed columns) is defined next to the view further down.
 -- Signed-in users can open the share page too, so grant both roles.
 -- Note: the `grant select on external_roadmap` statement itself moved further
 -- down in this file, alongside the view's definition (Sprint Heron Week 1
@@ -222,10 +228,10 @@ do $$ begin
     for select to anon using (true);
 exception when duplicate_object then null; end $$;
 
-do $$ begin
-  create policy "anon read owners" on owners
-    for select to anon using (true);
-exception when duplicate_object then null; end $$;
+-- Owners are never readable anonymously (they hold teammates' emails).
+-- security-hardening 2026-10-30; this policy existed until then.
+drop policy if exists "anon read owners" on owners;
+revoke all on owners from anon;
 
 -- ══════════════════════════════════════════════════════════════════════
 -- Lock signups to the company domain (+ explicit personal allowlist)
@@ -242,12 +248,75 @@ begin
   end if;
   return new;
 end;
-$$ language plpgsql security definer;
+$$ language plpgsql security definer
+  set search_path = public, pg_temp;
 
 drop trigger if exists enforce_company_domain on auth.users;
 create trigger enforce_company_domain
   before insert on auth.users
   for each row execute function enforce_company_domain();
+
+-- Trigger-only: never callable through the API (security-hardening 2026-10-30).
+-- Trigger functions aren't privilege-checked when they fire.
+revoke execute on function enforce_company_domain() from public, anon, authenticated;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- Auto-enable RLS on every new table in `public` (Supabase's rls_auto_enable
+-- event trigger). Existed in both projects before it was written down here
+-- (2026-10-30, security-hardening) — copied verbatim from beakon-prod.
+-- ══════════════════════════════════════════════════════════════════════
+-- Guarded: on a fresh project Supabase may own this function (supabase_admin),
+-- and replacing it would then fail the whole file. Say so instead.
+do $do$ begin
+  execute $fn$
+CREATE OR REPLACE FUNCTION public.rls_auto_enable()
+ RETURNS event_trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog'
+AS $function$
+DECLARE
+  cmd record;
+BEGIN
+  FOR cmd IN
+    SELECT *
+    FROM pg_event_trigger_ddl_commands()
+    WHERE command_tag IN ('CREATE TABLE', 'CREATE TABLE AS', 'SELECT INTO')
+      AND object_type IN ('table','partitioned table')
+  LOOP
+     IF cmd.schema_name IS NOT NULL AND cmd.schema_name IN ('public') AND cmd.schema_name NOT IN ('pg_catalog','information_schema') AND cmd.schema_name NOT LIKE 'pg_toast%' AND cmd.schema_name NOT LIKE 'pg_temp%' THEN
+      BEGIN
+        EXECUTE format('alter table if exists %s enable row level security', cmd.object_identity);
+        RAISE LOG 'rls_auto_enable: enabled RLS on %', cmd.object_identity;
+      EXCEPTION
+        WHEN OTHERS THEN
+          RAISE LOG 'rls_auto_enable: failed to enable RLS on %', cmd.object_identity;
+      END;
+     ELSE
+        RAISE LOG 'rls_auto_enable: skip % (either system schema or not in enforced list: %.)', cmd.object_identity, cmd.schema_name;
+     END IF;
+  END LOOP;
+END;
+$function$
+$fn$;
+exception when insufficient_privilege then
+  raise notice 'rls_auto_enable() not replaced (not owner) — keep the platform version';
+end $do$;
+
+-- Creating an event trigger can need elevated rights on a fresh project:
+-- don't fail the whole file over it, say so instead.
+do $$ begin
+  if not exists (select 1 from pg_event_trigger where evtname = 'ensure_rls') then
+    create event trigger ensure_rls on ddl_command_end
+      when tag in ('CREATE TABLE', 'CREATE TABLE AS', 'SELECT INTO')
+      execute function public.rls_auto_enable();
+  end if;
+exception when others then
+  raise notice 'ensure_rls event trigger not created (%) — enable RLS on new tables manually', sqlerrm;
+end $$;
+
+-- Trigger-only: never callable through the API.
+revoke execute on function rls_auto_enable() from public, anon, authenticated;
 
 -- ══════════════════════════════════════════════════════════════════════
 -- OKRs (Sprint Grackle — Phase 1: schema & RLS only, no read/write UI yet)
@@ -332,10 +401,21 @@ begin
   end if;
 end $$;
 
-create or replace view external_roadmap as
-select
-  i.id, i.title, i.summary, i.expected_outcome, i.status,
-  i.team_id, i.theme_id, i.target_start, i.target_end, i.position
+-- security-hardening 2026-10-30: only the columns /share displays, and
+-- security_invoker so anon's own RLS policy + column grants on `initiatives`
+-- (see "Anonymous access" at the end of this file) decide what it returns.
+-- Dropping columns needs drop + create; guarded so it runs once per database
+-- (same pattern as the team -> team_id rename above).
+do $$ begin
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'external_roadmap'
+               and column_name = 'summary') then
+    drop view external_roadmap;
+  end if;
+end $$;
+
+create or replace view external_roadmap with (security_invoker = true) as
+select i.id, i.title, i.status, i.theme_id, i.target_start, i.target_end
 from initiatives i
 where i.visibility = 'external' and i.archived = false
 order by i.position;
@@ -344,6 +424,17 @@ order by i.position;
 -- must run after the view exists, which on a fresh database it now does only
 -- from this point on.
 grant select on external_roadmap to anon, authenticated;
+
+-- Read-only views: both are owned by postgres and auto-updatable, and
+-- Supabase's default grants give anon/authenticated INSERT/UPDATE/DELETE on
+-- new views — which would let anyone write through them, bypassing RLS.
+-- Revoke everything, then grant SELECT back (initiative_scores to signed-in
+-- users only: it covers internal initiatives). Hotfix 2026-10-30, see
+-- supabase/migrations/2026-10-revoke-view-writes.sql.
+revoke all on external_roadmap  from anon, authenticated;
+revoke all on initiative_scores from anon, authenticated;
+grant select on external_roadmap  to anon, authenticated;
+grant select on initiative_scores to authenticated;
 
 -- ── OKRs ──
 create table if not exists okrs (
@@ -516,6 +607,7 @@ create or replace function persist_okr(
 ) returns void
 language plpgsql
 security invoker
+set search_path = public, pg_temp
 as $$
 begin
   insert into okrs (
@@ -602,6 +694,7 @@ create or replace function current_owner_id() returns text
 language sql
 security invoker
 stable
+set search_path = public, pg_temp
 as $$
   select id from owners where email = (auth.jwt() ->> 'email') limit 1;
 $$;
@@ -633,6 +726,7 @@ create or replace function persist_owner_profile(
 ) returns owners
 language plpgsql
 security invoker
+set search_path = public, pg_temp
 as $$
 declare
   v_email text := auth.jwt() ->> 'email';
@@ -755,6 +849,7 @@ create or replace function persist_roadmap(
 ) returns void
 language plpgsql
 security invoker
+set search_path = public, pg_temp
 as $$
 declare
   v_existing roadmaps%rowtype;
@@ -939,6 +1034,7 @@ create or replace function persist_okr_view(
 ) returns void
 language plpgsql
 security invoker
+set search_path = public, pg_temp
 as $$
 declare
   v_existing okr_views%rowtype;
@@ -1007,3 +1103,33 @@ revoke execute on function persist_okr_view(
 grant execute on function persist_okr_view(
   text, text, text, jsonb, text, boolean, double precision, jsonb
 ) to authenticated;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- Anonymous access — keep this section LAST (security-hardening 2026-10-30)
+-- Anon (signed-out, publishable key) gets exactly what /share needs:
+-- themes, the external_roadmap view, and the displayed columns of
+-- external, non-archived initiatives. Nothing else, including on objects
+-- added later. REVOKE ALL on a table also drops its column grants, so the
+-- blanket revoke comes first. New tables/functions need explicit grants —
+-- see supabase/README.md and openspec/specs/sharing-and-auth/spec.md.
+-- ══════════════════════════════════════════════════════════════════════
+revoke all on all tables    in schema public from anon;
+revoke all on all sequences in schema public from anon;
+grant select on themes to anon;
+grant select on external_roadmap to anon;
+grant select (id, title, status, theme_id, target_start, target_end, position, visibility, archived)
+  on initiatives to anon;   -- WHERE/ORDER BY columns of the view need a grant too
+-- No RPC is called signed-out; persist_* keep their explicit authenticated grants.
+revoke execute on all functions in schema public from anon;
+
+do $$ begin
+  create policy "anon read external initiatives" on initiatives
+    for select to anon using (visibility = 'external' and archived = false);
+exception when duplicate_object then null; end $$;
+
+-- Objects created later by postgres: anon gets nothing by default.
+-- (supabase_admin's defaults can't be changed from this role; the security
+-- advisor is the backstop.)
+alter default privileges for role postgres in schema public revoke all on tables    from anon;
+alter default privileges for role postgres in schema public revoke all on sequences from anon;
+alter default privileges for role postgres in schema public revoke all on functions from anon, public;

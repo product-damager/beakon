@@ -129,6 +129,32 @@ install), skip if the rename already happened, run once otherwise. Without it, t
 42P16 — see `supabase/migrations/2026-08-heron-team-strategic-objective-backfill.sql`'s
 "Part A0" for the incident this guards against.
 
+### Grants: nothing is public by default
+
+Since security-hardening (2026-10-30, `openspec/changes/archive/…security-hardening/`,
+`supabase/migrations/2026-10-security-hardening.sql`), the anonymous role (`anon`, the
+publishable key) gets **nothing** unless a statement grants it — including on tables, views,
+sequences and functions you add later *as `postgres`* (the SQL editor's role; default
+privileges for `postgres` no longer include `anon`). Objects created by Supabase itself
+(`supabase_admin`) still get Supabase's defaults — the security advisor catches those. Signed-in users (`authenticated`) still get Supabase's defaults on new tables.
+
+- **New table:** RLS is switched on automatically (`rls_auto_enable` / `ensure_rls`); add the
+  `authenticated` policies as usual. Give `anon` nothing.
+- **New view:** create it `with (security_invoker = true)` so it runs with the caller's
+  rights and RLS; then `revoke all … from anon, authenticated` and grant back `select` only
+  to the roles that need it. Never leave a view owned by `postgres` without
+  `security_invoker` — it bypasses RLS and is auto-updatable.
+- **New function:** add `set search_path = public, pg_temp`, then
+  `revoke execute … from public;` and `grant execute … to authenticated;` explicitly.
+  Trigger-only functions get `revoke execute … from public, anon, authenticated` (triggers
+  still fire).
+- **Anything for `/share`:** anonymous *grants* are listed in one place — the "Anonymous
+  access" section at the **end** of `schema.sql` (the anon policy on `themes` sits with the
+  other RLS policies near the top). Change it there, and update
+  `openspec/specs/sharing-and-auth/spec.md` in the same change.
+- **After any schema change**, run the Supabase security advisor on both projects. The only
+  accepted finding is leaked-password protection (Beakon has no passwords).
+
 ### Workflow: apply a schema change
 
 **1. Test on preview (rebuild from scratch).** Preview holds only disposable data, so the
@@ -210,11 +236,13 @@ RLS is on for every table:
 | Role | Can do |
 |------|--------|
 | `authenticated` (signed-in teammate) | Full read/write on all tables |
-| `anon` (public visitor) | Read **only** the `external_roadmap` view + `themes`/`owners` labels — never `initiatives` directly |
+| `anon` (public visitor) | Read **only** `themes`, the `external_roadmap` view, and the displayed columns (id, title, status, theme_id, target dates; plus position/visibility/archived for filtering) of external, non-archived `initiatives`. No owners, no other table, no function. |
 
-`external_roadmap` is a view exposing only `visibility = 'external'`, non-archived
-rows with internal fields (notes, DIVE inputs, health, owner) stripped — this is
-what powers the public `/share` page.
+`external_roadmap` is a `security_invoker` view of the external, non-archived
+initiatives with only the columns `/share` displays — this is what powers the public
+page. Since it runs with the caller's rights, anon's access is defined by the narrow
+policy + column grants in the "Anonymous access" section at the end of `schema.sql`
+(see "Grants: nothing is public by default" above).
 
 ---
 

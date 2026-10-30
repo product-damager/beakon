@@ -1,0 +1,77 @@
+schema: spec-driven
+
+# Constraints an agent cannot infer from the code. Repo conventions live in CLAUDE.md (local-only).
+context: |
+  Owner: Ivan Kulagin, BU Lead "Configure & Launch" at Kameleoon. Beakon is the UI for OKR live
+  state and the roadmap view for that BU. Audience: the BU's squads, product leadership, OKR check-ins.
+  This repo lives inside Ivan's Obsidian vault at Repos/beakon; sibling repo ../bu-dashboard holds
+  the BU metrics dashboard.
+
+  Field ownership - one writer per field, never edited in both places:
+  - The vault owns definitions: commitment texts, KRs (metric, baseline, target), tier, squad -
+    from vault "02 OKR" and ../bu-dashboard/data/okr.json; features/initiatives - from vault
+    "04 Features" frontmatter; metric definitions - from ../bu-dashboard/openspec/specs/metrics/.
+    They sync into Supabase and are read-only in Beakon's UI.
+  - Beakon owns live state: status, % done (achievement), health, check-ins. Each refresh copies
+    that state back into ../bu-dashboard/data/okr.json, so the vault always holds a full copy.
+  - Target state, arriving with the vault-sync change: today every field is still editable in
+    Beakon (see the baseline specs). Until then, new work must not add a second writer for any field.
+
+  Glossary (Beakon term = vault / okr.json term):
+  - Business Unit = Kameleoon BU (e.g. "Configure & Launch").
+  - Team = Kameleoon squad (e.g. "Finalize & Roll out", "Assets Creation").
+  - OKR = a delivery commitment ("We have shipped X...") = okr.json squads[].commitments[].
+  - okr.json squads[].objectives[] + their KRs = the measurable layer; not modelled in Beakon yet
+    (the measurable-krs change adds it, with KRs linked to bu-dashboard metric ids).
+  - Initiative = a feature/initiative note in vault "04 Features".
+  - tier (T1/T2/T3) = size of the work, used by design and PMM; not in Beakon yet.
+    okrClass (committed / conditional / optional) = commitment level. They answer different
+    questions; expect vault-sync to keep both, but that change decides.
+
+  Org scope (2027): only the "Configure & Launch" BU and its squads ("Finalize & Roll out",
+  "Assets Creation") are in scope for new data; leave the rest of the org data untouched.
+  Always name BUs and squads by name, never by number or code (no "BU3", "S7").
+
+  Supabase: two projects - beakon-preview (seed data, rebuild freely) and beakon-prod
+  (real data, never destroy). Both run the same supabase/schema.sql. Schema changes are idempotent
+  and forward-only; apply and test on preview first, then prod.
+
+  Privacy: aggregates only - no customer ids, customer names or row-level Kameleoon product data
+  in Supabase, in commits or on the public /share page.
+  Artifacts are written in English.
+
+rules:
+  proposal:
+    - Link the vault notes that motivate the change (feature, OKR, report) instead of copying them.
+    - State what is out of scope.
+    - For every new or changed field, say which side owns it (vault definition or Beakon live state) and confirm it has one writer.
+    - If the change touches what anonymous visitors can read, say so explicitly.
+  specs:
+    - Every requirement has at least one scenario.
+    - Describe user-observable behaviour and data rules, not components, libraries or file names.
+    - Mark behaviour taken from code rather than documented decisions as "(inferred)" in the requirement text.
+    - Name BUs and squads by name, never by number or code.
+  design:
+    - design.md carries the decision record that used to go to docs/decisions/ (frozen archive) - context, options considered, decision, consequences, and which earlier decision it supersedes.
+    - Spell out schema impact - tables, RLS policies, grants, functions - and whether anonymous access changes.
+    - Prefer, in order - no new code, reuse what exists, an already installed dependency. A new dependency needs one sentence of justification and the alternative considered.
+    - Schema changes go in supabase/schema.sql (idempotent) plus a one-off file in supabase/migrations/ only for data backfills or non-idempotent steps.
+    - Any UI change keeps working in seed mode (no Supabase env vars) as well as Supabase mode.
+  tasks:
+    - Keep tasks small enough to review in one sitting.
+    - Schema tasks list the order - preview first, verify, then prod - and end with a Supabase security advisor check.
+    - Close with npm run typecheck, npm run lint, npm run test and npm run build.
+    - UI tasks include a product-designer review; every change includes a qa-engineer pass before review.
+
+operations:
+  apply:
+    guidance:
+      - Write the least code that satisfies the specs; do not add features, options or abstractions the tasks do not ask for.
+      - Never cut RLS, validation, privacy filtering or the anon/share-page checks to save code.
+      - Route backend tasks to backend-engineer and UI tasks to frontend-engineer; run qa-engineer (and product-designer for UI) before ticking the last task; findings become new tasks.
+      - Never apply schema changes to beakon-prod without the PM's explicit go.
+      - End by listing anything skipped, simplified or not verified.
+  archive:
+    guidance:
+      - Archive only after dev-lead's approval and the PM's product acceptance.
+      - After archiving, list which vault notes (feature notes in 04 Features, the quarter OKR note, bu-dashboard okr.json mapping) need an update or a link.
