@@ -502,7 +502,8 @@ def write_back(args):
     changes = []
     for sq in okr.get("squads", []):
         for c in sq.get("commitments", []):
-            r = live.get(f"{okr.get('quarter')}/{c.get('key')}") or live.get(c.get("key"))
+            # Quarter key only: a bare key could carry another quarter's state.
+            r = live.get(f"{okr.get('quarter')}/{c.get('key')}")
             if not r:
                 continue
             ach = None if r.get("achievement") is None else float(r["achievement"])

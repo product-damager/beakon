@@ -187,11 +187,11 @@ class QaFixes(Base):
         bdir = os.path.join(self.vault, "backups")
         p = os.path.join(self.vault, "live.json")
         with open(p, "w") as f:
-            json.dump([{"source_key": "fr-1", "achievement": 0.2, "governance_status": "draft", "health": "on_track"}], f)
+            json.dump([{"source_key": "2026-Q4/fr-1", "achievement": 0.2, "governance_status": "draft", "health": "on_track"}], f)
         vs.main(["write-back", "--okr", self.okr, "--live", p, "--backup-dir", bdir, "--backup"])
         time.sleep(0.02)
         with open(p, "w") as f:
-            json.dump([{"source_key": "fr-1", "achievement": 0.5, "governance_status": "draft", "health": "on_track"}], f)
+            json.dump([{"source_key": "2026-Q4/fr-1", "achievement": 0.5, "governance_status": "draft", "health": "on_track"}], f)
         vs.main(["write-back", "--okr", self.okr, "--live", p, "--backup-dir", bdir, "--backup"])
         c = json.load(open(self.okr))["squads"][0]["commitments"][0]
         self.assertEqual(c["progress"], 50)
@@ -257,6 +257,16 @@ class QuarterKeys(Base):
         c = json.load(open(self.okr))["squads"][0]["commitments"][0]
         self.assertEqual((c["key"], c["progress"], c["status"]), ("fr-1", 30, "in_progress"))
 
+    def test_write_back_ignores_bare_or_other_quarter_keys(self):
+        bdir = os.path.join(self.vault, "backups")
+        p = os.path.join(self.vault, "live.json")
+        with open(p, "w") as f:
+            json.dump([{"source_key": "fr-1", "achievement": 0.9, "governance_status": "draft", "health": "blocked"},
+                       {"source_key": "2027-Q1/fr-1", "achievement": 0.9, "governance_status": "draft", "health": "blocked"}], f)
+        vs.main(["write-back", "--okr", self.okr, "--live", p, "--backup-dir", bdir, "--backup"])
+        c = json.load(open(self.okr))["squads"][0]["commitments"][0]
+        self.assertIsNone(c.get("progress"))  # okr.json is 2026-Q4: neither key applies
+
 
 class BuildOkrs(Base):
     def test_commitments_objectives_and_scope(self):
@@ -282,9 +292,9 @@ class WriteBack(Base):
 
     def test_refuses_without_backup_then_writes_only_owned_keys(self):
         bdir = os.path.join(self.vault, "backups")
-        live = self.live([{"source_key": "fr-1", "achievement": 0.4, "governance_status": "validated", "health": "at_risk"},
-                          {"source_key": "fr-2", "achievement": 1, "governance_status": "validated", "health": "on_track"},
-                          {"source_key": "ac-1", "achievement": 0.5, "governance_status": "rejected", "health": "blocked"}])
+        live = self.live([{"source_key": "2026-Q4/fr-1", "achievement": 0.4, "governance_status": "validated", "health": "at_risk"},
+                          {"source_key": "2026-Q4/fr-2", "achievement": 1, "governance_status": "validated", "health": "on_track"},
+                          {"source_key": "2026-Q4/ac-1", "achievement": 0.5, "governance_status": "rejected", "health": "blocked"}])
         with self.assertRaises(SystemExit):
             vs.main(["write-back", "--okr", self.okr, "--live", live, "--backup-dir", bdir])
         before = open(self.okr).read()
