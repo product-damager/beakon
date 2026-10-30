@@ -184,6 +184,14 @@ credentials — the PM asks Claude, and Claude reads/writes Supabase with its ow
    updates only `status`, `progress`, `health`, `governance` of synced commitments (formatting
    preserved). It refuses to run without a fresh backup.
 
+**Keys:** an initiative is keyed by its feature note's file name. An OKR is keyed by
+`<okr.json quarter>/<commitment key>`, e.g. `2026-Q4/fr-1`, because commitment keys restart
+every quarter. When `okr.json` moves to a new quarter, the new commitments become new OKRs;
+earlier quarters' OKRs are history and the sync never archives or changes them.
+
+**Preview:** build preview SQL from preview's own dump. Production SQL references production
+owner ids that don't exist on preview.
+
 Tests: `python3 -m unittest discover -s scripts/vault-sync`.
 
 ### Workflow: apply a schema change
