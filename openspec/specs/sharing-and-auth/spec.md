@@ -76,14 +76,14 @@ For each initiative, /share SHALL display only the title, a public status label 
 - **THEN** /share shows none of them
 
 ### Requirement: Anonymous read of the share projection (baseline 2026-10-30)
-This and the following baseline requirements record today's anonymous (signed-out, publishable key) database access, gaps included; they are the "before" for security-hardening, not the target state. Anonymous callers SHALL be able to read the external roadmap projection: id, title, summary, expected outcome, status, team id, theme id, target start, target end and position of every external, non-archived initiative.
+This and the following baseline requirements record today's anonymous (signed-out, publishable key) database access, gaps included: the "before" for security-hardening. Anonymous callers SHALL be able to read the external roadmap projection: id, title, summary, expected outcome, status, team id, theme id, target start, target end and position of every external, non-archived initiative.
 
 #### Scenario: Anon reads the external projection
 - **WHEN** an anonymous caller queries the external roadmap projection
 - **THEN** it receives only external, non-archived initiatives with those ten columns, of which /share displays only title, status, theme and dates
 
 ### Requirement: Anonymous read of reference data and scores (baseline 2026-10-30)
-Anonymous callers SHALL today be able to read every theme, every owner record (emails included) and the initiative score projection (id and DIVE score of every initiative, internal included; inferred). Owner emails and internal scores are gaps to close in security-hardening.
+Anonymous callers SHALL today be able to read every theme, every owner record (emails included) and the initiative score projection (id and DIVE score of every initiative, internal included; inferred). These are gaps; the anonymous read of owner emails is the first item in security-hardening's scope.
 
 #### Scenario: Anon reads owners
 - **WHEN** an anonymous caller queries owners
@@ -100,16 +100,16 @@ Anonymous callers SHALL NOT read or write initiatives, delivery links, business 
 - **WHEN** an anonymous caller queries the OKR tables
 - **THEN** it receives no rows
 
-### Requirement: Projections bypass row-level security and accept writes (baseline 2026-10-30)
-This gap MUST be treated as a defect to close, not intended behaviour. Both projections (external roadmap, initiative scores) run with their creator's rights, are automatically updatable, and anon holds insert, update and delete grants on them (Supabase advisor and grant inspection on beakon-prod; writes inferred, not exercised).
+### Requirement: Projections are read-only
+Anonymous and signed-in callers SHALL only read the external roadmap and initiative score projections, never insert, update or delete through them. Write grants on these RLS-bypassing projections were revoked by the 2026-10-30 hotfix (supabase/migrations/2026-10-revoke-view-writes.sql, preview then prod). Their creator's-rights mode remains a security-hardening item.
 
-#### Scenario: Anon edits an external initiative
-- **WHEN** an anonymous caller sends an update to the external roadmap projection
-- **THEN** today the database does not refuse it on permission grounds and the external initiative can change (inferred)
+#### Scenario: Anon write refused
+- **WHEN** an anonymous caller sends an update or delete to either projection
+- **THEN** the database refuses it with "permission denied"
 
-#### Scenario: Anon deletes through the score projection
-- **WHEN** an anonymous caller sends a delete to the initiative score projection
-- **THEN** today the database does not refuse it on permission grounds, so any initiative, internal included, can be deleted (inferred)
+#### Scenario: Share page still reads
+- **WHEN** an anonymous visitor opens /share
+- **THEN** the external roadmap projection is still readable and the page loads
 
 ### Requirement: Exposed functions and mutable search paths (baseline 2026-10-30)
 This gap MUST be treated as a defect to close. The company-domain signup check, and a database function not defined in the repository, can be executed by anon and signed-in callers through the API, and seven functions have a mutable search path.
