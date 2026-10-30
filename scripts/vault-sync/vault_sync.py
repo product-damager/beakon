@@ -270,42 +270,69 @@ def plan_okrs(okr, current):
     return rows, skips
 
 
-def initiative_sql(r):
-    cols = ["id", "title", "team_id", "status", "archived", "area", "tier", "owner_id",
-            "target_start", "target_end", "visibility", "source", "source_key", "vault_fields"]
-    vals = [sql_str(r["id"]), sql_str(r["title"]), sql_str(r["team_id"]), sql_str(r["status"]) + "::initiative_status",
-            str(r["archived"]).lower(), sql_str(r["area"]), sql_str(r["tier"]), sql_str(r["owner_id"]),
+def initiatives_sql(rows):
+    """Set-based sync: stage rows, insert new ones, update changed ones.
+
+    Insert-only: visibility ('internal'). Update: vault-owned columns only;
+    status is kept when the note is parked, owner/dates only when the vault
+    owns them. The WHERE ... IS DISTINCT FROM makes a re-run a true no-op.
+    """
+    if not rows:
+        return []
+    vals = ",\n  ".join(
+        "(" + ", ".join([
+            sql_str(r["id"]), sql_str(r["title"]), sql_str(r["team_id"]),
+            sql_str(r["status"]) + "::initiative_status", str(r["status_kept"]).lower(),
+            str(r["archived"]).lower(), sql_str(r["area"]), sql_str(r["tier"]),
+            sql_str(r["owner_id"]), str("owner_id" in r["vault_fields"]).lower(),
             sql_str(r["target_start"]) + "::date", sql_str(r["target_end"]) + "::date",
-            "'internal'", "'vault'", sql_str(r["source_key"]), sql_arr(r["vault_fields"])]
-    sets = ["title = excluded.title", "team_id = excluded.team_id",
-            "status = initiatives.status" if r["status_kept"] else "status = excluded.status",
-            "archived = excluded.archived", "area = excluded.area", "tier = excluded.tier",
-            "source = excluded.source", "source_key = excluded.source_key", "vault_fields = excluded.vault_fields"]
-    if "owner_id" in r["vault_fields"]:
-        sets.append("owner_id = excluded.owner_id")
-    if r["dates_owned"]:
-        sets += ["target_start = excluded.target_start", "target_end = excluded.target_end"]
-    # visibility is set on insert only (Beakon owns it afterwards). The WHERE
-    # makes a re-run a true no-op (no write, no updated_at bump).
-    changed = [x.split(" = ")[0] for x in sets if " = excluded." in x]
-    where = (f"({', '.join('initiatives.' + c for c in changed)}) is distinct from "
-             f"({', '.join('excluded.' + c for c in changed)})")
-    return (f"insert into initiatives ({', '.join(cols)})\n  values ({', '.join(vals)})\n"
-            f"  on conflict (id) do update set {', '.join(sets)}\n  where {where};")
+            str(r["dates_owned"]).lower(), sql_str(r["source_key"]), sql_arr(r["vault_fields"]),
+        ]) + ")" for r in rows)
+    new_vals = ("v.title, v.team_id, case when v.status_kept then i.status else v.status end, v.archived, "
+                "v.area, v.tier, case when v.owner_owned then v.owner_id else i.owner_id end, "
+                "case when v.dates_owned then v.target_start else i.target_start end, "
+                "case when v.dates_owned then v.target_end else i.target_end end, "
+                "'vault', v.source_key, v.vault_fields")
+    return [
+        "create temp table _vs_init (id text, title text, team_id text, status initiative_status, "
+        "status_kept boolean, archived boolean, area text, tier text, owner_id text, owner_owned boolean, "
+        "target_start date, target_end date, dates_owned boolean, source_key text, vault_fields text[]) on commit drop;",
+        f"insert into _vs_init values\n  {vals};",
+        "insert into initiatives (id, title, team_id, status, archived, area, tier, owner_id, target_start, "
+        "target_end, visibility, source, source_key, vault_fields)\n"
+        "  select id, title, team_id, status, archived, area, tier, owner_id, target_start, target_end, "
+        "'internal', 'vault', source_key, vault_fields from _vs_init\n  on conflict (id) do nothing;",
+        "update initiatives i set (title, team_id, status, archived, area, tier, owner_id, target_start, "
+        f"target_end, source, source_key, vault_fields) = ({new_vals})\n  from _vs_init v\n"
+        "  where i.id = v.id and (i.title, i.team_id, i.status, i.archived, i.area, i.tier, i.owner_id, "
+        f"i.target_start, i.target_end, i.source, i.source_key, i.vault_fields) is distinct from ({new_vals});",
+    ]
 
 
-def okr_sql(r):
-    cols = ["id", "title", "team_id", "year", "quarter", "deliverable_detail", "strategic_objective_id",
-            "tier", "archived", "source", "source_key", "vault_fields"]
-    vals = [sql_str(r["id"]), sql_str(r["title"]), sql_str(r["team_id"]), str(r["year"]), str(r["quarter"]),
+def okrs_sql(rows):
+    """Set-based OKR sync. `archived` is insert-only (Beakon owns it)."""
+    if not rows:
+        return []
+    cols = ["title", "team_id", "year", "quarter", "deliverable_detail", "strategic_objective_id", "tier",
+            "source_key", "vault_fields"]
+    vals = ",\n  ".join(
+        "(" + ", ".join([
+            sql_str(r["id"]), sql_str(r["title"]), sql_str(r["team_id"]), str(r["year"]), str(r["quarter"]),
             sql_str(r["deliverable_detail"]), sql_str(r["strategic_objective_id"]), sql_str(r["tier"]),
-            "false", "'vault'", sql_str(r["source_key"]), sql_arr(r["vault_fields"])]
-    upd = [c for c in cols[1:] if c != "archived"]  # archived: insert-only (Beakon owns it)
-    sets = [f"{c} = excluded.{c}" for c in upd]
-    where = (f"({', '.join('okrs.' + c for c in upd)}) is distinct from "
-             f"({', '.join('excluded.' + c for c in upd)})")
-    return (f"insert into okrs ({', '.join(cols)})\n  values ({', '.join(vals)})\n"
-            f"  on conflict (id) do update set {', '.join(sets)}\n  where {where};")
+            sql_str(r["source_key"]), sql_arr(r["vault_fields"]),
+        ]) + ")" for r in rows)
+    return [
+        "create temp table _vs_okr (id text, title text, team_id text, year smallint, quarter smallint, "
+        "deliverable_detail text, strategic_objective_id text, tier text, source_key text, "
+        "vault_fields text[]) on commit drop;",
+        f"insert into _vs_okr values\n  {vals};",
+        "insert into okrs (id, " + ", ".join(cols[:-2]) + ", archived, source, source_key, vault_fields)\n"
+        "  select id, " + ", ".join(cols[:-2]) + ", false, 'vault', source_key, vault_fields from _vs_okr\n"
+        "  on conflict (id) do nothing;",
+        "update okrs o set (" + ", ".join(cols) + ", source) = (" + ", ".join("v." + c for c in cols) + ", 'vault')\n"
+        "  from _vs_okr v\n  where o.id = v.id and (" + ", ".join("o." + c for c in cols) + ", o.source) "
+        "is distinct from (" + ", ".join("v." + c for c in cols) + ", 'vault');",
+    ]
 
 
 def diff(prior, row, fields):
@@ -355,8 +382,8 @@ def build(args):
     stamp = today.isoformat()
     sql = [f"-- vault-sync {stamp} — generated by scripts/vault-sync/vault_sync.py build. Idempotent.",
            "begin;"]
-    sql += [initiative_sql(r) for r in inits]
-    sql += [okr_sql(r) for r in okrs]
+    sql += initiatives_sql(inits)
+    sql += okrs_sql(okrs)
     if keys_i:
         sql.append(f"update initiatives set archived = true where source = 'vault' and archived = false "
                    f"and source_key not in ({', '.join(sql_str(k) for k in sorted(keys_i))});")

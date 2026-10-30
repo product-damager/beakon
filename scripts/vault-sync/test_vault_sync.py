@@ -83,7 +83,8 @@ class BuildInitiatives(Base):
         r = inits["Parked one"]
         self.assertTrue(r["archived"])
         self.assertEqual(r["id"], "i-x")
-        self.assertIn("status = initiatives.status", sql)
+        self.assertIn("case when v.status_kept then i.status else v.status end", sql)
+        self.assertIn("true", sql.split("insert into _vs_init values")[1].split(";")[0])  # status_kept flag set
 
     def test_new_rows_are_internal_with_deterministic_id(self):
         self.add("Rollout Preview", note(quarter="2026-Q4", tier="T2"))
@@ -93,7 +94,7 @@ class BuildInitiatives(Base):
         self.assertEqual((r["target_start"], r["target_end"]), ("2026-10-01", "2026-12-31"))
         self.assertIn("target_start", r["vault_fields"])
         self.assertIn("'internal'", sql)
-        self.assertNotIn("visibility = excluded", sql)  # insert-only
+        self.assertNotIn("visibility", sql.split("update initiatives i set")[1])  # insert-only
 
     def test_beakon_link_adopts_existing_row(self):
         self.add("Rollout Preview", note(beakon="i-ff-rollout"))
@@ -173,11 +174,12 @@ class ReviewFixes(Base):
     def test_upserts_only_write_on_change_and_okr_archived_is_beakons(self):
         self.add("Clean", note())
         _, _, _, sql, _ = self.build()
-        init_stmt = [s for s in sql.split(";") if "insert into initiatives" in s][0]
-        okr_stmt = [s for s in sql.split(";") if "insert into okrs" in s][0]
-        self.assertIn("is distinct from", init_stmt)
-        self.assertIn("is distinct from", okr_stmt)
-        self.assertNotIn("archived = excluded.archived", okr_stmt)
+        init_upd = [s for s in sql.split(";") if "update initiatives i set" in s][0]
+        okr_upd = [s for s in sql.split(";") if "update okrs o set" in s][0]
+        self.assertIn("is distinct from", init_upd)
+        self.assertIn("is distinct from", okr_upd)
+        self.assertNotIn("archived", okr_upd)  # archived is insert-only for OKRs
+        self.assertIn("on conflict (id) do nothing", sql)
 
 
 class QaFixes(Base):
