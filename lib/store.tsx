@@ -22,7 +22,7 @@ import {
 } from "./seed";
 import { EMPTY_FILTERS, normalizeFilters, type Filters } from "./filters";
 import type { OkrFilters } from "./okrFilters";
-import { ZOOM_SCALE_MAX, ZOOM_SCALE_MIN } from "./types";
+import { ZOOM_SCALE_MAX, ZOOM_SCALE_MIN, vaultOwns } from "./types";
 import type {
   BusinessUnit,
   Density,
@@ -1053,6 +1053,9 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
       setInitiatives((prev) => {
         const dragged = prev.find((x) => x.id === id);
         if (!dragged) return prev;
+        // vault-sync: the vault owns this initiative's status — reorder within
+        // its column only (the Board also blocks the drop; this is the backstop).
+        if (toStatus !== dragged.status && vaultOwns(dragged, "status")) return prev;
         const without = prev.filter((x) => x.id !== id);
 
         let insertAt: number;
@@ -1084,7 +1087,7 @@ export function RoadmapProvider({ children }: { children: ReactNode }) {
 
         if (isSupabaseConfigured) {
           queueMicrotask(() =>
-            persistMove(id, toStatus, position).catch((e) => reportError(e, "move"))
+            persistMove(id, toStatus, position, dragged.source === "vault" ? dragged.vaultFields : undefined).catch((e) => reportError(e, "move"))
           );
         }
 

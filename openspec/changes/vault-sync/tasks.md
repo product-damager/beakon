@@ -22,7 +22,7 @@ PM decisions: 2026-10-30 (proposal.md). Stop points: 4.1 (the dry-run report) an
 
 ## 2. Data layer and UI
 
-- [ ] 2.1 Types, mappers and seed:
+- [x] 2.1 Types, mappers and seed:
   - `lib/types.ts`, `lib/data.ts` and `lib/seed.ts` gain `tier`, `area`, `source`, `sourceKey` and `vaultFields`;
   - `persistInitiative` and `persistMove` never send columns listed in `vaultFields`, nor the vault metadata;
   - seed mode gets one vault-managed initiative and one vault-managed OKR for the demo.

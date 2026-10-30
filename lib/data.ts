@@ -22,6 +22,7 @@ import type {
   Status,
   Team,
   Theme,
+  Tier,
   TimelineSort,
 } from "./types";
 
@@ -55,6 +56,11 @@ interface InitiativeRow {
   archived: boolean;
   position: number | string;
   updated_at: string;
+  tier: Tier | null;
+  area: string | null;
+  source: "vault" | null;
+  source_key: string | null;
+  vault_fields: string[] | null;
 }
 
 interface DeliveryLinkRow {
@@ -106,12 +112,34 @@ function rowToInitiative(row: InitiativeRow, links: DeliveryLink[]): Initiative 
     updatedAt: row.updated_at,
     archived: row.archived,
     position: Number(row.position),
+    tier: row.tier ?? null,
+    area: row.area ?? null,
+    source: row.source ?? null,
+    sourceKey: row.source_key ?? null,
+    vaultFields: row.vault_fields ?? [],
   };
 }
 
-/** DB row for insert/update. `updated_at` is omitted — a trigger maintains it. */
-function initiativeToRow(i: Initiative) {
-  return {
+/**
+ * Drop the columns the vault owns on this row (vault-sync): the database
+ * guard refuses any change to them from signed-in users, and a client holding
+ * a stale value must still be able to save its live-state fields. Exported
+ * for tests.
+ */
+export function stripVaultOwned<T extends Record<string, unknown>>(row: T, vaultFields: string[] | undefined): T {
+  if (!vaultFields?.length) return row;
+  const out = { ...row };
+  for (const col of vaultFields) delete out[col];
+  return out;
+}
+
+/**
+ * DB row for insert/update. `updated_at` is omitted — a trigger maintains it.
+ * Vault metadata (area, source, source_key, vault_fields) is never written by
+ * the app — only by a vault sync — and vault-owned columns are stripped.
+ */
+export function initiativeToRow(i: Initiative) {
+  return stripVaultOwned({
     id: i.id,
     title: i.title,
     summary: i.summary,
@@ -134,7 +162,8 @@ function initiativeToRow(i: Initiative) {
     notes: i.notes,
     archived: i.archived,
     position: i.position ?? 0,
-  };
+    tier: i.tier ?? null,
+  }, i.source === "vault" ? i.vaultFields : undefined);
 }
 
 function rowToTheme(t: { id: string; name: string; description: string | null; color: string }): Theme {
@@ -364,10 +393,19 @@ export async function persistInitiative(i: Initiative): Promise<void> {
   }
 }
 
-/** Persist a board move: new status + fractional sort position. */
-export async function persistMove(id: string, status: Status, position: number): Promise<void> {
+/**
+ * Persist a board move: new status + fractional sort position. When the vault
+ * owns the status (vault-sync), only the position is written.
+ */
+export async function persistMove(
+  id: string,
+  status: Status,
+  position: number,
+  vaultFields?: string[]
+): Promise<void> {
   const sb = client();
-  const { error } = await sb.from("initiatives").update({ status, position }).eq("id", id);
+  const patch = stripVaultOwned({ status, position } as Record<string, unknown>, vaultFields);
+  const { error } = await sb.from("initiatives").update(patch).eq("id", id);
   if (error) throw error;
 }
 
@@ -521,6 +559,10 @@ interface OkrRow {
   archived: boolean;
   position: number | string;
   updated_at: string;
+  tier: Tier | null;
+  source: "vault" | null;
+  source_key: string | null;
+  vault_fields: string[] | null;
 }
 
 interface OkrOwnerRow {
@@ -573,6 +615,10 @@ function rowToOkr(row: OkrRow): Okr {
     archived: row.archived,
     position: Number(row.position),
     updatedAt: row.updated_at,
+    tier: row.tier ?? null,
+    source: row.source ?? null,
+    sourceKey: row.source_key ?? null,
+    vaultFields: row.vault_fields ?? [],
   };
 }
 
