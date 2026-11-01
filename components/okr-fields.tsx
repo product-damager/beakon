@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ChevronDown, Plus, Search, Trash2 } from "lucide-react";
+import { ChevronDown, Lock, Plus, Search, Trash2 } from "lucide-react";
 import type { BusinessUnit, Okr, OkrOwner, Owner, Team } from "@/lib/types";
 import { ownerName } from "@/lib/types";
 import { cn } from "@/lib/cn";
@@ -178,12 +178,21 @@ export function TeamOrBuPicker({
   teamId,
   businessUnitId,
   onChange,
+  hiddenTeamIds,
+  hint,
+  error,
 }: {
   teams: Team[];
   businessUnits: BusinessUnit[];
   teamId?: string;
   businessUnitId?: string;
   onChange: (next: { teamId?: string; businessUnitId?: string }) => void;
+  /** Teams not offered (vault-managed teams for a Beakon-only OKR); the selected one still labels the button. */
+  hiddenTeamIds?: Set<string>;
+  /** Shown under the picker, e.g. why some teams are missing. */
+  hint?: string | null;
+  /** Validation message, shown right under the button, above the hint. */
+  error?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -199,8 +208,9 @@ export function TeamOrBuPicker({
   const selectedBu = businessUnitId ? businessUnits.find((b) => b.id === businessUnitId) : undefined;
   const label = selectedTeam?.name ?? selectedBu?.name;
 
+  const pickableTeams = hiddenTeamIds?.size ? teams.filter((t) => !hiddenTeamIds.has(t.id)) : teams;
   const q = query.trim().toLowerCase();
-  const shownTeams = teams.filter((t) => !q || t.name.toLowerCase().includes(q));
+  const shownTeams = pickableTeams.filter((t) => !q || t.name.toLowerCase().includes(q));
   const shownBus = businessUnits.filter((b) => !q || b.name.toLowerCase().includes(q));
 
   const pickTeam = (id: string) => {
@@ -213,74 +223,98 @@ export function TeamOrBuPicker({
   };
 
   return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        aria-label="Team or business unit"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-        className={cn(baseInput, "flex h-9 w-full items-center gap-2 pr-9 text-left")}
-      >
-        <span className={cn("truncate", label ? "text-green-90" : "text-beige-60")}>
-          {label ?? "Choose a team or business unit"}
-        </span>
-        <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-beige-60" />
-      </button>
-
-      {open && (
-        <div
-          className={cn(
-            "absolute left-0 z-50 w-full rounded-xl border border-beige-20 bg-white p-2 shadow-lg",
-            placement === "top" ? "bottom-full mb-1" : "top-full mt-1"
-          )}
+    <div>
+      <div className="relative" ref={ref}>
+        <button
+          type="button"
+          aria-label="Team or business unit"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+          className={cn(baseInput, "flex h-9 w-full items-center gap-2 pr-9 text-left")}
         >
-          <div className="relative mb-2">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-beige-60" />
-            <input
-              autoFocus
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Escape" && (e.preventDefault(), close())}
-              placeholder="Search teams & business units…"
-              className="h-8 w-full rounded-lg border border-beige-30 bg-white pl-8 pr-3 text-sm text-green-90 placeholder:text-beige-60 focus:outline-none focus:ring-2 focus:ring-green-90"
-            />
-          </div>
-          <div className="calm-scroll max-h-60 space-y-0.5 overflow-auto" role="listbox">
-            <TeamGroupList
-              teams={teams}
-              businessUnits={businessUnits}
-              query={query}
-              selectedTeamId={teamId}
-              onPick={pickTeam}
-            />
-            {shownBus.length > 0 && (
-              <>
-                <div className="mono-label-sm px-2.5 py-1.5 text-beige-60">Business units</div>
-                {shownBus.map((b) => (
-                  <button
-                    key={b.id}
-                    type="button"
-                    role="option"
-                    aria-selected={b.id === businessUnitId}
-                    onClick={() => pickBu(b.id)}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-beige-10",
-                      b.id === businessUnitId ? "bg-beige-10 text-green-90" : "text-green-90"
-                    )}
-                  >
-                    <span className="truncate">{b.name}</span>
-                  </button>
-                ))}
-              </>
+          <span className={cn("truncate", label ? "text-green-90" : "text-beige-60")}>
+            {label ?? "Choose a team or business unit"}
+          </span>
+          <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-beige-60" />
+        </button>
+
+        {open && (
+          <div
+            className={cn(
+              "absolute left-0 z-50 w-full rounded-xl border border-beige-20 bg-white p-2 shadow-lg",
+              placement === "top" ? "bottom-full mb-1" : "top-full mt-1"
             )}
-            {shownTeams.length === 0 && shownBus.length === 0 && (
-              <div className="px-2.5 py-2 text-sm text-beige-60">No matches</div>
+          >
+            <div className="relative mb-2">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-beige-60" />
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Escape" && (e.preventDefault(), close())}
+                placeholder="Search teams & business units…"
+                className="h-8 w-full rounded-lg border border-beige-30 bg-white pl-8 pr-3 text-sm text-green-90 placeholder:text-beige-60 focus:outline-none focus:ring-2 focus:ring-green-90"
+              />
+            </div>
+            <div className="calm-scroll max-h-60 space-y-0.5 overflow-auto" role="listbox">
+              <TeamGroupList
+                teams={pickableTeams}
+                businessUnits={businessUnits}
+                query={query}
+                selectedTeamId={teamId}
+                onPick={pickTeam}
+              />
+              {shownBus.length > 0 && (
+                <>
+                  <div className="mono-label-sm px-2.5 py-1.5 text-beige-60">Business units</div>
+                  {shownBus.map((b) => (
+                    <button
+                      key={b.id}
+                      type="button"
+                      role="option"
+                      aria-selected={b.id === businessUnitId}
+                      onClick={() => pickBu(b.id)}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-beige-10",
+                        b.id === businessUnitId ? "bg-beige-10 text-green-90" : "text-green-90"
+                      )}
+                    >
+                      <span className="truncate">{b.name}</span>
+                    </button>
+                  ))}
+                </>
+              )}
+              {shownTeams.length === 0 && shownBus.length === 0 && (
+                <div className="px-2.5 py-2 text-sm text-beige-60">No matches</div>
+              )}
+            </div>
+            {/* Visual repeat of the hint under the picker, which screen readers already get. */}
+            {hint && (
+              <div aria-hidden className="mt-1 border-t border-beige-20 px-2.5 pt-2">
+                <VaultHint text={hint} />
+              </div>
             )}
           </div>
+        )}
+      </div>
+      {error && <p className="mt-1 text-xs text-red-70">{error}</p>}
+      {hint && (
+        <div className="mt-1">
+          <VaultHint text={hint} />
         </div>
       )}
     </div>
+  );
+}
+
+/** Why some teams are missing from the picker, with the vault lock marker. */
+function VaultHint({ text }: { text: string }) {
+  return (
+    <p className="flex gap-1.5 text-xs text-beige-60">
+      <Lock size={10} strokeWidth={2} aria-hidden className="mt-[3px] shrink-0 text-beige-50" />
+      <span>{text}</span>
+    </p>
   );
 }
 

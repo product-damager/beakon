@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { useRoadmap } from "@/lib/store";
 import { useOkrWorkspace } from "@/lib/useOkrWorkspace";
 import { ArchivedOkrs } from "@/components/ArchivedOkrs";
 import { OkrDrawer } from "@/components/OkrDrawer";
 import { Logo } from "@/components/Logo";
+import { vaultManagedTeamIds } from "@/lib/vaultTeams";
 
 export default function ArchivedOkrsPage() {
   const { teams, businessUnits, strategicObjectives, notify } = useRoadmap();
@@ -26,6 +27,7 @@ export default function ArchivedOkrsPage() {
   // rather than a global store field, since OKR selection isn't global.
   const [selectedOkrId, setSelectedOkrId] = useState<string | null>(null);
   const selectedOkr = selectedOkrId ? okrs.find((o) => o.id === selectedOkrId) : undefined;
+  const vaultTeamIds = useMemo(() => vaultManagedTeamIds(okrs, new Date()), [okrs]);
 
   if (loading) {
     return (
@@ -66,6 +68,7 @@ export default function ArchivedOkrsPage() {
         creatingDraft={null}
         onClose={() => setSelectedOkrId(null)}
         teams={teams}
+        vaultTeamIds={vaultTeamIds}
         businessUnits={businessUnits}
         strategicObjectives={strategicObjectives}
         okrOwners={okrOwners}
