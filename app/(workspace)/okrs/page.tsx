@@ -12,19 +12,25 @@ import { OkrDrawer } from "@/components/OkrDrawer";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui";
 import { groupOkrs } from "@/lib/okrGrouping";
+import { firstAllowedTeamId, vaultManagedTeamIds } from "@/lib/vaultTeams";
 import type { Okr, StrategicObjective, Team } from "@/lib/types";
 
 /** A fresh, unsaved OKR draft for "New OKR" — mirrors RoadmapProvider's
  * newDraft(): sensible defaults (first team/objective) rather than forcing
  * every field to be picked from scratch, title/team-or-BU still required
- * before Create is enabled. */
-function newOkrDraft(teams: Team[], strategicObjectives: StrategicObjective[]): Okr {
+ * before Create is enabled. The default team skips vault-managed teams (none
+ * left → no team; openspec okr-tracking "Create an OKR"). */
+function newOkrDraft(
+  teams: Team[],
+  strategicObjectives: StrategicObjective[],
+  vaultTeamIds: Set<string>
+): Okr {
   const now = new Date();
   return {
     id: `okr-${Math.random().toString(36).slice(2, 9)}`,
     title: "",
     strategicObjectiveId: strategicObjectives[0]?.id ?? "",
-    teamId: teams[0]?.id,
+    teamId: firstAllowedTeamId(teams, vaultTeamIds),
     businessUnitId: undefined,
     year: now.getFullYear(),
     quarter: Math.floor(now.getMonth() / 3) + 1,
@@ -189,7 +195,7 @@ function OkrsPageInner() {
     if (loading) return;
     if (searchParams.get("new") === "1") {
       setSelectedOkrId(null);
-      setCreatingDraft(newOkrDraft(teams, strategicObjectives));
+      setCreatingDraft(newOkrDraft(teams, strategicObjectives, vaultManagedTeamIds(okrs, new Date())));
       router.replace("/okrs", { scroll: false });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run on the URL/loading flip, not every team/objective refresh
@@ -197,6 +203,7 @@ function OkrsPageInner() {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const filtered = useMemo(() => applyOkrFilters(okrs, filters, teams), [okrs, filters, teams]);
+  const vaultTeamIds = useMemo(() => vaultManagedTeamIds(okrs, new Date()), [okrs]);
   const selectedOkr = selectedOkrId ? okrs.find((o) => o.id === selectedOkrId) : undefined;
 
   // Same grouping the grouped table itself computes — kept here too (cheap)
@@ -324,6 +331,7 @@ function OkrsPageInner() {
         creatingDraft={creatingDraft}
         onClose={closeDrawer}
         teams={teams}
+        vaultTeamIds={vaultTeamIds}
         businessUnits={businessUnits}
         strategicObjectives={strategicObjectives}
         okrOwners={okrOwners}

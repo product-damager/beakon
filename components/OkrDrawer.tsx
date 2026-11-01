@@ -22,6 +22,7 @@ import { Button, Eyebrow, HealthTag, StatusTag, Tag, TierTag, VAULT_HINT, VaultT
 import { Field, InlineTagSelect, NativeSelect, SearchableSelect, TextArea, TextInput } from "./form";
 import { DependencyPicker, Prop } from "./initiative-fields";
 import { AchievementInput, OkrOwnersEditor, TeamOrBuPicker } from "./okr-fields";
+import { vaultTeamsHint } from "@/lib/vaultTeams";
 import { OKR_GOVERNANCE_META, formatAchievement } from "./OkrList";
 
 const OKR_CLASS_LABEL: Record<NonNullable<Okr["okrClass"]>, string> = {
@@ -44,6 +45,7 @@ export function OkrDrawer({
   creatingDraft,
   onClose,
   teams,
+  vaultTeamIds,
   businessUnits,
   strategicObjectives,
   okrOwners,
@@ -58,6 +60,8 @@ export function OkrDrawer({
   creatingDraft: Okr | null;
   onClose: () => void;
   teams: Team[];
+  /** Vault-managed teams: not offered to new or Beakon-only OKRs (lib/vaultTeams). */
+  vaultTeamIds: Set<string>;
   businessUnits: BusinessUnit[];
   strategicObjectives: StrategicObjective[];
   okrOwners: OkrOwner[];
@@ -77,6 +81,7 @@ export function OkrDrawer({
       creating={creating}
       onClose={onClose}
       teams={teams}
+      vaultTeamIds={vaultTeamIds}
       businessUnits={businessUnits}
       strategicObjectives={strategicObjectives}
       okrOwners={okrOwners}
@@ -93,6 +98,7 @@ function DrawerBody({
   creating,
   onClose,
   teams,
+  vaultTeamIds,
   businessUnits,
   strategicObjectives,
   okrOwners,
@@ -105,6 +111,8 @@ function DrawerBody({
   creating: boolean;
   onClose: () => void;
   teams: Team[];
+  /** Vault-managed teams: not offered to new or Beakon-only OKRs (lib/vaultTeams). */
+  vaultTeamIds: Set<string>;
   businessUnits: BusinessUnit[];
   strategicObjectives: StrategicObjective[];
   okrOwners: OkrOwner[];
@@ -304,15 +312,15 @@ function DrawerBody({
                   teams={teams}
                   businessUnits={businessUnits}
                   teamId={d.teamId}
+                  hiddenTeamIds={vaultTeamIds}
+                  hint={vaultTeamsHint(teams, vaultTeamIds)}
+                  error={teamBuTouched && teamBuInvalid ? "Choose exactly one team or business unit." : null}
                   businessUnitId={d.businessUnitId}
                   onChange={({ teamId, businessUnitId }) => {
                     setTeamBuTouched(true);
                     patch({ teamId, businessUnitId });
                   }}
                 />
-              )}
-              {teamBuTouched && teamBuInvalid && (
-                <p className="mt-1 text-xs text-red-70">Choose exactly one team or business unit.</p>
               )}
             </Prop>
           </div>

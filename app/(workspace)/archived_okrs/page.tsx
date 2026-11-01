@@ -7,6 +7,7 @@ import { useOkrWorkspace } from "@/lib/useOkrWorkspace";
 import { ArchivedOkrs } from "@/components/ArchivedOkrs";
 import { OkrDrawer } from "@/components/OkrDrawer";
 import { Logo } from "@/components/Logo";
+import { vaultManagedTeamIds } from "@/lib/vaultTeams";
 
 export default function ArchivedOkrsPage() {
   const { teams, businessUnits, strategicObjectives, notify } = useRoadmap();
@@ -66,6 +67,7 @@ export default function ArchivedOkrsPage() {
         creatingDraft={null}
         onClose={() => setSelectedOkrId(null)}
         teams={teams}
+        vaultTeamIds={vaultManagedTeamIds(okrs, new Date())}
         businessUnits={businessUnits}
         strategicObjectives={strategicObjectives}
         okrOwners={okrOwners}

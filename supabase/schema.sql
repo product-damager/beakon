@@ -1140,6 +1140,28 @@ create unique index if not exists initiatives_source_key_idx
 create unique index if not exists okrs_source_key_idx
   on okrs (source, source_key) where source is not null;
 
+-- ── Vault-managed teams (vault-squads-locked-in-beakon, 2026-11-01) ──
+-- A team owning a vault-synced OKR (archived or not) in the previous quarter,
+-- the current one or later. Beakon-only OKRs can't be created on or moved to
+-- these teams. Mirrors lib/vaultTeams.ts — keep the two in step.
+-- Security invoker: it sees only the OKRs the caller can read. It relies on the
+-- "authenticated full access" policy on okrs; narrowing that policy weakens the lock.
+create or replace function vault_managed_team_ids() returns setof text
+language sql
+stable
+security invoker
+set search_path = public, pg_temp
+as $$
+  select distinct team_id from okrs
+  where source = 'vault'
+    and team_id is not null
+    and year * 4 + quarter >= extract(year from current_date)::int * 4
+                               + extract(quarter from current_date)::int - 1;
+$$;
+revoke execute on function vault_managed_team_ids() from public, anon;
+-- The guard trigger runs as the signed-in user and calls this function.
+grant execute on function vault_managed_team_ids() to authenticated;
+
 -- ── Guard: vault-owned columns are read-only for signed-in users ──
 create or replace function guard_vault_definitions() returns trigger
 language plpgsql
@@ -1175,12 +1197,29 @@ begin
     new.source := null;
     new.source_key := null;
     new.vault_fields := '{}';
+    -- New OKRs can't land on a vault-managed team. An existing id is the
+    -- insert half of persist_okr's upsert: the UPDATE branch decides then.
+    if tg_table_name = 'okrs'
+       and new.team_id in (select vault_managed_team_ids())
+       and not exists (select 1 from okrs where id = new.id) then
+      raise exception 'Managed in the vault: OKRs of "%" come from the vault — add the commitment to 02 OKR, then sync',
+        (select name from teams where id = new.team_id)
+        using errcode = '42501';
+    end if;
     return new;
   end if;
 
   if old.source is null then
     if new.source is not null or new.source_key is not null or new.vault_fields <> '{}' then
       raise exception 'Only a vault sync can mark a record as managed in the vault'
+        using errcode = '42501';
+    end if;
+    -- A Beakon-only OKR can't be moved onto a vault-managed team.
+    if tg_table_name = 'okrs'
+       and new.team_id is distinct from old.team_id
+       and new.team_id in (select vault_managed_team_ids()) then
+      raise exception 'Managed in the vault: OKRs of "%" come from the vault — add the commitment to 02 OKR, then sync',
+        (select name from teams where id = new.team_id)
         using errcode = '42501';
     end if;
     return new;
