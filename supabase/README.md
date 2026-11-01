@@ -176,13 +176,24 @@ credentials — the PM asks Claude, and Claude reads/writes Supabase with its ow
    against the report, then to **beakon-prod**, checks again. The SQL is idempotent and never
    deletes: a definition gone from the vault is archived.
 
-**Write-back (Beakon → okr.json)** — "write OKR live state back":
+**Write-back (Beakon → okr.json + squad OKR notes)** — "write OKR live state back":
 1. Claude reads `source_key, achievement, governance_status, health` of `okrs where source = 'vault'`
    from beakon-prod into a JSON list.
 2. `python3 scripts/vault-sync/vault_sync.py write-back --live <live.json> --backup` — copies
-   `okr.json` to `02 OKR/backups/okr.json.<timestamp>-before-vault-sync-writeback.bak`, then
+   `okr.json` to `02 OKR/backups/okr.json.<timestamp>-before-vault-sync-writeback.bak` and each
+   squad note to `02 OKR/backups/<note>.<timestamp>-before-vault-sync-writeback.md`, then
    updates only `status`, `progress`, `health`, `governance` of synced commitments (formatting
-   preserved). It refuses to run without a fresh backup.
+   preserved). It refuses to run without a fresh backup of `okr.json` and of every note it changes.
+3. The same run refreshes the generated block between `<!-- beakon:live:start -->` and
+   `<!-- beakon:live:end -->` in `02 OKR/<quarter> OKR — <squad>.md` for each squad with synced
+   commitments (one row per commitment, plus an average). Nothing outside the markers changes.
+   Missing markers are inserted after the "OKR — Kameleoon format" table; a missing note, broken
+   markers or a note without that table are skipped. Each note gets a report line: `updated`,
+   `unchanged`, `markers inserted` or `skipped (<reason>)`.
+   Roll back a note: copy its latest `.md` backup over it, or delete the block by hand.
+   For a dry run on a copied `okr.json`, also pass `--vault <copy>`: write-back refuses a
+   non-default `--okr` without it, so it never writes the real notes by accident. Backups and the
+   write-back marker then go to `<copy>/02 OKR/backups` unless `--backup-dir` says otherwise.
 
 **Keys:** an initiative is keyed by its feature note's file name. An OKR is keyed by
 `<okr.json quarter>/<commitment key>`, e.g. `2026-Q4/fr-1`, because commitment keys restart
