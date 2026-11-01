@@ -76,11 +76,15 @@ A write-back run SHALL copy the live state of vault-managed OKRs into `okr.json`
 - **THEN** the live state block of `02 OKR/2026-Q4 OKR — Finalize & Roll out.md` shows 40% for that commitment in the same run
 
 ### Requirement: Strategic objective for synced commitments
-A synced OKR's strategic objective SHALL come from the commitment's `strategic_objective` (core, ai, data, internal); when it is missing, it SHALL default to "Core: Strengthening our foundations" for "Finalize & Roll out" and "AI: Scaling PBX adoption" for "Assets Creation".
+A synced OKR's strategic objective SHALL come from the commitment's `strategic_objective` (core, ai, data, internal); when it is missing, it SHALL default to "A trusted platform for every team" (core) for "Finalize & Roll out" and "AI everywhere, increasingly autonomous" (ai) for "Assets Creation".
 
 #### Scenario: Commitment without strategic objective
 - **WHEN** an "Assets Creation" commitment has no `strategic_objective` and the sync runs
-- **THEN** its OKR is linked to "AI: Scaling PBX adoption"
+- **THEN** its OKR is linked to "AI everywhere, increasingly autonomous"
+
+#### Scenario: Codes unchanged by the rename
+- **WHEN** a "Finalize & Roll out" commitment has `strategic_objective: core` and the sync runs after the rename
+- **THEN** its OKR is linked to "A trusted platform for every team", the same objective it was linked to before, and the sync reports no change for that field
 
 ### Requirement: Runs triggered by the PM without stored credentials
 Sync and write-back SHALL be runnable by the PM in a Claude session, with no server, scheduler or stored database credentials; database changes SHALL be applied to beakon-preview and checked before beakon-prod.

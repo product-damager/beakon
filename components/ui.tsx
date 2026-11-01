@@ -221,7 +221,7 @@ export function VaultLock() {
 }
 
 /**
- * Tier (T1–T3, size of the work) — an outlined square chip, so it reads as a
+ * Tier (T1–T3, go-to-market launch tier) — an outlined square chip, so it reads as a
  * neutral attribute and never as a state tag (Archived) or a status/lime colour.
  */
 export function TierTag({ tier, className }: { tier: Tier; className?: string }) {

@@ -24,9 +24,11 @@ context: |
   - okr.json squads[].objectives[] + their KRs = the measurable layer; not modelled in Beakon yet
     (the measurable-krs change adds it, with KRs linked to bu-dashboard metric ids).
   - Initiative = a feature/initiative note in vault "04 Features".
-  - tier (T1/T2/T3) = size of the work, used by design and PMM; not in Beakon yet.
+  - tier (T1/T2/T3) = go-to-market launch tier, used by design and PMM: T1 Market-moving (high
+    impact), T2 Capability (medium), T3 Enhancement (low). Not the size of the work. Vault-owned,
+    shown read-only in Beakon on OKRs and initiatives.
     okrClass (committed / conditional / optional) = commitment level. They answer different
-    questions; expect vault-sync to keep both, but that change decides.
+    questions and are kept as separate fields.
 
   Org scope (2027): only the "Configure & Launch" BU and its squads ("Finalize & Roll out",
   "Assets Creation") are in scope for new data; leave the rest of the org data untouched.

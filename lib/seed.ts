@@ -569,8 +569,8 @@ export const TEAMS_TABLE: Team[] = [
 ];
 
 export const STRATEGIC_OBJECTIVES: StrategicObjective[] = [
-  { id: "so-core", name: "Core: Strengthening our foundations", description: "", year: 2026 },
-  { id: "so-ai", name: "AI: Scaling PBX adoption", description: "", year: 2026 },
+  { id: "so-core", name: "A trusted platform for every team", description: "", year: 2026 },
+  { id: "so-ai", name: "AI everywhere, increasingly autonomous", description: "", year: 2026 },
   { id: "so-data", name: "Data: Powering trusted Insights & Outcomes", description: "", year: 2026 },
   { id: "so-internal", name: "Internal", description: "", year: 2026 },
 ];
