@@ -16,7 +16,7 @@
 - [x] 3.1 `TeamOrBuPicker`: accept hidden team ids and a hint; hide those teams, keep the selected team as the label, show the hint under the picker when any team is hidden; verify in the browser on a Beakon-only OKR that the squads are not listed and "Configure & Launch" is still pickable as a business unit
 - [x] 3.2 OKR drawer: pass the set for new drafts and Beakon-only OKRs only (synced OKRs keep their read-only team); verify that opening a synced OKR is unchanged
 - [x] 3.3 `newOkrDraft`: default to the first team not vault-managed, or no team when none is left; add a test and verify "New OKR" in the browser
-- [ ] 3.4 Verify in seed mode (no Supabase env vars) and against beakon-preview that the picker, hint and default behave as in the okr-tracking scenarios
+- [x] 3.4 Verify in seed mode (no Supabase env vars) and against beakon-preview that the picker, hint and default behave as in the okr-tracking scenarios
 - [x] 3.5 product-designer review of the picker hint (placement, wording, truncation); findings become tasks
 - [x] 3.6 Design finding: the open dropdown covered the hint — repeat it as a footer row inside the dropdown; verified in the browser (seed mode)
 - [x] 3.7 Design finding: validation error rendered under the hint — show "Choose exactly one team or business unit." right under the button, hint after it; typecheck green
