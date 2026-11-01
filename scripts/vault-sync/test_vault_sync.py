@@ -188,11 +188,11 @@ class QaFixes(Base):
         p = os.path.join(self.vault, "live.json")
         with open(p, "w") as f:
             json.dump([{"source_key": "2026-Q4/fr-1", "achievement": 0.2, "governance_status": "draft", "health": "on_track"}], f)
-        vs.main(["write-back", "--okr", self.okr, "--live", p, "--backup-dir", bdir, "--backup"])
+        vs.main(["write-back", "--vault", self.vault, "--okr", self.okr, "--live", p, "--backup-dir", bdir, "--backup"])
         time.sleep(0.02)
         with open(p, "w") as f:
             json.dump([{"source_key": "2026-Q4/fr-1", "achievement": 0.5, "governance_status": "draft", "health": "on_track"}], f)
-        vs.main(["write-back", "--okr", self.okr, "--live", p, "--backup-dir", bdir, "--backup"])
+        vs.main(["write-back", "--vault", self.vault, "--okr", self.okr, "--live", p, "--backup-dir", bdir, "--backup"])
         c = json.load(open(self.okr))["squads"][0]["commitments"][0]
         self.assertEqual(c["progress"], 50)
         self.assertEqual(len([f for f in os.listdir(bdir) if f.endswith(".bak")]), 2)  # none overwritten
@@ -260,7 +260,7 @@ class QuarterKeys(Base):
         p = os.path.join(self.vault, "live.json")
         with open(p, "w") as f:
             json.dump([{"source_key": "2026-Q4/fr-1", "achievement": 0.3, "governance_status": "draft", "health": "on_track"}], f)
-        vs.main(["write-back", "--okr", self.okr, "--live", p, "--backup-dir", bdir, "--backup"])
+        vs.main(["write-back", "--vault", self.vault, "--okr", self.okr, "--live", p, "--backup-dir", bdir, "--backup"])
         c = json.load(open(self.okr))["squads"][0]["commitments"][0]
         self.assertEqual((c["key"], c["progress"], c["status"]), ("fr-1", 30, "in_progress"))
 
@@ -270,7 +270,7 @@ class QuarterKeys(Base):
         with open(p, "w") as f:
             json.dump([{"source_key": "fr-1", "achievement": 0.9, "governance_status": "draft", "health": "blocked"},
                        {"source_key": "2027-Q1/fr-1", "achievement": 0.9, "governance_status": "draft", "health": "blocked"}], f)
-        vs.main(["write-back", "--okr", self.okr, "--live", p, "--backup-dir", bdir, "--backup"])
+        vs.main(["write-back", "--vault", self.vault, "--okr", self.okr, "--live", p, "--backup-dir", bdir, "--backup"])
         c = json.load(open(self.okr))["squads"][0]["commitments"][0]
         self.assertIsNone(c.get("progress"))  # okr.json is 2026-Q4: neither key applies
 
@@ -303,9 +303,9 @@ class WriteBack(Base):
                           {"source_key": "2026-Q4/fr-2", "achievement": 1, "governance_status": "validated", "health": "on_track"},
                           {"source_key": "2026-Q4/ac-1", "achievement": 0.5, "governance_status": "rejected", "health": "blocked"}])
         with self.assertRaises(SystemExit):
-            vs.main(["write-back", "--okr", self.okr, "--live", live, "--backup-dir", bdir])
+            vs.main(["write-back", "--vault", self.vault, "--okr", self.okr, "--live", live, "--backup-dir", bdir])
         before = open(self.okr).read()
-        vs.main(["write-back", "--okr", self.okr, "--live", live, "--backup-dir", bdir, "--backup"])
+        vs.main(["write-back", "--vault", self.vault, "--okr", self.okr, "--live", live, "--backup-dir", bdir, "--backup"])
         after = json.load(open(self.okr))
         c = {x["key"]: x for s in after["squads"] for x in s["commitments"]}
         self.assertEqual((c["fr-1"]["status"], c["fr-1"]["progress"], c["fr-1"]["health"]), ("in_progress", 40, "at_risk"))
@@ -319,7 +319,7 @@ class WriteBack(Base):
                               else os.path.join(bdir, [f for f in os.listdir(bdir) if f.endswith(".bak")][0])).read(), before)
         time.sleep(0.01)
         with self.assertRaises(SystemExit):  # a second write-back needs a fresh backup
-            vs.main(["write-back", "--okr", self.okr, "--live", live, "--backup-dir", bdir])
+            vs.main(["write-back", "--vault", self.vault, "--okr", self.okr, "--live", live, "--backup-dir", bdir])
 
     def test_allowlisted_product_term_is_not_a_customer(self):
         self.assertFalse(vs.denylisted("Autopromo Legacy read-only"))
@@ -329,6 +329,268 @@ class WriteBack(Base):
     def test_not_assessed_is_not_started(self):
         self.assertEqual(vs.commitment_status(None, "draft"), "not_started")
         self.assertEqual(vs.commitment_status(0, "validated"), "not_started")
+
+
+FR_NOTE = """---
+type: okr
+squad: Finalize & Roll out
+---
+# Finalize & Roll out — Q4 2026 OKR
+
+## OKR — Kameleoon format (for the OKR sheet)
+
+Final list, café — hand-written.
+
+| # | Strategic objective | OKR | % |
+| --- | --- | --- | --- |
+| 1 | A trusted platform | We have shipped A. | 10% |
+| 2 | A trusted platform | We have shipped B. | 0% |
+
+**Quarter average:** 5% (Nov 1).
+
+## OKR — measurable
+
+| KR | Baseline |
+| --- | --- |
+| x | 75 |
+"""
+
+
+class LiveBlock(unittest.TestCase):
+    C = [{"key": "a", "text": "Short.", "governance": "to_validate", "progress": 30, "status": "in_progress", "health": "on_track"},
+         {"key": "b", "text": "Not synced.", "progress": 99},
+         {"key": "c", "text": "Customers who manage personalizations by API can do everything | they do\nin the editor.",
+          "governance": None, "progress": None, "status": "not_started", "health": None}]
+
+    def rows(self, block):
+        return [l for l in block if l.startswith("| ") and not l.startswith("| #") and not l.startswith("| ---")]
+
+    def test_row_content_and_position(self):
+        block = vs.live_block(self.C, {"a", "c"}, "2026-11-02")
+        self.assertEqual(block[0], "### Live state from Beakon — synced 2026-11-02")
+        self.assertIn("Generated from Beakon. Edit progress in Beakon, not here.", block)
+        rows = self.rows(block)
+        self.assertEqual(rows[0], "| 1 | Short. | To validate | 30% | In progress | On track |")
+        self.assertTrue(rows[1].startswith("| 3 | "))  # unsynced "b" has no row, "c" keeps # 3
+        self.assertTrue(rows[1].endswith(" | — | — | Not started | — |"))  # empty values
+
+    def test_long_text_is_cut_at_a_word_and_escaped(self):
+        t = vs.short_text(self.C[2]["text"])
+        self.assertEqual(t, "Customers who manage personalizations by API can do…")
+        self.assertLessEqual(len(t), 61)
+        self.assertEqual(vs.short_text("a | b\nc"), "a \\| b c")
+        self.assertEqual(vs.short_text("x" * 70), "x" * 60 + "…")
+
+    def test_average(self):
+        def avg(progress):
+            cs = [{"key": str(i), "progress": p} for i, p in enumerate(progress)]
+            return vs.live_block(cs, {c["key"] for c in cs}, "2026-11-02")[-1]
+        self.assertEqual(avg([90, 20, 15, 0, 70, 30]), "Average: 38% (6 of 6 commitments with a %)")  # 37.5 up
+        self.assertEqual(avg([40, 45, None]), "Average: 43% (2 of 3 commitments with a %)")
+        self.assertEqual(avg([None, None]), "Average: —")
+
+
+class LiveNotes(Base):
+    def setUp(self):
+        super().setUp()
+        self.okr_dir = os.path.join(self.vault, "02 OKR")
+        self.bdir = os.path.join(self.okr_dir, "backups")
+        os.makedirs(self.okr_dir)
+        self.fr = os.path.join(self.okr_dir, "2026-Q4 OKR — Finalize & Roll out.md")
+        self.ac = os.path.join(self.okr_dir, "2026-Q4 OKR — Assets Creation.md")
+        self.put(self.fr, FR_NOTE)
+        self.put(self.ac, FR_NOTE.replace("Finalize & Roll out", "Assets Creation"))
+        self.others = {"2026-Q4 OKR.md": "# Quarter\n", "2026-Q3 OKR — Finalize & Roll out.md": "# Q3 é\n"}
+        for name, text in self.others.items():
+            self.put(os.path.join(self.okr_dir, name), text)
+
+    def put(self, path, text):
+        with open(path, "w", encoding="utf-8", newline="") as f:
+            f.write(text)
+
+    def get(self, path):
+        with open(path, encoding="utf-8", newline="") as f:
+            return f.read()
+
+    def run_wb(self, rows, backup=True, today="2026-11-02"):
+        p = os.path.join(self.vault, "live.json")
+        with open(p, "w") as f:
+            json.dump(rows, f)
+        argv = ["write-back", "--vault", self.vault, "--okr", self.okr, "--live", p,
+                "--backup-dir", self.bdir, "--today", today] + (["--backup"] if backup else [])
+        return vs.main(argv)
+
+    LIVE = [{"source_key": "2026-Q4/fr-1", "achievement": 0.4, "governance_status": "validated", "health": "at_risk"},
+            {"source_key": "2026-Q4/fr-2", "achievement": None, "governance_status": "draft", "health": "on_track"},
+            {"source_key": "2026-Q4/ac-1", "achievement": 0.5, "governance_status": "draft", "health": "on_track"}]
+
+    def outside(self, text):
+        s, e = text.index(vs.LIVE_START), text.index(vs.LIVE_END)
+        return text[:s + len(vs.LIVE_START)], text[e:]
+
+    def test_first_insert(self):
+        report = self.run_wb(self.LIVE)
+        self.assertIn("note 2026-Q4 OKR — Finalize & Roll out: markers inserted", report)
+        new = self.get(self.fr)
+        self.assertIn("| 2 | A trusted platform | We have shipped B. | 0% |\n\n" + vs.LIVE_START + "\n### Live state", new)
+        self.assertIn(vs.LIVE_END + "\n\n**Quarter average:** 5% (Nov 1).", new)
+        self.assertIn("| 1 | We have shipped A. | Validated | 40% | In progress | At risk |", new)
+        self.assertIn("Average: 40% (1 of 2 commitments with a %)", new)
+        before, after = new[:new.index(vs.LIVE_START)], new[new.index(vs.LIVE_END) + len(vs.LIVE_END):]
+        self.assertEqual(before[:-1] + after[1:], FR_NOTE)  # only the block was added
+
+    def test_refresh_in_place_keeps_every_byte_outside_the_markers(self):
+        for nl in ("\n", "\r\n"):
+            with self.subTest(nl=nl):
+                text = FR_NOTE.replace("**Quarter", vs.LIVE_START + "\nstale — hand edit\n" + vs.LIVE_END + "\n\n**Quarter")
+                self.put(self.fr, text.replace("\n", nl))
+                self.run_wb(self.LIVE)
+                new = self.get(self.fr)
+                self.assertEqual(self.outside(new), self.outside(text.replace("\n", nl)))
+                self.assertNotIn("stale", new)
+                self.assertIn("| 1 | We have shipped A. | Validated | 40% |", new)
+                self.assertEqual(new.count("\r\n") > 0, nl == "\r\n")
+                if nl == "\r\n":
+                    self.assertNotIn("\n", new.replace("\r\n", ""))  # block uses the note's line ending
+                time.sleep(0.01)
+
+    def test_same_day_rerun_leaves_note_untouched(self):
+        self.run_wb(self.LIVE)
+        os.utime(self.fr, (1, 1))
+        before = self.get(self.fr)
+        time.sleep(0.01)
+        report = self.run_wb(self.LIVE)
+        self.assertIn("note 2026-Q4 OKR — Finalize & Roll out: unchanged", report)
+        self.assertEqual((self.get(self.fr), os.path.getmtime(self.fr)), (before, 1))
+
+    def test_broken_markers_and_no_table_are_skipped(self):
+        broken = FR_NOTE.replace("**Quarter", vs.LIVE_START + "\n**Quarter")
+        no_table = "# Assets Creation\n\nNo table here.\n"
+        self.put(self.fr, broken)
+        self.put(self.ac, no_table)
+        report = self.run_wb(self.LIVE)
+        self.assertIn("note 2026-Q4 OKR — Finalize & Roll out: skipped (broken markers)", report)
+        self.assertIn("note 2026-Q4 OKR — Assets Creation: skipped (no OKR — Kameleoon format table)", report)
+        self.assertEqual((self.get(self.fr), self.get(self.ac)), (broken, no_table))
+        self.assertEqual(json.load(open(self.okr))["squads"][0]["commitments"][0]["progress"], 40)  # okr.json still written
+        for name, text in (("duplicated", FR_NOTE + vs.LIVE_START + "\n" + vs.LIVE_END + "\n" + vs.LIVE_START + "\n"),
+                           ("reversed", FR_NOTE + vs.LIVE_END + "\nx\n" + vs.LIVE_START + "\n")):
+            with self.subTest(name):
+                self.put(self.fr, text)
+                time.sleep(0.01)
+                self.assertIn("note 2026-Q4 OKR — Finalize & Roll out: skipped (broken markers)", self.run_wb(self.LIVE))
+                self.assertEqual(self.get(self.fr), text)
+
+    def test_squad_name_that_is_not_a_file_name_is_skipped(self):
+        okr = json.load(open(self.okr))
+        okr["squads"][1]["name"] = "../Assets Creation"
+        with open(self.okr, "w", encoding="utf-8") as f:
+            f.write(json.dumps(okr, indent=1, ensure_ascii=False) + "\n")
+        report = self.run_wb(self.LIVE)
+        self.assertIn("note 2026-Q4 OKR — ../Assets Creation: skipped (squad name is not a file name)", report)
+        self.assertEqual(self.get(self.ac), FR_NOTE.replace("Finalize & Roll out", "Assets Creation"))
+
+    def test_backup_dir_defaults_inside_the_given_vault(self):
+        p = os.path.join(self.vault, "live.json")
+        with open(p, "w") as f:
+            json.dump(self.LIVE, f)
+        vs.main(["write-back", "--vault", self.vault, "--okr", self.okr, "--live", p, "--backup", "--today", "2026-11-02"])
+        self.assertTrue(os.path.exists(os.path.join(self.bdir, vs.MARKER)))
+
+    def test_only_notes_of_synced_squads_are_touched(self):
+        os.remove(self.ac)
+        names = set(os.listdir(self.okr_dir))
+        report = self.run_wb(self.LIVE)
+        self.assertIn("note 2026-Q4 OKR — Assets Creation: skipped (missing note)", report)
+        self.assertFalse(os.path.exists(self.ac))  # never created
+        self.assertEqual(set(os.listdir(self.okr_dir)), names | {"backups"})  # nothing for "BU / PBX adoption"
+        self.assertFalse(any("PBX" in r for r in report))
+        for name, text in self.others.items():
+            self.assertEqual(self.get(os.path.join(self.okr_dir, name)), text)
+
+    def test_notes_are_backed_up_and_guarded(self):
+        self.run_wb(self.LIVE)
+        baks = [f for f in os.listdir(self.bdir) if f.endswith(vs.NOTE_BACKUP_SUFFIX)]
+        fr_bak = [f for f in baks if f.startswith("2026-Q4 OKR — Finalize & Roll out.")]
+        self.assertEqual(len(fr_bak), 1)
+        self.assertEqual(self.get(os.path.join(self.bdir, fr_bak[0])), FR_NOTE)
+        self.assertFalse(any(f.startswith("2026-Q4 OKR.") for f in baks))  # quarter note is not a candidate
+        time.sleep(0.02)
+        # A fresh okr.json backup alone is not enough when a note would change.
+        with open(os.path.join(self.bdir, "okr.json.manual.bak"), "w") as f:
+            f.write("{}")
+        okr_before, note_before = open(self.okr).read(), self.get(self.fr)
+        with self.assertRaises(SystemExit):
+            self.run_wb([dict(self.LIVE[0], achievement=0.9)], backup=False)
+        self.assertEqual((open(self.okr).read(), self.get(self.fr)), (okr_before, note_before))
+        time.sleep(0.02)
+        self.run_wb([dict(self.LIVE[0], achievement=0.9)])
+        self.assertIn("| 90% |", self.get(self.fr))
+        self.assertEqual(len([f for f in os.listdir(self.bdir) if f.startswith("2026-Q4 OKR — Finalize & Roll out.")]), 2)
+
+    # QA findings (tasks 6.x)
+
+    def test_note_edited_during_the_run_keeps_the_edit(self):
+        real = vs.backup_file
+
+        def edit_after_backup(src, backup_dir, stem, ext, stamp):
+            real(src, backup_dir, stem, ext, stamp)
+            if src == self.fr:
+                with open(self.fr, "a", encoding="utf-8") as f:
+                    f.write("typed in Obsidian\n")
+        vs.backup_file = edit_after_backup
+        try:
+            report = self.run_wb(self.LIVE)
+        finally:
+            vs.backup_file = real
+        self.assertIn("note 2026-Q4 OKR — Finalize & Roll out: skipped (note changed during the run)", report)
+        self.assertEqual(self.get(self.fr), FR_NOTE + "typed in Obsidian\n")
+
+    def test_vault_is_required_with_a_copied_okr_json(self):
+        p = os.path.join(self.vault, "live.json")
+        with open(p, "w") as f:
+            json.dump(self.LIVE, f)
+        with self.assertRaises(SystemExit):
+            vs.main(["write-back", "--okr", self.okr, "--live", p, "--backup-dir", self.bdir, "--backup"])
+        self.assertFalse(os.path.exists(self.bdir))  # refused before anything ran
+
+    def test_insert_keeps_a_missing_final_newline(self):
+        text = FR_NOTE[:FR_NOTE.index("\n\n**Quarter")]  # note ends with the table, no newline
+        self.put(self.fr, text)
+        self.run_wb(self.LIVE)
+        new = self.get(self.fr)
+        self.assertTrue(new.startswith(text + "\n\n" + vs.LIVE_START + "\n"))
+        self.assertTrue(new.endswith("\n" + vs.LIVE_END))
+
+    def test_fenced_code_is_ignored(self):
+        fenced = "```\n" + vs.LIVE_START + "\nexample\n" + vs.LIVE_END + "\n| not | the table |\n```\n"
+        text = FR_NOTE.replace("Final list, café — hand-written.\n", "Final list.\n\n" + fenced)
+        self.put(self.fr, text)
+        report = self.run_wb(self.LIVE)
+        self.assertIn("note 2026-Q4 OKR — Finalize & Roll out: markers inserted", report)
+        new = self.get(self.fr)
+        self.assertIn(fenced, new)  # example untouched
+        self.assertIn("| 2 | A trusted platform | We have shipped B. | 0% |\n\n" + vs.LIVE_START, new)
+
+    def test_bom_and_indented_markers_are_recognised(self):
+        text = "﻿" + vs.LIVE_START + "\nold\n  " + vs.LIVE_END + "  \n" + FR_NOTE
+        self.put(self.fr, text)
+        report = self.run_wb(self.LIVE)
+        self.assertIn("note 2026-Q4 OKR — Finalize & Roll out: updated", report)
+        new = self.get(self.fr)
+        self.assertTrue(new.startswith("﻿" + vs.LIVE_START + "\n### Live state"))
+        self.assertTrue(new.endswith("  " + vs.LIVE_END + "  \n" + FR_NOTE))
+
+    def test_unchanged_notes_are_not_backed_up(self):
+        self.run_wb(self.LIVE)
+        time.sleep(0.01)
+        self.run_wb(self.LIVE)  # same day, same state: notes unchanged
+        fr = [f for f in os.listdir(self.bdir) if f.startswith("2026-Q4 OKR — Finalize & Roll out.")]
+        self.assertEqual(len(fr), 1)
+
+    def test_text_escaping(self):
+        self.assertEqual(vs.short_text("a \\| b"), "a \\\\\\| b")
+        self.assertEqual(vs.short_text("see <!-- x -->"), "see &lt;!-- x -->")
 
 
 if __name__ == "__main__":

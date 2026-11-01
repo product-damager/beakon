@@ -8,7 +8,9 @@ Claude reads/writes Supabase with its own tools and passes JSON in/out.
   build       vault (04 Features + okr.json) + current DB rows (JSON)
               -> idempotent SQL + a human report (creates/updates/archives/skips)
   write-back  live OKR state from Beakon (JSON) -> okr.json (status, progress,
-              health, governance of synced commitments only), after a backup
+              health, governance of synced commitments only) and the generated
+              block between <!-- beakon:live:start/end --> in each squad's
+              "02 OKR/<quarter> OKR — <squad>.md" note, after backups
 
 Python rather than Node: okr.json is written by Python's json module
 (indent=1, ensure_ascii=False); re-serializing it the same way is byte-exact,
@@ -20,6 +22,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import math
 import os
 import re
 import shutil
@@ -475,43 +478,156 @@ def commitment_status(achievement, governance):
     return "not_started"
 
 
-def latest_backup_mtime(backup_dir):
+def latest_backup_mtime(backup_dir, prefix="okr.json.", suffix=".bak"):
+    if not os.path.isdir(backup_dir):
+        return None
     times = [os.path.getmtime(os.path.join(backup_dir, f)) for f in os.listdir(backup_dir)
-             if f.startswith("okr.json.") and f.endswith(".bak")]
+             if f.startswith(prefix) and f.endswith(suffix)]
     return max(times) if times else None
 
 
+def backup_file(src, backup_dir, stem, ext, stamp):
+    dest = os.path.join(backup_dir, f"{stem}.{stamp}-before-vault-sync-writeback{ext}")
+    n = 1
+    while os.path.exists(dest):  # never overwrite an earlier backup
+        n += 1
+        dest = os.path.join(backup_dir, f"{stem}.{stamp}-{n}-before-vault-sync-writeback{ext}")
+    shutil.copyfile(src, dest)  # copyfile: the backup gets "now" as mtime (copy2 kept the old one)
+    os.utime(dest, None)
+
+
 MARKER = ".vault-sync-writeback"
+NOTE_BACKUP_SUFFIX = "-before-vault-sync-writeback.md"
+
+# Live state block in the squad OKR notes (change vault-sync-live-state-in-notes, design D3–D5).
+LIVE_START = "<!-- beakon:live:start -->"
+LIVE_END = "<!-- beakon:live:end -->"
+KAMELEOON_HEADING = "## OKR — Kameleoon format"
+
+
+def label(v):
+    s = "" if v is None else str(v).replace("_", " ").strip()
+    return s[:1].upper() + s[1:] if s else "—"
+
+
+def short_text(t, limit=60):
+    t = " ".join(str(t or "").split())  # line breaks and runs of spaces -> one space
+    if len(t) > limit:
+        sp = t[:limit + 1].rfind(" ")
+        t = (t[:sp] if sp > 0 else t[:limit]).rstrip() + "…"
+    # Backslash first so an existing "\\|" can't end the cell; "<!--" would hide the rest of it.
+    return t.replace("\\", "\\\\").replace("|", "\\|").replace("<!--", "&lt;!--")
+
+
+def live_block(commitments, synced, today):
+    """Lines between the markers: heading, notice, one row per synced commitment, average (D5)."""
+    rows, values = [], []
+    for i, c in enumerate(commitments, 1):  # # = position in okr.json, like the Kameleoon table
+        if c.get("key") not in synced:
+            continue
+        p = c.get("progress")
+        if p is not None:
+            values.append(p)
+        rows.append(f"| {i} | {short_text(c.get('text'))} | {label(c.get('governance'))} | "
+                    f"{'—' if p is None else f'{p}%'} | {label(c.get('status'))} | {label(c.get('health'))} |")
+    if values:  # plain mean, halves rounded up (round() would round them to even)
+        avg = f"Average: {math.floor(sum(values) / len(values) + 0.5)}% ({len(values)} of {len(rows)} commitments with a %)"
+    else:
+        avg = "Average: —"
+    return [f"### Live state from Beakon — synced {today}", "",
+            "Generated from Beakon. Edit progress in Beakon, not here.", "",
+            "| # | Commitment | Governance | Achievement % | Status | Health |",
+            "| --- | --- | --- | --- | --- | --- |", *rows, "", avg]
+
+
+def split_lines(text):
+    """Lines with their endings; "".join() gives the text back byte for byte."""
+    lines = [l + "\n" for l in text.split("\n")]
+    lines[-1] = lines[-1][:-1]
+    return lines if lines[-1] else lines[:-1]
+
+
+def splice_note(text, block):
+    """(new text, outcome) — only the lines between the markers change; new text None = skip (D3, D4)."""
+    nl = "\r\n" if "\r\n" in text else "\n"
+    lines = split_lines(text)
+    body = "".join(l + nl for l in block)
+    plain, fence = [], None  # (i, line without BOM) outside fenced code blocks
+    for i, l in enumerate(lines):
+        t = l.lstrip("\ufeff") if i == 0 else l
+        m = re.match(r"\s{0,3}(```|~~~)", t)
+        if fence:
+            fence = None if m and m.group(1) == fence else fence
+        elif m:
+            fence = m.group(1)
+        else:
+            plain.append((i, t))
+    starts = [i for i, t in plain if t.strip() == LIVE_START]
+    ends = [i for i, t in plain if t.strip() == LIVE_END]
+    if len(starts) == 1 and len(ends) == 1 and starts[0] < ends[0]:
+        new = "".join(lines[:starts[0] + 1]) + body + "".join(lines[ends[0]:])
+        return new, "updated" if new != text else "unchanged"
+    if starts or ends:
+        return None, "skipped (broken markers)"
+    head = next((n for n, (_, t) in enumerate(plain) if t.startswith(KAMELEOON_HEADING)), None)
+    first = None
+    if head is not None:
+        for n in range(head + 1, len(plain)):
+            i, t = plain[n]
+            if re.match(r"#{1,2} ", t):  # next section: the table must be in this one
+                break
+            if t.startswith("|"):
+                first = i
+                break
+    if first is None:
+        return None, "skipped (no OKR — Kameleoon format table)"
+    last = first
+    while last + 1 < len(lines) and lines[last + 1].startswith("|"):
+        last += 1
+    if not lines[last].endswith("\n"):  # table ends the file: keep "no final newline"
+        return text + nl + nl + LIVE_START + nl + body + LIVE_END, "markers inserted"
+    new = ("".join(lines[:last + 1]) + nl + LIVE_START + nl + body + LIVE_END + nl
+           + "".join(lines[last + 1:]))
+    return new, "markers inserted"
+
+
+def plan_notes(okr, synced, notes_dir, today):
+    """[(path, stem, old text, new text or None, outcome)] for squads with synced commitments (D2)."""
+    plans = []
+    for sq in okr.get("squads", []):
+        keys = {c.get("key") for c in sq.get("commitments", [])} & synced
+        if not keys:
+            continue  # e.g. "BU / PBX adoption": no commitments, no note
+        stem = f"{okr.get('quarter')} OKR — {sq.get('name')}"
+        path = os.path.join(notes_dir, stem + ".md")
+        if "/" in stem or os.sep in stem:
+            plans.append((path, stem, None, None, "skipped (squad name is not a file name)"))
+            continue
+        if not os.path.isfile(path):
+            plans.append((path, stem, None, None, "skipped (missing note)"))
+            continue
+        with open(path, encoding="utf-8", newline="") as f:
+            old = f.read()
+        new, outcome = splice_note(old, live_block(sq["commitments"], keys, today))
+        plans.append((path, stem, old, new, outcome))
+    return plans
 
 
 def write_back(args):
     marker = os.path.join(args.backup_dir, MARKER)
-    if args.backup:
-        os.makedirs(args.backup_dir, exist_ok=True)
-        stamp = dt.datetime.now().strftime("%Y-%m-%d-%H%M%S")
-        dest = os.path.join(args.backup_dir, f"okr.json.{stamp}-before-vault-sync-writeback.bak")
-        n = 1
-        while os.path.exists(dest):  # never overwrite an earlier backup
-            n += 1
-            dest = os.path.join(args.backup_dir, f"okr.json.{stamp}-{n}-before-vault-sync-writeback.bak")
-        shutil.copyfile(args.okr, dest)  # copyfile: the backup gets "now" as mtime (copy2 kept the old one)
-        os.utime(dest, None)
-    last_backup = latest_backup_mtime(args.backup_dir) if os.path.isdir(args.backup_dir) else None
-    last_write = os.path.getmtime(marker) if os.path.exists(marker) else None
-    if last_backup is None or (last_write is not None and last_backup <= last_write):
-        raise SystemExit("refusing to write: no okr.json backup newer than the last write-back "
-                         f"in {args.backup_dir!r} — run again with --backup")
+    today = args.today or dt.date.today().isoformat()
 
     raw = open(args.okr, encoding="utf-8").read()
     okr = json.loads(raw)
     live = {r["source_key"]: r for r in json.load(open(args.live, encoding="utf-8"))}
-    changes = []
+    changes, synced = [], set()
     for sq in okr.get("squads", []):
         for c in sq.get("commitments", []):
             # Quarter key only: a bare key could carry another quarter's state.
             r = live.get(f"{okr.get('quarter')}/{c.get('key')}")
             if not r:
                 continue
+            synced.add(c.get("key"))
             ach = None if r.get("achievement") is None else float(r["achievement"])
             new = {
                 "status": commitment_status(ach, r.get("governance_status")),
@@ -524,11 +640,45 @@ def write_back(args):
                     changes.append(f"{c['key']}.{k}: {c.get(k)!r} → {v!r}")
                     c[k] = v
     out = json.dumps(okr, indent=1, ensure_ascii=False) + "\n"
+    notes = plan_notes(okr, synced, os.path.join(args.vault, "02 OKR"), today)
+
+    # Everything is computed; nothing is written before the backups and the guard (D6).
+    if args.backup:
+        os.makedirs(args.backup_dir, exist_ok=True)
+        stamp = dt.datetime.now().strftime("%Y-%m-%d-%H%M%S")
+        backup_file(args.okr, args.backup_dir, "okr.json", ".bak", stamp)
+        for path, stem, old, new, _ in notes:
+            if new is not None and new != old:
+                backup_file(path, args.backup_dir, stem, ".md", stamp)
+    last_write = os.path.getmtime(marker) if os.path.exists(marker) else None
+
+    def fresh(t):
+        return t is not None and (last_write is None or t > last_write)
+
+    if not fresh(latest_backup_mtime(args.backup_dir)):
+        raise SystemExit("refusing to write: no okr.json backup newer than the last write-back "
+                         f"in {args.backup_dir!r} — run again with --backup")
+    for _, stem, old, new, _ in notes:
+        if new is not None and new != old and not fresh(latest_backup_mtime(args.backup_dir, f"{stem}.", NOTE_BACKUP_SUFFIX)):
+            raise SystemExit(f"refusing to write: no backup of {stem!r} newer than the last write-back "
+                             f"in {args.backup_dir!r} — run again with --backup")
+
     if out != raw:
         open(args.okr, "w", encoding="utf-8").write(out)
+    written = False
+    for n, (path, stem, old, new, _) in enumerate(notes):
+        if new is not None and new != old:
+            with open(path, encoding="utf-8", newline="") as f:
+                if f.read() != old:  # edited since it was read (e.g. in Obsidian): keep the edit
+                    notes[n] = (path, stem, old, None, "skipped (note changed during the run)")
+                    continue
+            with open(path, "w", encoding="utf-8", newline="") as f:
+                f.write(new)
+            written = True
     open(marker, "w").write(dt.datetime.now().isoformat())
-    print("\n".join(changes) if changes else "no changes")
-    return changes
+    report = changes + [f"note {stem}: {outcome}" for _, stem, _, _, outcome in notes]
+    print("\n".join(report if changes or written else ["no changes"] + report))
+    return report
 
 
 def main(argv=None):
@@ -546,9 +696,18 @@ def main(argv=None):
     w = sub.add_parser("write-back", help="live OKR state -> okr.json")
     w.add_argument("--okr", default=okr_default)
     w.add_argument("--live", required=True, help="JSON list: {source_key, achievement, governance_status, health}")
-    w.add_argument("--backup-dir", default=os.path.join(vault_default, "02 OKR", "backups"))
-    w.add_argument("--backup", action="store_true", help="copy okr.json to the backup dir first")
+    w.add_argument("--backup-dir", help="default: <vault>/02 OKR/backups")
+    w.add_argument("--vault", help="squad notes are read from <vault>/02 OKR; required with a non-default --okr")
+    w.add_argument("--backup", action="store_true", help="copy okr.json and the squad notes to the backup dir first")
+    w.add_argument("--today", help="YYYY-MM-DD for the block heading (tests)")
     a = p.parse_args(argv)
+    if a.cmd == "write-back" and a.vault is None:
+        # A dry run on a copied okr.json must never write the real squad notes.
+        if os.path.abspath(a.okr) != okr_default:
+            p.error("write-back with a non-default --okr needs --vault")
+        a.vault = vault_default
+    if a.cmd == "write-back" and a.backup_dir is None:  # backups and marker stay in that vault
+        a.backup_dir = os.path.join(a.vault, "02 OKR", "backups")
     return build(a) if a.cmd == "build" else write_back(a)
 
 
