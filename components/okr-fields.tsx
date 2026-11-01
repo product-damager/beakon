@@ -289,8 +289,9 @@ export function TeamOrBuPicker({
                 <div className="px-2.5 py-2 text-sm text-beige-60">No matches</div>
               )}
             </div>
+            {/* Visual repeat of the hint under the picker, which screen readers already get. */}
             {hint && (
-              <div className="mt-1 border-t border-beige-20 px-2.5 pt-2">
+              <div aria-hidden className="mt-1 border-t border-beige-20 px-2.5 pt-2">
                 <VaultHint text={hint} />
               </div>
             )}

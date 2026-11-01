@@ -28,6 +28,8 @@
 - [x] 4.1a QA finding: hint followed the unstable team load order — hint names sorted alphabetically, spec scenario and design updated; test passes the teams in both orders
 - [x] 4.1b QA finding: no test for business-unit-level synced OKRs — added; archived OKRs count by construction (noted in the test)
 - [x] 4.1c QA finding: the rule depends on the "authenticated full access" read policy — commented in `supabase/schema.sql`
+- [x] 4.1d Dev-lead nit: archived-OKRs page rebuilt the locked-team set on every render — memoised like the OKRs page; typecheck and build green
+- [x] 4.1e Dev-lead nit: the hint was read twice by screen readers while the list is open — in-list copy marked aria-hidden, the one under the picker stays
 - [x] 4.2 Run `npm run typecheck`, `npm run lint`, `npm run test` and `npm run build`, all green
 - [x] 4.3 After the PM's explicit go: apply the schema change to beakon-prod, repeat the 2.2 checks without writing (refusals only, inside rolled-back transactions), and run the security advisor on beakon-prod
 
