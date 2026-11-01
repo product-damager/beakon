@@ -40,8 +40,8 @@ export const OKR_GOVERNANCE_META: Record<OkrGovernanceStatus, { label: string; t
 export const GOVERNANCE_KEYS = Object.keys(OKR_GOVERNANCE_META) as OkrGovernanceStatus[];
 
 /** Short column alias per strategic objective, so the list column doesn't
- * have to carry each objective's full name ("Core: Strengthening our
- * foundations", etc.) — the full name is still available via a `title`
+ * have to carry each objective's full name ("A trusted platform for every
+ * team", etc.) — the full name is still available via a `title`
  * tooltip at the call site. Keyed by id, not parsed from the name string,
  * so it doesn't silently break if naming conventions change. Falls back to
  * the full name for any future objective not yet given a short alias. */

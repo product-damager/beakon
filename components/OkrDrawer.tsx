@@ -371,7 +371,7 @@ function DrawerBody({
               )}
             </Prop>
           </div>
-          {/* Tier (size of the work) — set only by the vault sync; there is
+          {/* Tier (launch tier, T1–T3) — set only by the vault sync; there is
            * no persist_okr parameter for it, so it is read-only for everyone. */}
           <div className="col-span-2">
             <Prop icon={Layers} label="Tier" locked={vault}>
@@ -426,7 +426,7 @@ function DrawerBody({
           <TextArea value={d.notes} onChange={(e) => set("notes", e.target.value)} onBlur={saveNow} />
         </Field>
 
-        {/* De-emphasized: a post-governance delivery-commitment tier, optional
+        {/* De-emphasized: a post-governance commitment level (not tier), optional
          * and read by nothing downstream — styled visually secondary and
          * placed low in the form, not alongside required fields like Health. */}
         <div>

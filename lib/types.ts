@@ -10,7 +10,8 @@ export type Status =
   | "released";
 export type Visibility = "internal" | "external";
 export type Health = "on_track" | "at_risk" | "blocked" | "delayed";
-/** Size of the work (vault-sync): T1 largest … T3 smallest. Distinct from OkrClass. */
+/** Go-to-market launch tier (vault-sync): T1 Market-moving (highest impact) … T3 Enhancement
+ * (lowest). Not the size of the work. Distinct from OkrClass. */
 export type Tier = "T1" | "T2" | "T3";
 export const TIERS: Tier[] = ["T1", "T2", "T3"];
 
@@ -135,7 +136,7 @@ export interface Initiative {
   notes: string; // internal-only, excluded from external share
   updatedAt: string; // ISO datetime
   archived: boolean;
-  /** Size of the work (T1–T3); vault-owned when the initiative is synced. */
+  /** Launch tier (T1–T3, impact, not size); vault-owned when the initiative is synced. */
   tier?: Tier | null;
   /** Feature area from the vault note (read-only label on synced initiatives). */
   area?: string | null;
@@ -365,7 +366,7 @@ export interface Okr {
   archived: boolean;
   position?: number;
   updatedAt: string; // ISO datetime
-  /** Size of the work (T1–T3), independent of okrClass; vault-owned when synced. */
+  /** Launch tier (T1–T3, impact, not size), independent of okrClass; vault-owned when synced. */
   tier?: Tier | null;
   /** "vault" when the OKR is synced from an okr.json commitment; see vaultOwns(). */
   source?: "vault" | null;

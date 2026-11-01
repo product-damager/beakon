@@ -359,7 +359,9 @@ export async function fetchWorkspace(): Promise<Workspace> {
   const owners = ((ownerRes.data ?? []) as OwnerRow[]).map(rowToOwner);
   const businessUnits = ((buRes.data ?? []) as BusinessUnitRow[]).map(rowToBusinessUnit);
   const teams = ((teamRes.data ?? []) as TeamRow[]).map(rowToTeam);
-  const strategicObjectives = ((soRes.data ?? []) as StrategicObjectiveRow[]).map(rowToStrategicObjective);
+  const strategicObjectives = sortStrategicObjectives(
+    ((soRes.data ?? []) as StrategicObjectiveRow[]).map(rowToStrategicObjective),
+  );
   const roadmaps = ((roadmapRes.data ?? []) as RoadmapRow[]).map(rowToRoadmap);
   const okrViews = ((okrViewRes.data ?? []) as OkrViewRow[]).map(rowToOkrView);
 
@@ -594,6 +596,20 @@ function rowToBusinessUnit(row: BusinessUnitRow): BusinessUnit {
 
 function rowToTeam(row: TeamRow): Team {
   return { id: row.id, name: row.name, businessUnitId: row.business_unit_id };
+}
+
+/** Display order of strategic objectives (same as lib/seed.ts). Postgres returns
+ * rows in no fixed order (an UPDATE moves them), and "New OKR" takes the first
+ * objective as its default, so order explicitly: these ids first, then any
+ * other objective by name. */
+const STRATEGIC_OBJECTIVE_ORDER = ["so-core", "so-ai", "so-data", "so-internal"];
+
+export function sortStrategicObjectives(list: StrategicObjective[]): StrategicObjective[] {
+  const rank = (id: string) => {
+    const i = STRATEGIC_OBJECTIVE_ORDER.indexOf(id);
+    return i === -1 ? STRATEGIC_OBJECTIVE_ORDER.length : i;
+  };
+  return [...list].sort((a, b) => rank(a.id) - rank(b.id) || a.name.localeCompare(b.name));
 }
 
 function rowToStrategicObjective(row: StrategicObjectiveRow): StrategicObjective {

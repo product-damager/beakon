@@ -63,8 +63,8 @@ on conflict (id) do update
 
 -- ── Strategic objectives (2026) ─────────────────────────────────────────
 insert into strategic_objectives (id, name, description, year, sponsor_id) values
-  ('so-core',     'Core: Strengthening our foundations',        '', 2026, null),
-  ('so-ai',       'AI: Scaling PBX adoption',                   '', 2026, null),
+  ('so-core',     'A trusted platform for every team',          '', 2026, null),
+  ('so-ai',       'AI everywhere, increasingly autonomous',     '', 2026, null),
   ('so-data',     'Data: Powering trusted Insights & Outcomes', '', 2026, null),
   ('so-internal', 'Internal',                                   '', 2026, null)
 on conflict (id) do update
